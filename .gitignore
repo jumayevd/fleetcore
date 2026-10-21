@@ -61,3 +61,4 @@ DEMO-CREDENTIALS.local.txt
 /.claude/launch.json
 .vercel
 .env*
+!.env.example
