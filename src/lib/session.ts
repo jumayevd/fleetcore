@@ -67,9 +67,20 @@ export async function writeAccounts(accounts: SessionAccount[]) {
   forgetSessions();
 }
 
+/**
+ * Only accounts that still exist and are active. A signed cookie can outlive its user (deleted, deactivated, or a
+ * reseeded database): such entries are ignored, so they never count as "signed in".
+ */
+async function liveAccounts(accounts: SessionAccount[]) {
+  if (!accounts.length) return accounts;
+  const rows = await rootDb.user.findMany({ where: { id: { in: accounts.map((a) => a.userId) }, active: true }, select: { id: true } });
+  const ok = new Set(rows.map((r) => r.id));
+  return accounts.filter((a) => ok.has(a.userId));
+}
+
 /** Signed-in accounts, as written: use in actions that are about to change them. */
 export async function currentAccounts() {
-  return readAccounts((await cookies()).get(SESSION_COOKIE)?.value);
+  return liveAccounts(await readAccounts((await cookies()).get(SESSION_COOKIE)?.value));
 }
 
 /** Add (or refresh) an account after a successful password check. */
@@ -99,7 +110,7 @@ export type ActiveContext = {
 export type SessionContext = { accounts: SessionAccount[]; active: ActiveContext | null };
 
 async function resolve(token: string | undefined, activeRaw: string | undefined): Promise<SessionContext> {
-  const accounts = await readAccounts(token);
+  const accounts = await liveAccounts(await readAccounts(token));
   if (!accounts.length) return { accounts, active: null };
   const ref = parseWorkspaceKey(activeRaw);
   if (!ref || !accounts.some((a) => a.userId === ref.userId)) return { accounts, active: null };
