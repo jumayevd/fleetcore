@@ -3,18 +3,19 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { format } from "date-fns";
-import { ArrowUpRight, Container, MapPin, Maximize2, Phone, Search, Wrench, X } from "lucide-react";
+import { ArrowUpRight, Container, MapPin, Maximize2, OctagonX, Phone, Search, Wrench, X } from "lucide-react";
 import { LeafletMap, type MapTruck } from "./map";
 import {
   FLEET_STATUSES, FLEET_STATUS_HINT, FLEET_STATUS_LABEL, FLEET_STATUS_TONE, LOW_FUEL_PCT,
-  fixAge, fleetStatus, pmLabel, sourceLabel, type FleetStatus,
+  fixAge, fleetStatus, serviceLine, serviceNeeded, serviceTone, sourceLabel, type FleetStatus,
 } from "./map/fleet-status";
+import { useFormat } from "./locale";
 import {
   Avatar, Badge, Chip, EmptyState, IconButton, Kbd, LiveDot, PageHeader, StatusDot,
   buttonClass, cn, inputClass, segmentedThumb, type Tone,
 } from "./ui";
 import type { FleetSnapshot } from "@/lib/telemetry";
+import type { Formatter } from "@/lib/locale";
 
 /** The map only re-renders when its props change, not on every keystroke in the search box. */
 const MemoMap = memo(LeafletMap);
@@ -23,14 +24,12 @@ const POLL_MS = 10_000;
 const CLOCK_MS = 15_000;
 
 type Truck = FleetSnapshot[number];
-type Attention = "all" | "pmOverdue" | "pmDue" | "fuel" | "hold" | "nodriver";
+type Attention = "all" | "oilOverdue" | "oilDue" | "fuel" | "driverHold" | "nodriver";
 
 const TONE_TEXT: Record<Tone, string> = {
   neutral: "text-fg-muted", accent: "text-accent-text", ok: "text-ok", warn: "text-warn",
   danger: "text-danger", info: "text-info", progress: "text-progress",
 };
-const kmFmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
-const km = (n: number) => `${kmFmt.format(n)} km`;
 
 /* ------------------------------------------------------------------ */
 /* Clock store: stable during SSR/hydration, ticks on the client        */
@@ -138,8 +137,8 @@ function derive(t: Truck, now: number): View {
     lowFuel: t.fuelPct != null && t.fuelPct < LOW_FUEL_PCT,
     groupKey: t.group?.trim() || "none",
     haystack: [
-      t.unitNumber, t.plate, t.name, t.group, t.driver?.name, t.locationName, ...t.trailers.map((r) => r.unitNumber),
-      t.workInProgress ? `#${t.workInProgress.number} ${t.workInProgress.title}` : null,
+      t.unitNumber, t.plate, t.name, t.group, t.driver?.name, t.place, ...t.trailers.map((r) => r.unitNumber),
+      t.workInProgress ? `#${t.workInProgress.number} ${t.workInProgress.title}` : null, t.hold?.label,
     ].filter(Boolean).join(" ").toLowerCase(),
   };
 }
@@ -156,10 +155,10 @@ function matches(v: View, f: Filters, skip?: keyof Filters) {
 
 function hasAttention(v: View, a: Attention) {
   switch (a) {
-    case "pmOverdue": return v.t.pm.state === "overdue";
-    case "pmDue": return v.t.pm.state === "due";
+    case "oilOverdue": return v.t.service.state === "overdue";
+    case "oilDue": return v.t.service.state === "due_now" || v.t.service.state === "due_soon";
     case "fuel": return v.lowFuel;
-    case "hold": return Boolean(v.t.driver?.hold);
+    case "driverHold": return Boolean(v.t.driver?.hold);
     case "nodriver": return !v.t.driver && v.t.status === "ACTIVE";
     default: return true;
   }
@@ -168,25 +167,26 @@ function hasAttention(v: View, a: Attention) {
 const toMap = (v: View): MapTruck => ({
   id: v.t.id, unitNumber: v.t.unitNumber, lat: v.t.lat, lng: v.t.lng, heading: v.t.heading, speedKmh: v.t.speedKmh,
   status: v.t.status, driverName: v.t.driver?.name, moving: v.status === "rolling", stale: v.status === "nosignal",
-  tone: FLEET_STATUS_TONE[v.status], label: FLEET_STATUS_LABEL[v.status],
+  tone: FLEET_STATUS_TONE[v.status], label: FLEET_STATUS_LABEL[v.status], glyph: v.status === "oos" ? "stop" : "truck",
 });
 
 const posOf = (t: Truck | undefined): [number, number] | null => (t && t.lat != null && t.lng != null ? [t.lat, t.lng] : null);
 const latestPing = (trucks: FleetSnapshot) => trucks.reduce((m, t) => (t.lastPingAt ? Math.max(m, Date.parse(t.lastPingAt)) : m), 0);
 
-/** Short state for a row: speed when rolling, the job when in the shop, otherwise what the fix says. */
-function stateText(v: View) {
+/** Short state for a row: speed when rolling, the hold or the job when off the road, otherwise what the fix says. */
+function stateText(v: View, f: Formatter) {
   const { t } = v;
   switch (v.status) {
-    case "rolling": return `${Math.round(t.speedKmh)} km/h`;
+    case "rolling": return f.speed(t.speedKmh);
     case "idle": return "Idle · engine on";
     case "stopped": return v.live ? "Stopped" : "Parked";
-    case "shop": return t.status === "OUT_OF_SERVICE" ? "Out of service" : t.workInProgress ? `In shop · #${t.workInProgress.number}` : "In shop";
+    case "oos": return t.hold ? (t.hold.repaired ? "Out of service · to confirm" : "Out of service · defect") : "Out of service";
+    case "shop": return t.workInProgress ? `In shop · #${t.workInProgress.number}` : "In shop";
     case "nosignal": return v.hasPosition ? "No signal" : "No position yet";
   }
 }
 
-const pmTone = (t: Truck): Tone => (t.pm.state === "overdue" ? "danger" : t.pm.state === "due" ? "warn" : "neutral");
+const placeOf = (v: View) => v.t.place ?? (v.hasPosition ? "Last known position" : "No position");
 
 /* ------------------------------------------------------------------ */
 /* Small parts                                                         */
@@ -205,7 +205,7 @@ function FuelBar({ pct, wide }: { pct: number | null; wide?: boolean }) {
   );
 }
 
-/** Times are formatted in the viewer's zone; suppress the warning in case server and browser zones differ. */
+/** Relative times tick on the client; suppress the warning in case the first client tick lands before hydration ends. */
 const T = ({ children, className }: { children: ReactNode; className?: string }) => (
   <span suppressHydrationWarning className={className}>{children}</span>
 );
@@ -231,23 +231,44 @@ function FeedState({ feed, compact }: { feed: Feed; compact?: boolean }) {
   return <LiveDot />;
 }
 
+/** "Out of service" banner: which defect holds it and how it gets released. */
+function HoldNote({ t, canEdit, compact }: { t: Truck; canEdit: boolean; compact?: boolean }) {
+  if (!t.outOfService) return null;
+  const h = t.hold;
+  return (
+    <div className={cn("flex items-start gap-2 bg-danger-soft text-danger", compact ? "rounded-md px-2 py-1.5" : "border-b border-line px-3 py-2")}>
+      <OctagonX aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+      <div className="min-w-0 flex-1 text-[12px] leading-4">
+        <p className="font-medium">{h ? (h.repaired ? "Out of service · repaired, waiting to be confirmed" : "Out of service until the repair is verified") : "Marked out of service"}</p>
+        {h && <p className="truncate text-[11px] opacity-90" title={h.label}>{h.label}{h.count > 1 ? ` · ${h.count - 1} more` : ""}</p>}
+      </div>
+      {h && !compact && (
+        canEdit && h.repaired
+          ? <Link href={`/inspections?review=${t.id}`} className={buttonClass("secondary", "sm")}>Confirm & clear</Link>
+          : <Link href={`/inspections/defects?defect=${h.defectId}`} className={buttonClass("secondary", "sm")}>Open defect</Link>
+      )}
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* Dashboard mini map                                                  */
 /* ------------------------------------------------------------------ */
 
-/** Marker popup on the overview map: who drives it, fuel, odometer, PM and when it last reported, with the way in. */
-function TruckPopup({ v }: { v: View }) {
+/** Marker popup on the Today map: who drives it, fuel, odometer, oil service and when it last reported, with the way in. */
+function TruckPopup({ v, f }: { v: View; f: Formatter }) {
   const { t } = v;
-  const pm = pmLabel(t.pm.leftKm);
+  const oil = serviceLine(t.service, f);
   // Leaflet colours every link in the map; the spans carry the theme colour instead.
   return (
     <div className="text-[12px] leading-[18px] text-fg">
       <div className="flex items-center gap-1.5">
         <StatusDot tone={FLEET_STATUS_TONE[v.status]} />
         <span className="num text-[13px] font-semibold">{t.unitNumber}</span>
-        <span className={cn("ml-auto text-[11px] font-medium", TONE_TEXT[FLEET_STATUS_TONE[v.status]])}>{stateText(v)}</span>
+        <span className={cn("ml-auto text-[11px] font-medium", TONE_TEXT[FLEET_STATUS_TONE[v.status]])}>{stateText(v, f)}</span>
       </div>
       <div className="truncate text-[11px] text-fg-subtle">{t.name} · <span className="num">{t.plate}</span></div>
+      {t.outOfService && <div className="mt-1.5"><HoldNote t={t} canEdit={false} compact /></div>}
       <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5">
         <div className="col-span-2 min-w-0">
           <dt className="text-[11px] text-fg-subtle">Driver</dt>
@@ -262,10 +283,10 @@ function TruckPopup({ v }: { v: View }) {
           </dd>
         </div>
         <div className="min-w-0"><dt className="text-[11px] text-fg-subtle">Fuel</dt><dd><FuelBar pct={t.fuelPct} /></dd></div>
-        <div className="min-w-0"><dt className="text-[11px] text-fg-subtle">Odometer</dt><dd className="num truncate">{km(t.odometerKm)}</dd></div>
+        <div className="min-w-0"><dt className="text-[11px] text-fg-subtle">Odometer</dt><dd className="num truncate">{f.dist(t.odometerKm)}</dd></div>
         <div className="col-span-2 min-w-0">
-          <dt className="text-[11px] text-fg-subtle">Next PM</dt>
-          <dd className={cn("num truncate", TONE_TEXT[pmTone(t)])}>{pm ?? "No PM interval set"}</dd>
+          <dt className="text-[11px] text-fg-subtle">Oil service</dt>
+          <dd className={cn("num truncate", TONE_TEXT[serviceTone(t.service)])}>{oil ?? "No oil change recorded"}</dd>
         </div>
         <div className="col-span-2 min-w-0">
           <dt className="text-[11px] text-fg-subtle">Last update</dt>
@@ -281,7 +302,7 @@ function TruckPopup({ v }: { v: View }) {
 }
 
 /**
- * Compact live map with a status legend, for the overview. Each legend count opens the live map filtered to it.
+ * Compact live map with a status legend, for the Today page. Each legend count opens the live map filtered to it.
  * Pass `live={can(user.role, "tracking.view")}`: without it the map shows the server snapshot and does not poll.
  */
 export function LiveFleetMini({ initial, at, height = 360, live = true }: {
@@ -291,6 +312,7 @@ export function LiveFleetMini({ initial, at, height = 360, live = true }: {
   height?: number | string;
   live?: boolean;
 }) {
+  const f = useFormat();
   const { trucks, feed } = useFleet(initial, live);
   const now = useNow(at ? Date.parse(at) : latestPing(initial));
   const views = useMemo(() => trucks.map((t) => derive(t, now)), [trucks, now]);
@@ -298,8 +320,8 @@ export function LiveFleetMini({ initial, at, height = 360, live = true }: {
   const mapTrucks = useMemo(() => views.map(toMap), [views]);
   const renderPopup = useCallback((id: string) => {
     const v = byId.get(id);
-    return v ? <TruckPopup v={v} /> : null;
-  }, [byId]);
+    return v ? <TruckPopup v={v} f={f} /> : null;
+  }, [byId, f]);
   const count = (s: FleetStatus) => views.filter((v) => v.status === s).length;
   const offMap = views.filter((v) => !v.hasPosition).length;
 
@@ -309,10 +331,11 @@ export function LiveFleetMini({ initial, at, height = 360, live = true }: {
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[11px] text-fg-muted">
         {FLEET_STATUSES.map((s) => {
           const n = count(s);
+          if (s === "oos" && n === 0) return null;
           const body = (
             <>
-              <StatusDot tone={FLEET_STATUS_TONE[s]} />
-              {FLEET_STATUS_LABEL[s]} <span className={cn("num font-medium", n ? "text-fg" : "text-fg-faint")}>{n}</span>
+              <StatusDot tone={FLEET_STATUS_TONE[s]} className={cn(s === "nosignal" && "opacity-60")} />
+              {FLEET_STATUS_LABEL[s]} <span className={cn("num font-medium", n ? (s === "oos" ? "text-danger" : "text-fg") : "text-fg-faint")}>{n}</span>
             </>
           );
           return live
@@ -333,10 +356,10 @@ export function LiveFleetMini({ initial, at, height = 360, live = true }: {
 /* ------------------------------------------------------------------ */
 
 const ATTENTION_ITEMS: { key: Exclude<Attention, "all">; label: string; tone: Tone }[] = [
-  { key: "pmOverdue", label: "PM overdue", tone: "danger" },
-  { key: "pmDue", label: "PM due soon", tone: "warn" },
+  { key: "oilOverdue", label: "Oil overdue", tone: "danger" },
+  { key: "oilDue", label: "Oil due", tone: "warn" },
   { key: "fuel", label: "Low fuel", tone: "warn" },
-  { key: "hold", label: "Driver on hold", tone: "warn" },
+  { key: "driverHold", label: "Driver on hold", tone: "warn" },
   { key: "nodriver", label: "No driver", tone: "neutral" },
 ];
 
@@ -347,13 +370,14 @@ export function TrackingBoard({ initial, at, selectedId: initialSelected, initia
   at?: string;
   /** Pre-selected truck id (deep link `/tracking?truck=…`). */
   selectedId?: string | null;
-  /** Status filter from `?status=` (rolling, idle, stopped, shop, nosignal). */
+  /** Status filter from `?status=` (rolling, idle, stopped, shop, oos, nosignal). */
   initialStatus?: "all" | FleetStatus;
   /** Group filter from `?group=` ("none" = trucks without a group). */
   initialGroup?: string;
-  /** Show edit actions (book PM, assign a driver). */
+  /** Show edit actions (book oil service, assign a driver, confirm a repair). */
   canEdit?: boolean;
 }) {
+  const f = useFormat();
   const { trucks, updatedAt, feed } = useFleet(initial);
   const mounted = useMounted();
   const now = useNow(at ? Date.parse(at) : latestPing(initial));
@@ -444,7 +468,7 @@ export function TrackingBoard({ initial, at, selectedId: initialSelected, initia
 
   const mapTrucks = useMemo(() => views.map(toMap), [views]);
   const totals = useMemo(() => {
-    const out = { rolling: 0, idle: 0, stopped: 0, shop: 0, nosignal: 0 } as Record<FleetStatus, number>;
+    const out = { rolling: 0, idle: 0, stopped: 0, shop: 0, oos: 0, nosignal: 0 } as Record<FleetStatus, number>;
     for (const v of views) out[v.status]++;
     return out;
   }, [views]);
@@ -465,8 +489,8 @@ export function TrackingBoard({ initial, at, selectedId: initialSelected, initia
             {/* Only the connection state is announced; the timestamp changes every poll and stays out of the live region. */}
             <span role="status" aria-live="polite"><FeedState feed={feed} /></span>
             <span className="text-fg-faint" aria-hidden="true">·</span>
-            <span className="num text-fg-muted">
-              {mounted && shownAt ? <>Updated <T>{format(shownAt, "HH:mm:ss")}</T></> : `Every ${POLL_MS / 1000} s`}
+            <span className="num text-fg-muted" title={`Company time (${f.zone(shownAt ?? undefined)})`}>
+              {mounted && shownAt ? <>Updated <T>{f.time(shownAt)}</T></> : `Every ${POLL_MS / 1000} s`}
             </span>
           </div>
         }
@@ -488,12 +512,14 @@ export function TrackingBoard({ initial, at, selectedId: initialSelected, initia
               {(["all", ...FLEET_STATUSES] as const).map((s) => {
                 const on = status === s;
                 const n = s === "all" ? undefined : count("status", (v) => v.status === s);
+                // Out of service only earns a button when something is out of service (or it is the active filter).
+                if (s === "oos" && !n && !on) return null;
                 return (
                   <button key={s} type="button" aria-pressed={on} onClick={() => setStatus(s)} title={s === "all" ? undefined : FLEET_STATUS_HINT[s]}
                     className={cn(segmentedThumb(on), "h-6 px-2")}>
-                    {s !== "all" && <StatusDot tone={FLEET_STATUS_TONE[s]} />}
+                    {s !== "all" && <StatusDot tone={FLEET_STATUS_TONE[s]} className={cn(s === "nosignal" && "opacity-60")} />}
                     {s === "all" ? "All" : FLEET_STATUS_LABEL[s]}
-                    {n != null && <span className={cn("num text-[10.5px]", on ? "text-fg-subtle" : "text-fg-faint")}>{n}</span>}
+                    {n != null && <span className={cn("num text-[10.5px]", on ? "text-fg-subtle" : s === "oos" ? "text-danger" : "text-fg-faint")}>{n}</span>}
                   </button>
                 );
               })}
@@ -511,7 +537,7 @@ export function TrackingBoard({ initial, at, selectedId: initialSelected, initia
 
           <ul className="min-h-0 flex-1 divide-y divide-line overflow-y-auto overscroll-contain max-xl:max-h-[46vh]" aria-label="Trucks" data-fleet-list>
             {list.map((v) => (
-              <TruckCard key={v.t.id} v={v} selected={v.t.id === selectedId} onSelect={() => select(v.t.id)} />
+              <TruckCard key={v.t.id} v={v} f={f} selected={v.t.id === selectedId} onSelect={() => select(v.t.id)} />
             ))}
             {list.length === 0 && (
               <li>
@@ -547,14 +573,16 @@ export function TrackingBoard({ initial, at, selectedId: initialSelected, initia
           <div className="pointer-events-none absolute bottom-3 left-3 z-[1001] hidden flex-wrap items-center gap-3 rounded-md border border-line bg-overlay/90 px-2.5 py-1.5 text-[11px] text-fg-muted shadow-float backdrop-blur md:flex">
             {FLEET_STATUSES.map((s) => (
               <span key={s} className="inline-flex items-center gap-1.5">
-                <StatusDot tone={FLEET_STATUS_TONE[s]} className={cn(s === "nosignal" && "opacity-60")} /> {FLEET_STATUS_LABEL[s]}
+                {s === "oos"
+                  ? <OctagonX aria-hidden className="h-3 w-3 text-danger" />
+                  : <StatusDot tone={FLEET_STATUS_TONE[s]} className={cn(s === "nosignal" && "opacity-60")} />} {FLEET_STATUS_LABEL[s]}
               </span>
             ))}
             <span className="inline-flex items-center gap-1.5"><StatusDot tone="accent" /> Selected</span>
             {offMap > 0 && <span className="text-fg-subtle">{offMap} without a position (in the list only)</span>}
           </div>
 
-          {selected && <DetailPanel v={selected} canEdit={canEdit} onClose={() => select(null)} />}
+          {selected && <DetailPanel v={selected} f={f} canEdit={canEdit} onClose={() => select(null)} />}
         </div>
       </div>
     </div>
@@ -563,7 +591,7 @@ export function TrackingBoard({ initial, at, selectedId: initialSelected, initia
 
 function AttentionRow({ value, onChange, count }: { value: Attention; onChange: (a: Attention) => void; count: (k: Exclude<Attention, "all">) => number }) {
   const items = ATTENTION_ITEMS.map((i) => ({ ...i, n: count(i.key) })).filter((i) => i.n > 0 || i.key === value);
-  if (items.length === 0) return <p className="px-0.5 text-[11px] text-fg-subtle">No PM due, low fuel, holds or unassigned trucks right now</p>;
+  if (items.length === 0) return <p className="px-0.5 text-[11px] text-fg-subtle">No oil due, low fuel, holds or unassigned trucks right now</p>;
   return (
     <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Needs attention">
       {items.map((i) => {
@@ -586,27 +614,31 @@ function AttentionRow({ value, onChange, count }: { value: Attention; onChange: 
 /* Truck card                                                          */
 /* ------------------------------------------------------------------ */
 
-function TruckCard({ v, selected, onSelect }: { v: View; selected: boolean; onSelect: () => void }) {
+function TruckCard({ v, f, selected, onSelect }: { v: View; f: Formatter; selected: boolean; onSelect: () => void }) {
   const { t } = v;
   const tone = FLEET_STATUS_TONE[v.status];
-  const pm = t.pm.state === "overdue" || t.pm.state === "due" ? pmLabel(t.pm.leftKm) : null;
+  const oil = serviceNeeded(t.service) ? serviceLine(t.service, f) : null;
 
   return (
     <li id={`truck-${t.id}`}>
       <button type="button" onClick={onSelect} aria-pressed={selected}
         className={cn("block w-full border-l-2 px-3 py-2 text-left transition-colors hover:bg-raised focus-visible:outline-none focus-visible:bg-raised",
-          selected ? "border-accent bg-accent-soft/50 hover:bg-accent-soft/50" : "border-transparent")}>
+          selected ? "border-accent bg-accent-soft/50 hover:bg-accent-soft/50" : v.status === "oos" ? "border-danger" : "border-transparent")}>
         {/* Unit · plate · state */}
         <div className="flex items-center gap-2">
-          <StatusDot tone={tone} pulse={v.status === "rolling"} />
+          {v.status === "oos"
+            ? <OctagonX aria-hidden className="h-3.5 w-3.5 shrink-0 text-danger" />
+            : <StatusDot tone={tone} pulse={v.status === "rolling"} className={cn(v.status === "nosignal" && "opacity-60")} />}
           <span className="num text-[13px] font-semibold text-fg">{t.unitNumber}</span>
           <span className="num truncate text-[11px] text-fg-subtle">{t.plate}</span>
           <span className="ml-auto shrink-0">
-            {v.status === "shop"
-              ? <Badge value={t.status === "OUT_OF_SERVICE" ? "OUT_OF_SERVICE" : "MAINTENANCE"} label={stateText(v)} />
-              : v.status === "rolling"
-                ? <span className="num text-[12px] font-medium text-fg">{Math.round(t.speedKmh)} <span className="text-[10px] font-normal text-fg-subtle">km/h</span></span>
-                : <span className={cn("text-[11px]", v.status === "nosignal" ? "font-medium text-danger" : "text-fg-subtle")}>{stateText(v)}</span>}
+            {v.status === "oos"
+              ? <Badge value="OUT_OF_SERVICE" tone="danger" label={stateText(v, f)} />
+              : v.status === "shop"
+                ? <Badge value="MAINTENANCE" label={stateText(v, f)} />
+                : v.status === "rolling"
+                  ? <span className="num text-[12px] font-medium text-fg">{f.number(t.speedKmh)} <span className="text-[10px] font-normal text-fg-subtle">{f.labels.speed}</span></span>
+                  : <span className={cn("text-[11px]", v.status === "nosignal" ? "font-medium text-danger" : "text-fg-subtle")}>{stateText(v, f)}</span>}
           </span>
         </div>
 
@@ -624,16 +656,17 @@ function TruckCard({ v, selected, onSelect }: { v: View; selected: boolean; onSe
         {/* Location · fuel · last update */}
         <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-fg-subtle">
           <MapPin className="h-3 w-3 shrink-0" />
-          <span className="truncate">{t.locationName ?? (v.hasPosition ? "Last known position" : "No position")}</span>
+          <span className="truncate">{placeOf(v)}</span>
           <span className="ml-auto flex shrink-0 items-center gap-2">
             <FuelBar pct={t.fuelPct} />
             <T className="num">{fixAge(v.fixAgeMs)}</T>
           </span>
         </div>
 
-        {pm && (
-          <div className="mt-1.5 flex items-center gap-1.5">
-            <Chip tone={pmTone(t)}>{pm}</Chip>
+        {(oil || t.hold) && (
+          <div className="mt-1.5 flex min-w-0 items-center gap-1.5">
+            {t.hold && <span className="truncate text-[11px] text-danger" title={t.hold.label}>{t.hold.label}</span>}
+            {oil && <Chip tone={serviceTone(t.service)} className="shrink-0">{oil}</Chip>}
           </div>
         )}
       </button>
@@ -645,12 +678,13 @@ function TruckCard({ v, selected, onSelect }: { v: View; selected: boolean; onSe
 /* Detail panel                                                        */
 /* ------------------------------------------------------------------ */
 
-function DetailPanel({ v, canEdit, onClose }: { v: View; canEdit: boolean; onClose: () => void }) {
+function DetailPanel({ v, f, canEdit, onClose }: { v: View; f: Formatter; canEdit: boolean; onClose: () => void }) {
   const { t } = v;
   const d = t.driver;
   const job = t.workInProgress;
-  const pm = pmLabel(t.pm.leftKm);
-  const pmNeeded = t.pm.state === "overdue" || t.pm.state === "due";
+  const oil = serviceLine(t.service, f);
+  const oilTone = serviceTone(t.service);
+  const statusLabel = v.status === "oos" ? "Out of service" : FLEET_STATUS_LABEL[v.status];
 
   return (
     <section aria-label={`Truck ${t.unitNumber}`}
@@ -660,7 +694,7 @@ function DetailPanel({ v, canEdit, onClose }: { v: View; canEdit: boolean; onClo
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
             <Link href={`/fleet/${t.id}`} className="num text-[15px] font-semibold leading-5 text-fg hover:text-accent-text">{t.unitNumber}</Link>
-            <Badge value={v.status.toUpperCase()} tone={FLEET_STATUS_TONE[v.status]} label={t.status === "OUT_OF_SERVICE" ? "Out of service" : FLEET_STATUS_LABEL[v.status]} />
+            <Badge value={v.status.toUpperCase()} tone={FLEET_STATUS_TONE[v.status]} label={statusLabel} />
           </div>
           <p className="truncate text-[11px] text-fg-subtle">
             {t.name} {t.year} · <span className="num">{t.plate}</span>{t.group ? ` · ${t.group}` : ""}
@@ -670,14 +704,16 @@ function DetailPanel({ v, canEdit, onClose }: { v: View; canEdit: boolean; onClo
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <HoldNote t={t} canEdit={canEdit} />
+
         <div className="grid grid-cols-2 gap-px border-b border-line bg-line">
-          <Metric label={v.live ? "Speed" : "Last known speed"} value={<>{Math.round(t.speedKmh)} <span className="text-[11px] font-normal text-fg-subtle">km/h</span></>}
+          <Metric label={v.live ? "Speed" : "Last known speed"} value={<>{f.number(t.speedKmh)} <span className="text-[11px] font-normal text-fg-subtle">{f.labels.speed}</span></>}
             hint={v.live ? (t.engineOn ? "Engine on" : "Engine off") : "No live data"} />
           <Metric label="Fuel" value={<FuelBar pct={t.fuelPct} wide />} hint={v.lowFuel ? `Below ${LOW_FUEL_PCT}%, plan a fuel stop` : undefined} tone={v.lowFuel ? "warn" : undefined} />
-          <Metric label="Odometer" value={km(t.odometerKm)} />
-          <Metric label="Next PM" value={pm ? pm.replace(/^PM /, "") : "Not set"} tone={pmTone(t) === "neutral" ? undefined : pmTone(t)}
-            hint={t.pm.nextKm != null ? `at ${km(t.pm.nextKm)}` : "Set an interval on the truck"} />
-          <Metric label="Location" value={<span className="font-sans">{t.locationName ?? (v.hasPosition ? "Last known position" : "No position")}</span>}
+          <Metric label="Odometer" value={f.dist(t.odometerKm)} hint={t.odometerAt ? `as of ${f.day(t.odometerAt)}` : "No reading date"} />
+          <Metric label="Oil service" value={oil ? oil.replace(/^Oil:? /, "") : "Not recorded"} tone={oilTone === "neutral" || oilTone === "ok" ? undefined : oilTone}
+            hint={t.service.dueAtKm != null ? `due at ${f.dist(t.service.dueAtKm)}` : "Log an oil change to start the count"} />
+          <Metric label="Location" value={<span className="font-sans">{placeOf(v)}</span>}
             hint={t.lat != null && t.lng != null ? `${t.lat.toFixed(4)}, ${t.lng.toFixed(4)}` : undefined} />
           <Metric label="Last update" value={<T>{fixAge(v.fixAgeMs)}</T>} tone={v.status === "nosignal" ? "danger" : undefined} hint={sourceLabel(t.pingSource)} />
         </div>
@@ -730,10 +766,10 @@ function DetailPanel({ v, canEdit, onClose }: { v: View; canEdit: boolean; onClo
           )}
         </dl>
 
-        {pmNeeded && canEdit && !job && (
+        {serviceNeeded(t.service) && canEdit && !job && (
           <div className="flex items-center justify-between gap-2 border-t border-line px-3 py-2">
-            <span className={cn("num text-[12px] font-medium", TONE_TEXT[pmTone(t)])}>{pm}</span>
-            <Link href={`/maintenance/work-orders/new?truck=${t.id}&category=PM`} className={buttonClass("secondary", "sm")}>Book PM</Link>
+            <span className={cn("num text-[12px] font-medium", TONE_TEXT[oilTone])}>{oil}</span>
+            <Link href={`/maintenance/oil?book=${t.id}`} className={buttonClass("secondary", "sm")}>Book oil service</Link>
           </div>
         )}
       </div>
@@ -741,7 +777,7 @@ function DetailPanel({ v, canEdit, onClose }: { v: View; canEdit: boolean; onClo
       <footer className="flex items-center gap-1 border-t border-line px-2 py-1.5">
         <Link href={`/fleet/${t.id}`} className={buttonClass("ghost", "sm")}>Truck <ArrowUpRight /></Link>
         {d && <Link href={`/drivers/${d.id}`} className={buttonClass("ghost", "sm")}>Driver <ArrowUpRight /></Link>}
-        {job && <Link href={`/maintenance/work-orders/${job.id}`} className={buttonClass("ghost", "sm")}>Work order <ArrowUpRight /></Link>}
+        {job && <Link href={`/maintenance/work-orders/${job.id}`} className={buttonClass("ghost", "sm")}>Repair <ArrowUpRight /></Link>}
       </footer>
     </section>
   );

@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronRight, FileText, Fuel, Mail, Pencil, Phone, Truck as TruckIcon } from "lucide-react";
+import { ChevronRight, EyeOff, FileText, Fuel, Headset, Mail, Pencil, Phone, Truck as TruckIcon } from "lucide-react";
 import { getCurrentUser, requireUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { DRIVER_TYPE_LABELS } from "@/lib/constants";
 import { DOC_KIND_LABELS, REQUIRED_DRIVER_DOCS } from "@/lib/documents";
-import { ago, date, daysAgo, daysUntil, km, money, money2, number } from "@/lib/format";
+import { ago, daysAgo, daysUntil } from "@/lib/format";
+import { getFormat } from "@/lib/format-server";
 import { DocumentsPanel } from "@/components/documents/panel";
 import { Badge, Card, Chip, DL, EmptyState, ExpiryBadge, InfoTip, LinkButton, PageHeader, Stat, StatusDot, Table, Tabs, cn, type Tone } from "@/components/ui";
 import { HoldControl } from "./hold-control";
@@ -30,6 +31,7 @@ export async function generateMetadata({ params }: PageProps<"/drivers/[id]">) {
 
 export default async function DriverDetail({ params, searchParams }: PageProps<"/drivers/[id]">) {
   const user = await requireUser("drivers.view");
+  const f = await getFormat();
   const { id } = await params;
   const sp = await searchParams;
   const tab: Tab = (TABS as readonly string[]).includes(String(sp.tab)) ? (sp.tab as Tab) : "overview";
@@ -90,6 +92,7 @@ export default async function DriverDetail({ params, searchParams }: PageProps<"
             {driver.truck
               ? <span className="inline-flex items-center gap-1.5 text-fg-muted"><TruckIcon className="h-3.5 w-3.5" />Drives <Link href={`/fleet/${driver.truck.id}`} className="num font-medium text-fg hover:underline">{driver.truck.unitNumber}</Link></span>
               : <span className="inline-flex items-center gap-1.5 text-fg-subtle"><TruckIcon className="h-3.5 w-3.5" />No truck</span>}
+            {driver.dispatcher && <span className="inline-flex items-center gap-1.5 text-fg-muted"><Headset className="h-3.5 w-3.5" />Dispatch {driver.dispatcher}</span>}
           </span>
         }
         actions={editable && (
@@ -140,7 +143,7 @@ export default async function DriverDetail({ params, searchParams }: PageProps<"
                     </div>
                     <p className="mt-0.5 truncate text-[12px] text-fg-muted">{driver.truck.year} {driver.truck.make} {driver.truck.model} · <span className="num">{driver.truck.plate}</span></p>
                     <p className="mt-0.5 text-[11px] text-fg-subtle">
-                      <span className="num">{km(driver.truck.odometerKm)}</span>
+                      <span className="num">{f.dist(driver.truck.odometerKm)}</span>
                       {driver.truck.locationName && <> · {driver.truck.locationName}{driver.truck.lastPingAt && ` · ${ago(driver.truck.lastPingAt)}`}</>}
                     </p>
                   </div>
@@ -171,7 +174,7 @@ export default async function DriverDetail({ params, searchParams }: PageProps<"
                       <td className="num text-fg-muted">{kind === "LICENSE" ? `${driver.licenseNumber} · ${driver.licenseClass}` : "—"}</td>
                       <td>
                         {expiry
-                          ? <span className="inline-flex items-center gap-2"><span className="num text-fg-muted">{date(expiry)}</span><ExpiryBadge days={daysUntil(expiry)} /></span>
+                          ? <span className="inline-flex items-center gap-2"><span className="num text-fg-muted">{f.date(expiry)}</span><ExpiryBadge days={daysUntil(expiry)} /></span>
                           : editHref ? <Link href={editHref} className="text-[12px] font-medium text-warn hover:underline">Add the date</Link> : <span className="text-[12px] text-warn">Not recorded</span>}
                       </td>
                       <td>
@@ -199,7 +202,10 @@ export default async function DriverDetail({ params, searchParams }: PageProps<"
               <DL items={[
                 ["Status", <Badge key="st" value={driver.status} label={EMPLOYMENT_LABELS[driver.status] ?? driver.status} dot />],
                 ["Type", DRIVER_TYPE_LABELS[driver.type] ?? driver.type],
-                ["Hired", <span key="h"><span className="num">{date(driver.hireDate)}</span> <span className="text-fg-subtle">· {tenure(driver.hireDate)}</span></span>],
+                ["Dispatcher", driver.dispatcher
+                  ? <Link key="dp" href={`/drivers?dispatcher=${encodeURIComponent(driver.dispatcher)}`} className="hover:underline" title={`All drivers dispatched by ${driver.dispatcher}`}>{driver.dispatcher}</Link>
+                  : editHref ? <Link key="dp" href={editHref} className="text-[12px] font-medium text-warn hover:underline">Set the dispatcher</Link> : "—"],
+                ["Hired", <span key="h"><span className="num">{f.date(driver.hireDate)}</span> <span className="text-fg-subtle">· {tenure(driver.hireDate)}</span></span>],
                 ["Safety score", (
                   <span key="s" className="inline-flex items-center gap-1.5">
                     <Badge value={grade.grade} tone={grade.tone} label={`${grade.grade} · ${driver.score}`} className="num" />
@@ -244,7 +250,7 @@ export default async function DriverDetail({ params, searchParams }: PageProps<"
                     <td>
                       <div className="flex flex-col gap-0.5">
                         <ExpiryBadge days={daysUntil(expiry)} />
-                        {expiry && <span className="text-[11px] text-fg-subtle">{date(expiry)}{!doc?.expiresAt && recorded ? " · from record" : ""}</span>}
+                        {expiry && <span className="text-[11px] text-fg-subtle">{f.date(expiry)}{!doc?.expiresAt && recorded ? " · from record" : ""}</span>}
                       </div>
                     </td>
                   </tr>
@@ -255,7 +261,7 @@ export default async function DriverDetail({ params, searchParams }: PageProps<"
         </div>
       )}
 
-      {tab === "fuel" && <FuelTab driverId={id} truck={driver.truck} canLog={can(user.role, "fleet.edit")} />}
+      {tab === "fuel" && <FuelTab driverId={id} truck={driver.truck} canLog={can(user.role, "fleet.edit")} showMoney={can(user.role, "money.view")} />}
     </>
   );
 }
@@ -268,7 +274,8 @@ const TONE_RANK: Partial<Record<Tone, number>> = { danger: 0, warn: 1, info: 2 }
 const toneRank = (t: Tone) => TONE_RANK[t] ?? 3;
 
 /** Fills logged while this driver had the truck (FuelLog.driverId), newest first, with 90-day totals. */
-async function FuelTab({ driverId, truck, canLog }: { driverId: string; truck: { id: string; unitNumber: string } | null; canLog: boolean }) {
+async function FuelTab({ driverId, truck, canLog, showMoney }: { driverId: string; truck: { id: string; unitNumber: string } | null; canLog: boolean; showMoney: boolean }) {
+  const fmt = await getFormat();
   const [recent, logs] = await Promise.all([
     db.fuelLog.aggregate({ where: { driverId, date: { gte: daysAgo(FUEL_DAYS) } }, _sum: { liters: true, cost: true }, _count: true }),
     db.fuelLog.findMany({
@@ -276,30 +283,36 @@ async function FuelTab({ driverId, truck, canLog }: { driverId: string; truck: {
       select: { id: true, date: true, liters: true, cost: true, odometerKm: true, station: true, truck: { select: { id: true, unitNumber: true } } },
     }),
   ]);
-  const liters = recent._sum.liters ?? 0;
+  const volume = recent._sum.liters ?? 0;
   const cost = recent._sum.cost ?? 0;
-  const logHere = canLog && truck && <LinkButton href={`/fleet/${truck.id}`} variant="secondary" size="sm"><Fuel />Log fuel on {truck.unitNumber}</LinkButton>;
+  const vol = fmt.labels.volume;
+  const logHere = canLog && truck && <LinkButton href={`/fleet/${truck.id}?tab=expenses`} variant="secondary" size="sm"><Fuel />Log fuel on {truck.unitNumber}</LinkButton>;
 
   return (
     <>
-      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat label={`Fills · ${FUEL_DAYS}d`} value={number(recent._count)} icon={<Fuel />} />
-        <Stat label={`Litres · ${FUEL_DAYS}d`} value={number(liters)} />
-        <Stat label={`Spend · ${FUEL_DAYS}d`} value={money(cost)} />
-        <Stat label="Average price" value={liters ? `${money2(cost / liters)}/L` : "—"} hint={`Over the last ${FUEL_DAYS} days`} />
+      <div className={cn("mb-4 grid grid-cols-2 gap-3", showMoney ? "md:grid-cols-4" : "md:grid-cols-2")}>
+        <Stat label={`Fills · ${FUEL_DAYS}d`} value={fmt.number(recent._count)} icon={<Fuel />} />
+        <Stat label={`Fuel (${vol}) · ${FUEL_DAYS}d`} value={fmt.decimal(volume)} />
+        {showMoney && <Stat label={`Spend · ${FUEL_DAYS}d`} value={fmt.money(cost)} />}
+        {showMoney && <Stat label={`Average price per ${vol}`} value={volume ? fmt.money3(cost / volume) : "—"} hint={`Over the last ${FUEL_DAYS} days`} />}
       </div>
       <Card title="Fuel log" flush icon={<Fuel />}
-        actions={<span className="flex items-center gap-2">{logs.length === FUEL_ROWS && <span className="text-[11px] text-fg-subtle">Latest {FUEL_ROWS}</span>}{logHere}</span>}>
-        <Table dense stickyHead={false} head={["Date", "Truck", "Station", "Litres", "Cost", "Price", "Odometer"]}>
-          {logs.map((f) => (
-            <tr key={f.id}>
-              <td className="num whitespace-nowrap text-fg-muted">{date(f.date)}</td>
-              <td><Link href={`/fleet/${f.truck.id}`} className="num font-medium text-fg hover:underline">{f.truck.unitNumber}</Link></td>
-              <td className="max-w-48 truncate">{f.station ?? <span className="text-fg-faint">—</span>}</td>
-              <td className="num">{number(f.liters)}</td>
-              <td className="num">{money2(f.cost)}</td>
-              <td className="num text-fg-muted">{f.liters ? money2(f.cost / f.liters) : "—"}</td>
-              <td className={cn("num text-fg-muted", !f.odometerKm && "text-fg-faint")}>{f.odometerKm ? km(f.odometerKm) : "—"}</td>
+        actions={<span className="flex items-center gap-2">
+          {!showMoney && <span className="inline-flex items-center gap-1 text-[11px] text-fg-subtle"><EyeOff className="h-3.5 w-3.5" />Costs hidden for your role</span>}
+          {logs.length === FUEL_ROWS && <span className="text-[11px] text-fg-subtle">Latest {FUEL_ROWS}</span>}{logHere}
+        </span>}>
+        <Table dense stickyHead={false} head={["Date", "Truck", "Station", fmt.labels.volumeLong[0].toUpperCase() + fmt.labels.volumeLong.slice(1), ...(showMoney ? ["Cost", `Per ${vol}`] : []), "Odometer"]}>
+          {logs.map((x) => (
+            <tr key={x.id}>
+              <td className="num whitespace-nowrap text-fg-muted">{fmt.date(x.date)}</td>
+              <td><Link href={`/fleet/${x.truck.id}`} className="num font-medium text-fg hover:underline">{x.truck.unitNumber}</Link></td>
+              <td className="max-w-48 truncate">{x.station ?? <span className="text-fg-faint">—</span>}</td>
+              <td className="num">{fmt.decimal(x.liters)}</td>
+              {showMoney && <>
+                <td className="num">{fmt.money2(x.cost)}</td>
+                <td className="num text-fg-muted">{x.liters ? fmt.money3(x.cost / x.liters) : "—"}</td>
+              </>}
+              <td className={cn("num text-fg-muted", !x.odometerKm && "text-fg-faint")}>{x.odometerKm ? fmt.dist(x.odometerKm) : "—"}</td>
             </tr>
           ))}
         </Table>

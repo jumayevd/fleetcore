@@ -2,14 +2,17 @@ import { BadgeCheck, CalendarClock, FileWarning, FileX2, Users } from "lucide-re
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { DOC_KIND_LABELS } from "@/lib/documents";
-import { ago, date } from "@/lib/format";
+import { ago } from "@/lib/format";
+import { db } from "@/lib/db";
+import { normalizeLocale, type Formatter } from "@/lib/locale";
+import { getFormat } from "@/lib/format-server";
 import { saveCompanyProfile } from "@/app/actions/company";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { DocumentsPanel } from "@/components/documents/panel";
 import { Badge, Card, Field, InfoTip, Input, LinkButton, PageHeader, Stat, Textarea, type Tone } from "@/components/ui";
 import { getCompanyCompliance, getCompanyProfileRecord } from "./profile";
 import { REQUIRED_COMPANY_DOCS, complianceCounts, type DocCompliance, type DocComplianceStatus } from "./shared";
-import { ColorPicker, DeleteCompany } from "./controls";
+import { ColorPicker, DeleteCompany, RegionSettings } from "./controls";
 
 export const metadata = { title: "Company profile" };
 
@@ -17,7 +20,7 @@ const STATUS_TONE: Record<DocComplianceStatus, Tone> = { valid: "ok", expiring: 
 const STATUS_LABEL: Record<DocComplianceStatus, string> = { valid: "Valid", expiring: "Expiring", expired: "Expired", missing: "Missing" };
 const kindLabel = (k: string) => DOC_KIND_LABELS[k] ?? k;
 
-function statusText(r: DocCompliance) {
+function statusText(r: DocCompliance, date: Formatter["date"]) {
   if (r.status === "missing") return "Not uploaded";
   if (r.days === null) return "No expiry date";
   if (r.days < 0) return `Expired ${-r.days}d ago · ${date(r.doc?.expiresAt)}`;
@@ -26,7 +29,12 @@ function statusText(r: DocCompliance) {
 
 export default async function CompanyPage() {
   const user = await requireUser("company.manage");
-  const [{ profile, updatedAt }, compliance] = await Promise.all([getCompanyProfileRecord(), getCompanyCompliance()]);
+  const [{ profile, updatedAt }, compliance, trucks, fuelLogs, f] = await Promise.all([
+    getCompanyProfileRecord(), getCompanyCompliance(), db.truck.count(), db.fuelLog.count(), getFormat(),
+  ]);
+  const zones = Intl.supportedValuesOf("timeZone");
+  const date = f.date;
+  const us = f.imperial;
 
   const counts = complianceCounts(compliance);
   const names = (s: DocComplianceStatus) => compliance.filter((r) => r.status === s).map((r) => kindLabel(r.kind)).join(", ");
@@ -74,17 +82,17 @@ export default async function CompanyPage() {
 
               <Card title="Legal entity">
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Legal name" className="sm:col-span-2"><Input name="legalName" defaultValue={profile.legalName} placeholder="«Fleet Logistics» LLC" /></Field>
+                  <Field label="Legal name" className="sm:col-span-2"><Input name="legalName" defaultValue={profile.legalName} placeholder="Fleet Logistics LLC" /></Field>
                   <Field label="Director"><Input name="director" defaultValue={profile.director} placeholder="Full name" /></Field>
-                  <Field label="Tax ID"><Input name="taxId" defaultValue={profile.taxId} placeholder="123456789" className="num" /></Field>
-                  <Field label="Carrier licence number" className="sm:col-span-2"><Input name="licenseNumber" defaultValue={profile.licenseNumber} placeholder="AA 0000000" className="num" /></Field>
+                  <Field label={us ? "EIN / tax ID" : "Tax ID"}><Input name="taxId" defaultValue={profile.taxId} placeholder={us ? "12-3456789" : "123456789"} className="num" /></Field>
+                  <Field label={us ? "USDOT / MC number" : "Carrier licence number"} className="sm:col-span-2"><Input name="licenseNumber" defaultValue={profile.licenseNumber} placeholder={us ? "USDOT 1234567 · MC 123456" : "AA 0000000"} className="num" /></Field>
                 </div>
               </Card>
 
               <Card title="Contacts">
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Phone"><Input name="phone" type="tel" defaultValue={profile.phone} placeholder="+998 71 000 00 00" className="num" /></Field>
-                  <Field label="Email"><Input name="email" type="email" defaultValue={profile.email} placeholder="office@company.uz" /></Field>
+                  <Field label="Phone"><Input name="phone" type="tel" defaultValue={profile.phone} placeholder={us ? "(555) 010-0100" : "+998 71 000 00 00"} className="num" /></Field>
+                  <Field label="Email"><Input name="email" type="email" defaultValue={profile.email} placeholder="office@company.com" /></Field>
                   <Field label="Address" className="sm:col-span-2"><Textarea name="address" rows={2} defaultValue={profile.address} placeholder="Street, city, postcode, country" /></Field>
                 </div>
               </Card>
@@ -98,7 +106,7 @@ export default async function CompanyPage() {
                 {insurance && (
                   <p className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-fg-subtle">
                     <Badge value={insurance.status} tone={STATUS_TONE[insurance.status]} label={`Certificate ${STATUS_LABEL[insurance.status].toLowerCase()}`} />
-                    <span>{statusText(insurance)}{insurance.status === "missing" && " — upload it under Company documents"}</span>
+                    <span>{statusText(insurance, date)}{insurance.status === "missing" && " — upload it under Company documents"}</span>
                   </p>
                 )}
               </Card>
@@ -106,9 +114,9 @@ export default async function CompanyPage() {
               <Card title={<span className="flex items-center gap-1.5">Bank details<InfoTip>For reference: lessors, insurers and shops ask for them.</InfoTip></span>} className="lg:col-span-2">
                 <div className="grid gap-3 sm:grid-cols-4">
                   <Field label="Bank" className="sm:col-span-2"><Input name="bankName" defaultValue={profile.bank.name} placeholder="Bank name and branch" /></Field>
-                  <Field label="Account number" className="sm:col-span-2"><Input name="bankAccount" defaultValue={profile.bank.account} placeholder="2020 8000 0000 0000 0000" className="num" /></Field>
-                  <Field label="MFO / routing"><Input name="bankMfo" defaultValue={profile.bank.mfo} placeholder="00000" className="num" /></Field>
-                  <Field label="SWIFT / BIC"><Input name="bankSwift" defaultValue={profile.bank.swift} placeholder="XXXXUZ22" className="num" /></Field>
+                  <Field label="Account number" className="sm:col-span-2"><Input name="bankAccount" defaultValue={profile.bank.account} placeholder={us ? "000123456789" : "2020 8000 0000 0000 0000"} className="num" /></Field>
+                  <Field label={us ? "Routing (ABA)" : "MFO / routing"}><Input name="bankMfo" defaultValue={profile.bank.mfo} placeholder={us ? "021000021" : "00000"} className="num" /></Field>
+                  <Field label="SWIFT / BIC"><Input name="bankSwift" defaultValue={profile.bank.swift} placeholder={us ? "XXXXUS33" : "XXXXUZ22"} className="num" /></Field>
                 </div>
               </Card>
             </div>
@@ -125,8 +133,12 @@ export default async function CompanyPage() {
           {can(user.role, "company.delete") && <DeleteCompany name={user.company.name} />}
         </div>
 
-        {/* Compliance detail + documents */}
+        {/* Region, compliance detail + documents */}
         <div className="space-y-4">
+          <Card title={<span className="flex items-center gap-1.5">Region &amp; units<InfoTip>Every distance, volume and weight in this company is in these units, and every date and time is in this time zone — for everyone, wherever they sign in from. The top bar shows your own clock next to it.</InfoTip></span>}>
+            <RegionSettings locale={normalizeLocale(user.company)} zones={zones} counts={{ trucks, fuelLogs }} />
+          </Card>
+
           <Card flush
             title={
               <span className="flex items-center gap-1.5">Compliance
@@ -141,7 +153,7 @@ export default async function CompanyPage() {
                     <p className="truncate text-[13px] font-medium text-fg">
                       {r.doc ? <a href={`/api/documents/${r.doc.id}`} target="_blank" rel="noreferrer" className="hover:underline">{kindLabel(r.kind)}</a> : kindLabel(r.kind)}
                     </p>
-                    <p className="truncate text-[11px] text-fg-subtle">{statusText(r)}</p>
+                    <p className="truncate text-[11px] text-fg-subtle">{statusText(r, date)}</p>
                   </div>
                   <Badge value={r.status} tone={STATUS_TONE[r.status]} label={STATUS_LABEL[r.status]} dot />
                 </li>

@@ -1,55 +1,80 @@
 import { requireUser } from "@/lib/auth";
-import { WORK_ORDER_CATEGORIES, WORK_ORDER_STATUSES } from "@/lib/constants";
-import { toDateInput, toLocalInput } from "@/lib/format";
+import { can } from "@/lib/permissions";
+import { db } from "@/lib/db";
+import { getFormat } from "@/lib/format-server";
+import { defectLabel } from "@/lib/service";
+import { PTI_COMPONENT_LABELS, REPAIR_TYPES, humanize } from "@/lib/constants";
 import { PageHeader } from "@/components/ui";
-import { saveWorkOrderChecked } from "../../_lib/actions";
+import { saveWorkOrder } from "@/app/actions/repairs";
+import { repairTypeForCategory, repairTypeLabel } from "@/components/shop/shared";
 import { str, workOrderFormOptions } from "../../_lib/data";
-import { IN_HOUSE_VENDOR } from "../../_lib/shared";
-import { WorkOrderForm } from "../../_components/work-order-form";
+import { vendorOptions } from "../../_lib/repairs";
+import { RepairForm } from "../../_components/repair-form";
 
-export const metadata = { title: "New work order" };
+export const metadata = { title: "New repair" };
 
-export default async function NewWorkOrder({ searchParams }: PageProps<"/maintenance/work-orders/new">) {
-  await requireUser("fleet.edit");
+/** Walk-around components → the repair type a fix usually is. */
+const TYPE_FOR_COMPONENT: Record<string, string> = {
+  STEER_TIRES: "TIRES", DRIVE_TIRES: "TIRES", TRAILER_TIRES: "TIRES", LIGHTS: "ELECTRICAL", BATTERY: "ELECTRICAL",
+  SUSPENSION: "STEER", BODY: "BODY", GLASS_MIRRORS: "BODY", LEAKS: "ENGINE", BELTS_HOSES: "ENGINE",
+};
+
+/**
+ * New repair. Prefills from the URL: `truck` / `trailer`, `type` (or an older `category`), `status` (IN_PROGRESS /
+ * DONE), `vendor`, and `defect` (unit, title and description from the defect; saving ties the defect to the repair).
+ */
+export default async function NewRepair({ searchParams }: PageProps<"/maintenance/work-orders/new">) {
+  const user = await requireUser("fleet.edit");
+  const money = can(user.role, "money.view");
   const sp = await searchParams;
-  const { trucks, trailers, vendors } = await workOrderFormOptions();
-  const truckId = str(sp.truck);
-  const trailerId = str(sp.trailer);
+  const defectId = str(sp.defect);
+  const [{ trucks, trailers, drivers }, vendors, f, defect] = await Promise.all([
+    workOrderFormOptions(), vendorOptions(), getFormat(),
+    defectId ? db.defect.findUnique({ where: { id: defectId }, select: { id: true, number: true, truckId: true, trailerId: true, component: true, description: true, status: true } }) : null,
+  ]);
+  const truck = trucks.find((t) => t.id === (defect?.truckId ?? str(sp.truck)));
+  const trailer = trailers.find((t) => t.id === (defect?.trailerId ?? str(sp.trailer)));
+  const typeParam = str(sp.type);
   const category = str(sp.category);
+  const repairType = typeParam && (REPAIR_TYPES as readonly string[]).includes(typeParam) ? typeParam
+    : defect ? TYPE_FOR_COMPONENT[defect.component] ?? "REPAIR"
+      : category ? repairTypeForCategory(category) : "REPAIR";
   const statusParam = str(sp.status);
-  const status = statusParam && (WORK_ORDER_STATUSES as readonly string[]).includes(statusParam) ? statusParam : "OPEN";
-  const truck = trucks.find((t) => t.id === truckId);
-  const trailer = trailers.find((t) => t.id === trailerId);
-  const isPm = category === "PM";
-  const logging = status === "DONE";
-  // Defaults are computed here, in the zone the action parses dates in, so the client render can't disagree.
+  const status = statusParam === "DONE" || statusParam === "IN_PROGRESS" ? statusParam : "OPEN";
+  const vendorId = vendors.find((v) => v.id === str(sp.vendor))?.id ?? null;
   const now = new Date();
+  const unit = truck ?? trailer;
+  const component = defect ? PTI_COMPONENT_LABELS[defect.component] ?? humanize(defect.component) : null;
+  const title = defect ? `Repair for ${defectLabel(defect.number)}`
+    : status === "DONE" ? "Log a completed repair"
+      : repairType !== "REPAIR" && unit ? `${repairTypeLabel(repairType)} for ${unit.unitNumber}` : "New repair";
 
   return (
     <>
-      <PageHeader
-        eyebrow="Fleet · Maintenance · Work orders"
-        title={isPm && truck ? `PM service for ${truck.unitNumber}` : logging ? "Log a completed repair" : "New work order"}
-        subtitle={truck ? `${truck.unitNumber} · ${truck.detail}` : trailer ? `${trailer.unitNumber} · ${trailer.detail}` : undefined}
-      />
-      <WorkOrderForm
-        action={saveWorkOrderChecked.bind(null, null)}
+      <PageHeader title={title}
+        subtitle={defect ? `${component}: ${defect.description}${unit ? ` · ${unit.unitNumber}` : ""}` : unit ? `${unit.unitNumber} · ${unit.detail}` : "Book a unit into a shop, put it in now, or log work that is already done."} />
+      <RepairForm
+        action={saveWorkOrder.bind(null, null)}
         trucks={trucks}
         trailers={trailers}
+        drivers={drivers}
         vendors={vendors}
-        now={toLocalInput(now)}
-        submitLabel={logging ? "Log repair" : "Create work order"}
-        cancelHref={truck && isPm ? "/maintenance?tab=pm" : logging ? "/maintenance?tab=log" : "/maintenance/work-orders"}
+        money={money}
+        now={f.dateTimeInput(now)}
+        submitLabel={status === "DONE" ? "Log repair" : "Create repair"}
+        cancelHref={truck ? `/fleet/${truck.id}` : trailer ? `/fleet/trailers/${trailer.id}` : "/maintenance/work-orders"}
         initial={{
           truckId: truck?.id ?? null,
           trailerId: !truck && trailer ? trailer.id : null,
-          category: category && (WORK_ORDER_CATEGORIES as readonly string[]).includes(category) ? category : "OTHER",
-          status,
-          title: isPm ? "PM service" : null,
-          vendor: IN_HOUSE_VENDOR,
-          scheduledAt: toDateInput(now),
-          outAt: logging ? toLocalInput(now) : null,
+          repairType, status, vendorId,
+          title: defect ? `${component}: ${defect.description}`.slice(0, 200) : null,
+          description: defect ? `From ${defectLabel(defect.number)}: ${defect.description}` : null,
+          defectId: defect && defect.status !== "CLOSED" ? defect.id : null,
+          scheduledAt: f.dateInput(now),
+          inAt: status !== "OPEN" ? f.dateTimeInput(now) : null,
+          outAt: status === "DONE" ? f.dateTimeInput(now) : null,
           odometerKm: truck?.odometerKm ?? null,
+          payer: "COMPANY",
         }}
       />
     </>

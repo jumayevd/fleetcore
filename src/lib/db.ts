@@ -15,21 +15,32 @@ import { currentCompanyId } from "./tenant";
  * Write relations as scalar ids (`truckId: x`), not `truck: { connect }`, so the scope can add `companyId`.
  */
 
-const SCOPED = new Set(["Driver", "Truck", "Trailer", "WorkOrder", "FuelLog", "Document", "AuditLog", "AppSetting"]);
+const SCOPED = new Set([
+  "Driver", "Truck", "Trailer", "WorkOrder", "FuelLog", "Document", "AuditLog", "AppSetting",
+  "TruckType", "Vendor", "WorkOrderLine", "WorkOrderEvent", "WalkAround", "WalkAroundRating", "Defect",
+  "RoadsideInspection", "RoadsideViolation",
+]);
 
 const WHERE_OPS = new Set([
   "findUnique", "findUniqueOrThrow", "findFirst", "findFirstOrThrow", "findMany", "count", "aggregate", "groupBy",
   "update", "updateMany", "updateManyAndReturn", "delete", "deleteMany", "upsert",
 ]);
 
-type Ref = "driver" | "truck" | "trailer" | "workOrder";
+type Ref = "driver" | "truck" | "trailer" | "workOrder" | "truckType" | "vendor" | "walkAround" | "roadside";
 /** Foreign keys per model that must stay inside the company. */
 const REFS: Record<string, Record<string, Ref>> = {
-  Truck: { driverId: "driver" },
+  Truck: { driverId: "driver", truckTypeId: "truckType" },
   Trailer: { truckId: "truck" },
-  WorkOrder: { truckId: "truck", trailerId: "trailer" },
+  WorkOrder: { truckId: "truck", trailerId: "trailer", vendorId: "vendor", chargeDriverId: "driver" },
+  WorkOrderLine: { workOrderId: "workOrder" },
+  WorkOrderEvent: { workOrderId: "workOrder" },
   FuelLog: { truckId: "truck", driverId: "driver" },
-  Document: { truckId: "truck", trailerId: "trailer", driverId: "driver", workOrderId: "workOrder" },
+  Document: { truckId: "truck", trailerId: "trailer", driverId: "driver", workOrderId: "workOrder", roadsideId: "roadside" },
+  WalkAround: { truckId: "truck", driverId: "driver" },
+  WalkAroundRating: { walkAroundId: "walkAround" },
+  Defect: { truckId: "truck", trailerId: "trailer", walkAroundId: "walkAround", workOrderId: "workOrder" },
+  RoadsideInspection: { driverId: "driver", truckId: "truck", trailerId: "trailer" },
+  RoadsideViolation: { inspectionId: "roadside" },
 };
 
 function countIn(ref: Ref, id: string, companyId: string) {
@@ -39,6 +50,10 @@ function countIn(ref: Ref, id: string, companyId: string) {
     case "truck": return rootDb.truck.count({ where });
     case "trailer": return rootDb.trailer.count({ where });
     case "workOrder": return rootDb.workOrder.count({ where });
+    case "truckType": return rootDb.truckType.count({ where });
+    case "vendor": return rootDb.vendor.count({ where });
+    case "walkAround": return rootDb.walkAround.count({ where });
+    case "roadside": return rootDb.roadsideInspection.count({ where });
   }
 }
 

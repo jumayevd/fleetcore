@@ -32,21 +32,27 @@ const joinList = (items: string[]) => (items.length < 2 ? items.join("") : `${it
 /* Welcome: role-aware intro and suggested prompts (GET /api/assistant) */
 /* ------------------------------------------------------------------ */
 
-/** Each prompt is offered only to roles that hold the permission its answer needs. First matches win. */
-const SUGGESTED_PROMPTS: readonly { text: string; perm: Permission }[] = [
-  { text: "Which trucks are overdue for PM?", perm: "fleet.view" },
-  { text: "What paperwork expires this month?", perm: "fleet.view" },
-  { text: "Cost per km by truck last quarter", perm: "reports.view" },
-  { text: "Which work orders are overdue?", perm: "fleet.view" },
-  { text: "Which drivers have a licence or medical expiring?", perm: "drivers.view" },
-  { text: "Which leased trucks are near their mileage cap?", perm: "fleet.view" },
+/**
+ * Each prompt is offered only to roles that hold the permission its answer needs. First matches win. `units` words the
+ * distance the company's way ("Cost per mile" / "Cost per km").
+ */
+const SUGGESTED_PROMPTS: readonly { text: (units: "imperial" | "metric") => string; perm: Permission }[] = [
+  { text: () => "Which trucks are out of service and why?", perm: "fleet.view" },
+  { text: () => "Who hasn't sent a walk-around this week?", perm: "fleet.view" },
+  { text: () => "Repairs charged to drivers who haven't been told", perm: "fleet.view" },
+  { text: () => "Which trucks are overdue for an oil change?", perm: "fleet.view" },
+  { text: () => "What's in the shop right now, and at what stage?", perm: "fleet.view" },
+  { text: (u) => `Cost per ${u === "metric" ? "km" : "mile"} by truck last quarter`, perm: "money.view" },
+  { text: () => "Open defects holding a truck out of service", perm: "fleet.view" },
+  { text: () => "Roadside inspections and violations this year", perm: "fleet.view" },
 ];
-const MAX_PROMPTS = 5;
-export const promptsFor = (role: string) => SUGGESTED_PROMPTS.filter((p) => can(role, p.perm)).slice(0, MAX_PROMPTS).map((p) => p.text);
+const MAX_PROMPTS = 6;
+export const promptsFor = (role: string, units?: string | null) =>
+  SUGGESTED_PROMPTS.filter((p) => can(role, p.perm)).slice(0, MAX_PROMPTS).map((p) => p.text(units === "metric" ? "metric" : "imperial"));
 
 const TOPICS: [Permission, string][] = [
-  ["fleet.view", "trucks"], ["fleet.view", "trailers"], ["fleet.view", "PM and work orders"], ["fleet.view", "paperwork"],
-  ["drivers.view", "drivers"], ["reports.view", "costs"],
+  ["fleet.view", "trucks"], ["fleet.view", "repairs and vendors"], ["fleet.view", "oil and PM"], ["fleet.view", "walk-arounds and defects"],
+  ["fleet.view", "roadside inspections"], ["fleet.view", "paperwork"], ["drivers.view", "drivers"], ["money.view", "costs"],
 ];
 const GENERIC_INTRO = "Answers from live fleet data, with read-only lookups.";
 /** "Trucks, trailers, … and costs in Silk Road Freight — …": only what this role can actually ask about. */
@@ -79,11 +85,16 @@ export function parseAssistantInfo(v: unknown): AssistantInfo {
 /** Quiet activity lines shown in the chat while / after a tool runs, and when it fails. */
 const TOOL_LABELS: Record<string, { doing: string; done: string; fail: string }> = {
   fleetOverview: { doing: "Checking the fleet", done: "Checked the fleet", fail: "Couldn't check the fleet" },
+  unitsDown: { doing: "Checking units off the road", done: "Checked units off the road", fail: "Couldn't check units off the road" },
   listTrucks: { doing: "Looking up trucks", done: "Looked up trucks", fail: "Couldn't look up trucks" },
   truckDetail: { doing: "Opening the truck", done: "Opened the truck", fail: "Couldn't open the truck" },
   listTrailers: { doing: "Looking up trailers", done: "Looked up trailers", fail: "Couldn't look up trailers" },
-  maintenanceDue: { doing: "Checking PM due", done: "Checked PM due", fail: "Couldn't check PM due" },
-  workOrders: { doing: "Looking up work orders", done: "Looked up work orders", fail: "Couldn't look up work orders" },
+  maintenanceDue: { doing: "Checking oil and PM", done: "Checked oil and PM", fail: "Couldn't check oil and PM" },
+  workOrders: { doing: "Looking up repair orders", done: "Looked up repair orders", fail: "Couldn't look up repair orders" },
+  vendors: { doing: "Looking up vendors", done: "Looked up vendors", fail: "Couldn't look up vendors" },
+  walkArounds: { doing: "Checking walk-arounds", done: "Checked walk-arounds", fail: "Couldn't check walk-arounds" },
+  defects: { doing: "Looking up defects", done: "Looked up defects", fail: "Couldn't look up defects" },
+  roadsideInspections: { doing: "Looking up roadside inspections", done: "Looked up roadside inspections", fail: "Couldn't look up roadside inspections" },
   expiringPaperwork: { doing: "Checking expiry dates", done: "Checked expiry dates", fail: "Couldn't check expiry dates" },
   complianceGaps: { doing: "Checking paperwork gaps", done: "Checked paperwork gaps", fail: "Couldn't check paperwork gaps" },
   fleetCosts: { doing: "Adding up costs", done: "Added up costs", fail: "Couldn't add up costs" },
@@ -135,12 +146,15 @@ export function dropUnsettledToolCalls<M extends UIMessage>(messages: M[]): M[] 
 
 /**
  * Pages an answer may link to, as path shapes (an id segment is a record page): /dashboard(/alerts), /fleet(/:id),
- * /fleet/trailers(/:id), /maintenance, /maintenance/work-orders(/:id), /drivers(/:id), /tracking, /reports.
+ * /fleet/trailers(/:id), /maintenance, /maintenance/oil, /maintenance/work-orders(/:id), /vendors(/:id), /inspections,
+ * /inspections/defects, /inspections/roadside(/:id), /drivers(/:id), /tracking, /reports.
  */
 const LINK_PATHS: readonly RegExp[] = [
   /^\/dashboard(?:\/alerts)?$/,
   /^\/fleet(?:\/trailers)?(?:\/[A-Za-z0-9_-]+)?$/,
-  /^\/maintenance(?:\/work-orders(?:\/[A-Za-z0-9_-]+)?)?$/,
+  /^\/maintenance(?:\/oil|\/work-orders(?:\/[A-Za-z0-9_-]+)?)?$/,
+  /^\/vendors(?:\/[A-Za-z0-9_-]+)?$/,
+  /^\/inspections(?:\/defects|\/roadside(?:\/[A-Za-z0-9_-]+)?)?$/,
   /^\/drivers(?:\/[A-Za-z0-9_-]+)?$/,
   /^\/tracking$/,
   /^\/reports$/,

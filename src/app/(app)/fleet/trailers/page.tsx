@@ -5,12 +5,16 @@ import { Plus, Truck as TruckIcon, Container, FileCheck, CalendarClock, MapPinne
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { db } from "@/lib/db";
-import { EQUIPMENT, EQUIPMENT_LABELS, TRAILER_STATUSES, TRAILER_STATUS_LABELS } from "@/lib/constants";
+import { EQUIPMENT, EQUIPMENT_LABELS, REPAIR_STAGE_LABELS, TRAILER_STATUSES, TRAILER_STATUS_LABELS } from "@/lib/constants";
 import { REQUIRED_UNIT_DOCS } from "@/lib/documents";
-import { kg, ago, daysUntil } from "@/lib/format";
-import { Badge, Card, Cell, EmptyState, ExpiryBadge, FilterPills, InfoTip, LinkButton, PageHeader, Segmented, Stat, Table, cn } from "@/components/ui";
+import { ago, daysUntil } from "@/lib/format";
+import { getFormat } from "@/lib/format-server";
+import { roLabel } from "@/lib/service";
+import { Badge, Card, Cell, Chip, EmptyState, ExpiryBadge, FilterPills, InfoTip, LinkButton, PageHeader, Segmented, Stat, Table, cn } from "@/components/ui";
 import { ListFilters } from "../filters";
 import { LinkRow } from "../link-row";
+import { ColumnChooser, type ColumnDef } from "../column-chooser";
+import { openDefects, openRepairs, unitDocRows } from "../data";
 import { daysSince, docExpiryByUnit, docsByUnit, EXPIRY_SOON_DAYS, expiryCounts, LIST_LIMIT, missingDocs, paperworkExpiry, pingStale, sinceShort } from "../lib";
 import { TrailerStatusControl } from "./status-control";
 import { TrailerRowMenu } from "./row-menu";
@@ -20,9 +24,26 @@ export const metadata = { title: "Trailers" };
 const str = (v: string | string[] | undefined) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
 const PAIRED_FILTERS = { no: "Not paired", yes: "Paired" } as const;
 
+const COLUMNS: ColumnDef[] = [
+  { key: "status", label: "Status" },
+  { key: "truck", label: "Paired truck" },
+  { key: "driver", label: "Driver" },
+  { key: "location", label: "Location" },
+  { key: "gps", label: "GPS", hidden: true },
+  { key: "capacity", label: "Capacity", hidden: true },
+  { key: "repair", label: "Repair" },
+  { key: "defects", label: "Defects" },
+  { key: "inspection", label: "Annual inspection" },
+  { key: "insurance", label: "Insurance" },
+  { key: "registration", label: "Registration", hidden: true },
+  { key: "documents", label: "Documents" },
+];
+const TABLE_ID = "trailer-table";
+
 export default async function TrailersPage({ searchParams }: PageProps<"/fleet/trailers">) {
   const user = await requireUser("fleet.view");
   const editable = can(user.role, "fleet.edit");
+  const f = await getFormat();
   const sp = await searchParams;
   // Other modules link a trailer as /fleet/trailers?unit=<id>[&tab=compliance]; send those to the detail page.
   const unit = str(sp.unit);
@@ -45,12 +66,11 @@ export default async function TrailersPage({ searchParams }: PageProps<"/fleet/t
     ],
   };
 
-  const [all, docRows, truckCount] = await Promise.all([
+  const [all, docRows, truckCount, defects] = await Promise.all([
     db.trailer.findMany({ select: { id: true, unitNumber: true, status: true, statusSince: true, truckId: true, insuranceExpiry: true, inspectionExpiry: true } }),
-    db.document.findMany({
-      where: { trailerId: { not: null }, kind: { in: [...REQUIRED_UNIT_DOCS] } }, orderBy: { createdAt: "desc" }, select: { trailerId: true, kind: true, expiresAt: true },
-    }),
+    unitDocRows("trailer"),
     db.truck.count(),
+    openDefects("trailer"),
   ]);
 
   if (all.length === 0) {
@@ -60,7 +80,7 @@ export default async function TrailersPage({ searchParams }: PageProps<"/fleet/t
         <Card>
           <EmptyState icon={<Container />} title={editable ? "Add your first trailer" : "No trailers yet"}
             description={editable
-              ? "Each trailer gets its status, the truck it is paired with, where it was left, its paperwork and its repairs."
+              ? "Each trailer gets its status, the truck it is paired with, where it was left, its paperwork slots, defects and repairs."
               : "Trailers appear here once someone with edit access adds them."}
             action={editable && <LinkButton href="/fleet/trailers/new"><Plus />Add trailer</LinkButton>} />
         </Card>
@@ -87,7 +107,10 @@ export default async function TrailersPage({ searchParams }: PageProps<"/fleet/t
   });
   const capped = rows.length > LIST_LIMIT;
   const trailers = capped ? rows.slice(0, LIST_LIMIT) : rows;
-  const matching = capped ? await db.trailer.count({ where: listWhere }) : trailers.length;
+  const [matching, repairs] = await Promise.all([
+    capped ? db.trailer.count({ where: listWhere }) : Promise.resolve(trailers.length),
+    openRepairs("trailer", trailers.map((t) => t.id)),
+  ]);
 
   const byStatus = (s: string) => all.filter((t) => t.status === s);
   const oldest = (s: string) => byStatus(s).sort((a, b) => a.statusSince.getTime() - b.statusSince.getTime())[0];
@@ -114,6 +137,7 @@ export default async function TrailersPage({ searchParams }: PageProps<"/fleet/t
   const tile = (href: string | null, node: React.ReactNode) =>
     href ? <Link href={href} className="group block rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">{node}</Link> : node;
   const tileClass = "h-full transition-colors group-hover:border-line-strong";
+  const col = (key: string, label: React.ReactNode) => <span key={key} data-col={key} className="inline-flex items-center gap-1">{label}</span>;
 
   return (
     <>
@@ -135,7 +159,7 @@ export default async function TrailersPage({ searchParams }: PageProps<"/fleet/t
         {tile(only({ status: "SHOP" }), <Stat className={tileClass} label="In shop" value={byStatus("SHOP").length}
           hint={[shopOldest ? `${shopOldest.unitNumber} in ${daysSince(shopOldest.statusSince)}d` : null, outOfService ? `${outOfService} out of service` : null].filter(Boolean).join(" · ") || "none in repair"}
           tone={byStatus("SHOP").length || outOfService ? "warn" : "neutral"} icon={<Wrench />} />)}
-        {tile(only({ docs: "incomplete" }), <Stat className={tileClass} label="Paperwork incomplete" value={incomplete} hint="registration, insurance, inspection" tone={incomplete ? "warn" : "ok"} icon={<FileCheck />} />)}
+        {tile(only({ docs: "incomplete" }), <Stat className={tileClass} label="Paperwork incomplete" value={incomplete} hint="registration, insurance, annual inspection" tone={incomplete ? "warn" : "ok"} icon={<FileCheck />} />)}
         {tile(only({ docs: "expiring" }), <Stat className={tileClass} label="Paperwork expiring" value={expiringUnits} hint={expiringHint} tone={expiredUnits ? "danger" : expiringUnits ? "warn" : "ok"} icon={<CalendarClock />} />)}
       </div>
 
@@ -147,63 +171,87 @@ export default async function TrailersPage({ searchParams }: PageProps<"/fleet/t
           ]} />
           {docsFilter && <Link href={qs({ docs: undefined })} className="inline-flex h-6 items-center gap-1 rounded-full bg-accent-soft px-2.5 text-[12px] font-medium text-accent-text hover:opacity-80">{docsFilter === "expiring" ? "Paperwork expiring" : "Paperwork incomplete"}<X className="h-3 w-3" /></Link>}
         </div>
-        <ListFilters basePath="/fleet/trailers" params={params} placeholder="Unit, plate, truck, driver, place…" selects={[
-          { name: "type", label: "Type", placeholder: "All types", options: EQUIPMENT.map((e) => ({ value: e, label: EQUIPMENT_LABELS[e] })) },
-          { name: "paired", label: "Pairing", placeholder: "Paired or not", options: Object.entries(PAIRED_FILTERS).map(([value, label]) => ({ value, label })) },
-        ]} />
+        <div className="flex flex-wrap items-center gap-2">
+          <ListFilters basePath="/fleet/trailers" params={params} placeholder="Unit, plate, truck, driver, place…" selects={[
+            { name: "type", label: "Type", placeholder: "All types", options: EQUIPMENT.map((e) => ({ value: e, label: EQUIPMENT_LABELS[e] })) },
+            { name: "paired", label: "Pairing", placeholder: "Paired or not", options: Object.entries(PAIRED_FILTERS).map(([value, label]) => ({ value, label })) },
+          ]} />
+          <ColumnChooser tableId={TABLE_ID} storageKey="trailers.columns" columns={COLUMNS} />
+        </div>
       </div>
 
       <Card flush>
-        {capped && (
-          <p className="border-b border-line bg-info-soft px-4 py-2 text-[12px] text-info">
-            Showing the first <span className="num">{trailers.length}</span> of <span className="num">{matching}</span> matching trailers. Narrow the search or filters to see the rest.
-          </p>
-        )}
-        <Table head={["Unit",
-          <span key="status" className="inline-flex items-center gap-1">Status<InfoTip>The small number next to a status is how long the trailer has been in it.</InfoTip></span>,
-          "Paired truck", "Driver", "Location", "GPS", "Capacity", "Inspection", "Insurance", "Registration", "Documents", ""]}>
-          {trailers.map((t) => {
-            const missing = missingFor(t.id);
-            const onFile = REQUIRED_UNIT_DOCS.length - missing.length;
-            const paper = paperworkExpiry(t, docExpiry.get(t.id));
-            return (
-              <LinkRow key={t.id} href={`/fleet/trailers/${t.id}`}>
-                <td title={[t.year, t.plate].filter(Boolean).join(" · ") || undefined}>
-                  <Cell mono primary={<Link href={`/fleet/trailers/${t.id}`} className="font-semibold hover:underline">{t.unitNumber}</Link>}
-                    secondary={EQUIPMENT_LABELS[t.type] ?? t.type} />
-                </td>
-                <td className="whitespace-nowrap"><TrailerStatusControl id={t.id} status={t.status} locationName={t.locationName} editable={editable} since={sinceShort(t.statusSince)} /></td>
-                <td>
-                  {t.truck ? (
-                    <Cell mono primary={<Link href={`/fleet/${t.truck.id}`} className="font-medium hover:underline">{t.truck.unitNumber}</Link>}
-                      secondary={`${t.truck.make} ${t.truck.model}`} />
-                  ) : <span className="text-fg-faint">—</span>}
-                </td>
-                <td>{t.truck?.driver ? <Link href={`/drivers/${t.truck.driver.id}`} className="hover:underline">{t.truck.driver.name}</Link> : <span className="text-fg-faint">—</span>}</td>
-                <td title={t.lastPingAt ? `Last GPS position ${ago(t.lastPingAt)}` : t.gpsProvider ? "No GPS position yet" : "No tracker"}>
-                  {/* The age of the position only shows when it is old or missing; the GPS column already says when there is no tracker. */}
-                  <Cell primary={t.locationName ?? <span className="text-fg-faint">Unknown</span>}
-                    secondary={t.lastPingAt ? (pingStale(t.lastPingAt) ? ago(t.lastPingAt) : undefined) : t.gpsProvider ? "no ping yet" : undefined} />
-                </td>
-                <td className="whitespace-nowrap">{t.gpsProvider ?? <span className="text-fg-faint">None</span>}</td>
-                <td className="num whitespace-nowrap text-fg-muted">{kg(t.capacityKg)}</td>
-                <td><ExpiryBadge days={daysUntil(paper.INSPECTION)} /></td>
-                <td><ExpiryBadge days={daysUntil(paper.INSURANCE)} /></td>
-                <td><ExpiryBadge days={daysUntil(paper.REGISTRATION)} /></td>
-                <td>
-                  <Link href={`/fleet/trailers/${t.id}#documents`} className="hover:opacity-80" title={missing.length ? `Missing ${missing.map((m) => m.toLowerCase()).join(", ")}` : "All required documents on file"}>
-                    <Badge value="DOCS" tone={onFile === REQUIRED_UNIT_DOCS.length ? "ok" : onFile === 0 ? "neutral" : "warn"} label={`${onFile}/${REQUIRED_UNIT_DOCS.length}`}
-                      className={cn("num", onFile === 0 && "text-fg-subtle")} />
-                  </Link>
-                </td>
-                <td className="text-right"><TrailerRowMenu id={t.id} truckId={t.truckId} editable={editable} /></td>
-              </LinkRow>
-            );
-          })}
-        </Table>
-        {trailers.length === 0 && (
-          <EmptyState title="No trailers match" description="Try another status, type or pairing, or clear the search." action={<LinkButton href="/fleet/trailers" variant="secondary">Clear filters</LinkButton>} />
-        )}
+        <div id={TABLE_ID}>
+          {capped && (
+            <p className="border-b border-line bg-info-soft px-4 py-2 text-[12px] text-info">
+              Showing the first <span className="num">{trailers.length}</span> of <span className="num">{matching}</span> matching trailers. Narrow the search or filters to see the rest.
+            </p>
+          )}
+          <Table head={["Unit",
+            col("status", <>Status<InfoTip>The small number next to a status is how long the trailer has been in it.</InfoTip></>),
+            col("truck", "Paired truck"), col("driver", "Driver"), col("location", "Location"), col("gps", "GPS"), col("capacity", "Capacity"),
+            col("repair", "Repair"), col("defects", "Defects"),
+            col("inspection", "Annual inspection"), col("insurance", "Insurance"), col("registration", "Registration"), col("documents", "Documents"), ""]}>
+            {trailers.map((t) => {
+              const missing = missingFor(t.id);
+              const onFile = REQUIRED_UNIT_DOCS.length - missing.length;
+              const paper = paperworkExpiry(t, docExpiry.get(t.id));
+              const r = repairs.get(t.id);
+              const d = defects.get(t.id);
+              return (
+                <LinkRow key={t.id} href={`/fleet/trailers/${t.id}`}>
+                  <td title={[t.year, t.plate].filter(Boolean).join(" · ") || undefined}>
+                    <Cell mono primary={<Link href={`/fleet/trailers/${t.id}`} className="font-semibold hover:underline">{t.unitNumber}</Link>}
+                      secondary={EQUIPMENT_LABELS[t.type] ?? t.type} />
+                  </td>
+                  <td data-col="status" className="whitespace-nowrap"><TrailerStatusControl id={t.id} status={t.status} locationName={t.locationName} editable={editable} since={sinceShort(t.statusSince)} /></td>
+                  <td data-col="truck">
+                    {t.truck ? (
+                      <Cell mono primary={<Link href={`/fleet/${t.truck.id}`} className="font-medium hover:underline">{t.truck.unitNumber}</Link>}
+                        secondary={`${t.truck.make} ${t.truck.model}`} />
+                    ) : <span className="text-fg-faint">—</span>}
+                  </td>
+                  <td data-col="driver">{t.truck?.driver ? <Link href={`/drivers/${t.truck.driver.id}`} className="hover:underline">{t.truck.driver.name}</Link> : <span className="text-fg-faint">—</span>}</td>
+                  <td data-col="location" title={t.lastPingAt ? `Last GPS position ${ago(t.lastPingAt)}` : t.gpsProvider ? "No GPS position yet" : "No tracker"}>
+                    {/* The age of the position only shows when it is old or missing; the GPS column already says when there is no tracker. */}
+                    <Cell primary={t.locationName ?? <span className="text-fg-faint">Unknown</span>}
+                      secondary={t.lastPingAt ? (pingStale(t.lastPingAt) ? ago(t.lastPingAt) : undefined) : t.gpsProvider ? "no ping yet" : undefined} />
+                  </td>
+                  <td data-col="gps" className="whitespace-nowrap">{t.gpsProvider ?? <span className="text-fg-faint">None</span>}</td>
+                  <td data-col="capacity" className="num whitespace-nowrap text-fg-muted">{f.weight(t.capacityKg)}</td>
+                  <td data-col="repair" className="whitespace-nowrap">
+                    {r ? (
+                      <Link href={`/maintenance/work-orders/${r.id}`} className="group/ro block" title={r.title}>
+                        <Cell mono primary={<span className="font-medium group-hover/ro:underline">{roLabel(r.number)}</span>}
+                          secondary={r.status === "IN_PROGRESS" ? <span className="text-warn">{r.stage ? REPAIR_STAGE_LABELS[r.stage] ?? r.stage : "In the shop"}</span> : `Scheduled ${f.day(r.scheduledAt)}`} />
+                      </Link>
+                    ) : <span className="text-fg-faint">—</span>}
+                  </td>
+                  <td data-col="defects" className="whitespace-nowrap">
+                    {d ? (
+                      <Link href={`/fleet/trailers/${t.id}#defects`} className="hover:opacity-80">
+                        {d.urgent ? <Badge value="DEFECT" tone="danger" label={`${d.urgent} to fix now`} /> : <Chip tone="warn">{d.open} open</Chip>}
+                      </Link>
+                    ) : <span className="text-fg-faint">—</span>}
+                  </td>
+                  <td data-col="inspection"><ExpiryBadge days={daysUntil(paper.INSPECTION)} /></td>
+                  <td data-col="insurance"><ExpiryBadge days={daysUntil(paper.INSURANCE)} /></td>
+                  <td data-col="registration"><ExpiryBadge days={daysUntil(paper.REGISTRATION)} /></td>
+                  <td data-col="documents">
+                    <Link href={`/fleet/trailers/${t.id}#documents`} className="hover:opacity-80" title={missing.length ? `Missing ${missing.map((m) => m.toLowerCase()).join(", ")}` : "All required documents on file"}>
+                      <Badge value="DOCS" tone={onFile === REQUIRED_UNIT_DOCS.length ? "ok" : onFile === 0 ? "neutral" : "warn"} label={`${onFile}/${REQUIRED_UNIT_DOCS.length}`}
+                        className={cn("num", onFile === 0 && "text-fg-subtle")} />
+                    </Link>
+                  </td>
+                  <td className="text-right"><TrailerRowMenu id={t.id} truckId={t.truckId} editable={editable} /></td>
+                </LinkRow>
+              );
+            })}
+          </Table>
+          {trailers.length === 0 && (
+            <EmptyState title="No trailers match" description="Try another status, type or pairing, or clear the search." action={<LinkButton href="/fleet/trailers" variant="secondary">Clear filters</LinkButton>} />
+          )}
+        </div>
       </Card>
     </>
   );

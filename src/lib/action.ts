@@ -1,7 +1,12 @@
+import { parseDateInput, parseDateTimeInput } from "./locale";
+
 export type ActionState = { error?: string; ok?: string } | undefined;
 
-/** Read FormData fields with light coercion. */
-export function fields(fd: FormData) {
+/**
+ * Read FormData fields with light coercion. Pass the company's time zone (`user.company.timezone`) so that date and
+ * datetime-local inputs mean company time; without it they are read as before (server time).
+ */
+export function fields(fd: FormData, tz?: string) {
   const str = (k: string) => {
     const v = fd.get(k);
     return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
@@ -23,6 +28,8 @@ export function fields(fd: FormData) {
     date(k: string) {
       const v = str(k);
       if (v === null) return null;
+      const zoned = tz ? (v.includes("T") ? parseDateTimeInput(v, tz) : parseDateInput(v, tz)) : null;
+      if (zoned) return zoned;
       const d = new Date(v);
       if (Number.isNaN(d.getTime())) throw new FormError(`${k} must be a valid date`);
       return d;

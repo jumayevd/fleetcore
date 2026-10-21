@@ -21,6 +21,7 @@ function refresh(driverId?: string | null, fleet = false) {
   revalidatePath("/drivers");
   if (driverId) revalidatePath(`/drivers/${driverId}`);
   revalidatePath("/dashboard");
+  revalidatePath("/inspections");
   if (fleet) {
     revalidatePath("/fleet", "layout");
     revalidatePath("/tracking");
@@ -76,7 +77,8 @@ export async function saveDriver(driverId: string | null, _: ActionState, fd: Fo
   let id = driverId;
   let fleetChanged = false;
   const res = await attempt(async () => {
-    const f = fields(fd);
+    // Date inputs are calendar days in the company's time zone.
+    const f = fields(fd, me.company.timezone);
     const licenseExpiry = f.date("licenseExpiry");
     if (!licenseExpiry) throw new FormError("Licence expiry is required");
     const status = f.str("status") ?? "ACTIVE";
@@ -101,6 +103,8 @@ export async function saveDriver(driverId: string | null, _: ActionState, fd: Fo
       ...(scoreIn != null ? { score: Math.round(scoreIn) } : {}),
       hold,
       holdReason: hold ? f.str("holdReason") : null,
+      // Who dispatches the driver, so walk-around videos and repairs are chased with the right person.
+      dispatcher: f.str("dispatcher")?.replace(/\s+/g, " ") ?? null,
       notes: f.str("notes"),
     };
 
@@ -128,7 +132,8 @@ export async function saveDriver(driverId: string | null, _: ActionState, fd: Fo
     }
   });
   if (res?.error) return res;
-  refresh(id, fleetChanged);
+  // Truck pages show the driver's name and dispatcher too, so they refresh even when the truck didn't change.
+  refresh(id, fleetChanged || Boolean(driverId));
   redirect(`/drivers/${id}`);
 }
 

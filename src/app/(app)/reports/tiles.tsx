@@ -40,3 +40,14 @@ export function ReportTile({ label, tip, value, delta, deltaTone = "neutral", no
     </div>
   );
 }
+
+/** A small figure inside a card (the card is the tile): label, value, and an optional coloured note. */
+export function MiniStat({ label, value, note, tone, tip }: { label: string; value: ReactNode; note?: ReactNode; tone?: Tone; tip?: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <p className="flex items-center gap-1 truncate text-[11px] font-medium text-fg-muted">{label}{tip && <InfoTip>{tip}</InfoTip>}</p>
+      <p className={cn("num mt-0.5 truncate text-[17px] font-semibold leading-6 tracking-[-0.01em]", tone && tone !== "neutral" ? TONE_TEXT[tone] : "text-fg")}>{value}</p>
+      {note && <p className="truncate text-[11px] text-fg-subtle">{note}</p>}
+    </div>
+  );
+}

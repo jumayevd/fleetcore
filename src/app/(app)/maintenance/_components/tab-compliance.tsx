@@ -1,15 +1,16 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { DOC_KIND_LABELS, REQUIRED_UNIT_DOCS } from "@/lib/documents";
-import { date } from "@/lib/format";
+import { getFormat } from "@/lib/format-server";
+import type { Formatter } from "@/lib/locale";
 import { Badge, Card, InfoTip, Stat, Table } from "@/components/ui";
 import { DOC_STATE_LABEL, DOC_STATE_TONE, type ComplianceRow, type UnitDoc, type unitCompliance } from "../_lib/data";
 import { UnitLink } from "./unit-link";
 
 type Data = Awaited<ReturnType<typeof unitCompliance>>;
 
-function DocCell({ d }: { d: UnitDoc }) {
-  if (d.state === "ok") return <span className="num text-[12px] text-fg-muted" title="On file">{d.expiresAt ? date(d.expiresAt) : "On file"}</span>;
+function DocCell({ d, f }: { d: UnitDoc; f: Formatter }) {
+  if (d.state === "ok") return <span className="num text-[12px] text-fg-muted" title="On file">{d.expiresAt ? f.date(d.expiresAt) : "On file"}</span>;
   const label = d.state === "expired" ? `Expired ${-(d.days ?? 0)}d ago` : d.state === "expiring" ? `${d.days}d left` : "Missing";
   return (
     <div className="flex flex-col items-start gap-0.5">
@@ -30,7 +31,8 @@ function nextStep(r: ComplianceRow) {
   return "All paperwork on file";
 }
 
-export function ComplianceTab({ data }: { data: Data }) {
+export async function ComplianceTab({ data }: { data: Data }) {
+  const f = await getFormat();
   const { rows, units, documents } = data;
   return (
     <>
@@ -49,7 +51,7 @@ export function ComplianceTab({ data }: { data: Data }) {
               <td title={r.detail}>
                 <UnitLink truck={r.type === "truck" ? { id: r.id, unitNumber: r.unitNumber } : null} trailer={r.type === "trailer" ? { id: r.id, unitNumber: r.unitNumber } : null} />
               </td>
-              {r.docs.map((d) => <td key={d.kind} className="whitespace-nowrap"><DocCell d={d} /></td>)}
+              {r.docs.map((d) => <td key={d.kind} className="whitespace-nowrap"><DocCell d={d} f={f} /></td>)}
               <td className="max-w-72 truncate" title={r.worst !== "ok" ? DOC_STATE_LABEL[r.worst] : undefined}>
                 <span className={r.worst === "ok" ? "text-fg-subtle" : "text-fg"}>{nextStep(r)}</span>
               </td>

@@ -3,9 +3,10 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
-import { Suspense, use, useEffect, useRef, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   LayoutDashboard, Map, Truck, Container, Wrench, ClipboardList, Users, BarChart3, Landmark, ShieldCheck, ScrollText, Settings,
+  Droplet, Store, ClipboardCheck, TriangleAlert, ShieldAlert,
   Bell, Search, Menu, X, LogOut, UserCircle, PanelLeftClose, PanelLeftOpen, ChevronRight, Palette, Package, UserPlus, LayoutGrid,
   type LucideIcon,
 } from "lucide-react";
@@ -17,6 +18,8 @@ const AppearanceControls = dynamic(() => import("./appearance").then((m) => m.Ap
   loading: () => <div className="h-72" aria-busy="true" />,
 });
 import { NavProgress } from "./nav-progress";
+import { LocaleProvider } from "./locale";
+import { CompanyClock } from "./company-clock";
 import { WorkspaceGuard, WorkspaceSwitcher, flatCompanies, useSwitchCompany } from "./workspace-switcher";
 import { NAV, NAV_COOKIE, SEGMENT_LABELS, allNavItems, findNavItem, findNavSection } from "@/lib/nav";
 import { can } from "@/lib/permissions";
@@ -24,29 +27,53 @@ import { ROLE_LABELS } from "@/lib/constants";
 import { signOut, signOutAll } from "@/app/actions/auth";
 import type { ActiveWorkspace, WorkspaceAccount } from "@/lib/workspace-shared";
 import type { Alert } from "@/lib/alerts";
+import type { CompanyLocale } from "@/lib/locale";
 
 const ICONS: Record<string, LucideIcon> = {
   LayoutDashboard, Map, Truck, Container, Wrench, ClipboardList, Users, BarChart3, Landmark, ShieldCheck, ScrollText, Settings,
+  Droplet, Store, ClipboardCheck, TriangleAlert, ShieldAlert,
 };
 
 type ShellUser = { name: string; email: string; role: ActiveWorkspace["role"] };
 
-/** Alerts for the bell and counts for the nav. Streamed: the shell renders first, these fill in when ready. */
+/** Alerts for the bell and counts for the nav (GET /api/shell). */
 export type ShellData = { alerts: Alert[]; badges: Record<string, number> };
 
-export function AppShell({ user, active, accounts, data, navOpen, children }: {
+/**
+ * Bell alerts and nav counts, fetched by the browser after the page has rendered and again on every navigation and
+ * once a minute. Not streamed from the layout: a promise handed from the layout to the shell races a page that calls
+ * notFound() (React then throws "boundaries should not be flushed again" and the request can hang).
+ */
+function useShellData(path: string): ShellData | null {
+  const [data, setData] = useState<ShellData | null>(null);
+  useEffect(() => {
+    let live = true;
+    const load = () => fetch("/api/shell", { cache: "no-store" })
+      .then((r) => (r.ok ? (r.json() as Promise<ShellData>) : null))
+      .then((d) => { if (live && d) setData(d); })
+      .catch(() => {});
+    load();
+    const id = setInterval(load, 60_000);
+    return () => { live = false; clearInterval(id); };
+  }, [path]);
+  return data;
+}
+
+export function AppShell({ user, active, accounts, locale, navOpen, children }: {
   user: ShellUser;
+  /** The active company's units, time zone and currency (useFormat() in client components). */
+  locale: CompanyLocale;
   /** The company this browser is working in, and as which signed-in account. */
   active: ActiveWorkspace;
   /** Every signed-in account with its companies (the switcher). */
   accounts: WorkspaceAccount[];
-  data: Promise<ShellData>;
   /** Sidebar state from the cookie, so the first paint already has the right width. */
   navOpen: boolean;
   children: ReactNode;
 }) {
   const path = usePathname();
   const router = useRouter();
+  const data = useShellData(path);
   const [pinned, setPinned] = useState(navOpen);
   const [cmd, setCmd] = useState(false);
   const chord = useRef<string | null>(null);
@@ -105,8 +132,8 @@ export function AppShell({ user, active, accounts, data, navOpen, children }: {
 
       <div className={cn("transition-[padding] duration-200 ease-out", pinned ? "lg:pl-60" : "lg:pl-16", "print:pl-0")}>
         {/* Keyed by path so popovers and the mobile drawer close on navigation without effects. */}
-        <TopBar key={path} user={user} active={active} accounts={accounts} path={path} data={data} pinned={pinned} onSidebar={setSidebar} openSearch={() => setCmd(true)} />
-        <main className="mx-auto w-full max-w-[1680px] px-4 pb-8 pt-2 lg:px-6">{children}</main>
+        <TopBar key={path} user={user} active={active} accounts={accounts} locale={locale} path={path} data={data} pinned={pinned} onSidebar={setSidebar} openSearch={() => setCmd(true)} />
+        <main className="mx-auto w-full max-w-[1680px] px-4 pb-8 pt-2 lg:px-6"><LocaleProvider locale={locale}>{children}</LocaleProvider></main>
       </div>
       {cmd && <CommandPalette onClose={() => setCmd(false)} role={user.role} active={active} accounts={accounts} onSwitch={switchTo} />}
       <WorkspaceGuard active={active} accounts={accounts} />
@@ -115,7 +142,7 @@ export function AppShell({ user, active, accounts, data, navOpen, children }: {
 }
 
 function SideNav({ user, active, accounts, path, data, expanded, pinned, onTogglePin, onNavigate }: {
-  user: ShellUser; active: ActiveWorkspace; accounts: WorkspaceAccount[]; path: string; data: Promise<ShellData>;
+  user: ShellUser; active: ActiveWorkspace; accounts: WorkspaceAccount[]; path: string; data: ShellData | null;
   expanded: boolean; pinned: boolean; onTogglePin: () => void; onNavigate?: () => void;
 }) {
   const activeHref = findNavItem(path)?.href;
@@ -204,8 +231,8 @@ function SideNav({ user, active, accounts, path, data, expanded, pinned, onToggl
 }
 
 /** Count chip on a nav item or a folded category (overdue work orders). */
-function NavBadge({ data, hrefs, expanded }: { data: Promise<ShellData>; hrefs: string[]; expanded: boolean }) {
-  const { badges } = use(data);
+function NavBadge({ data, hrefs, expanded }: { data: ShellData | null; hrefs: string[]; expanded: boolean }) {
+  const badges = data?.badges ?? {};
   const n = hrefs.reduce((a, h) => a + (badges[h] ?? 0), 0);
   if (!n) return null;
   return expanded
@@ -213,8 +240,8 @@ function NavBadge({ data, hrefs, expanded }: { data: Promise<ShellData>; hrefs: 
     : <span className="fade-in absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent" />;
 }
 
-function TopBar({ user, active, accounts, path, data, pinned, onSidebar, openSearch }: {
-  user: ShellUser; active: ActiveWorkspace; accounts: WorkspaceAccount[]; path: string; data: Promise<ShellData>;
+function TopBar({ user, active, accounts, locale, path, data, pinned, onSidebar, openSearch }: {
+  user: ShellUser; active: ActiveWorkspace; accounts: WorkspaceAccount[]; locale: CompanyLocale; path: string; data: ShellData | null;
   pinned: boolean; onSidebar: (open: boolean) => void; openSearch: () => void;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -256,6 +283,7 @@ function TopBar({ user, active, accounts, path, data, pinned, onSidebar, openSea
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-1">
+          <div className="mr-2"><CompanyClock locale={locale} /></div>
           <button onClick={openSearch} className="hidden h-9 w-64 items-center gap-2 rounded-[10px] border border-line bg-surface px-3 text-[13px] text-fg-subtle shadow-card transition-colors hover:border-line-strong hover:text-fg-muted sm:flex" aria-label="Search">
             <Search className="h-3.5 w-3.5" /><span className="flex-1 truncate text-left">Search {active.companyName}…</span><Kbd>⌘K</Kbd>
           </button>
@@ -329,8 +357,8 @@ function BellButton({ count, critical, onClick }: { count: number; critical: num
   );
 }
 
-function BellMenu({ data, open, onToggle, onClose }: { data: Promise<ShellData>; open: boolean; onToggle: () => void; onClose: () => void }) {
-  const { alerts } = use(data);
+function BellMenu({ data, open, onToggle, onClose }: { data: ShellData | null; open: boolean; onToggle: () => void; onClose: () => void }) {
+  const alerts = data?.alerts ?? [];
   const critical = alerts.filter((a) => a.level === "critical").length;
   return (
     <>

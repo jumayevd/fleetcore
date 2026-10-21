@@ -13,6 +13,8 @@ export const PERMISSIONS = {
   "drivers.view": EVERYONE,
   "drivers.edit": EDITORS,
   "reports.view": EVERYONE,
+  /** Costs, invoices, spend. View-only members see the work, not the money. */
+  "money.view": EDITORS,
   "assistant.use": EVERYONE,
   "company.manage": ADMINS,
   "members.manage": ADMINS,
@@ -30,7 +32,8 @@ export function can(role: string | undefined | null, permission: Permission): bo
 // Which permission a destination needs (mirrors each page's requireUser). Links, alerts and KPI tiles pointing
 // somewhere a role cannot open are hidden or re-targeted rather than shown as dead links. Keep in step with the pages.
 const ROUTE_PERMISSIONS: [prefix: string, perm: Permission][] = [
-  ["/fleet", "fleet.view"], ["/maintenance", "fleet.view"], ["/drivers", "drivers.view"], ["/tracking", "tracking.view"],
+  ["/fleet", "fleet.view"], ["/maintenance", "fleet.view"], ["/vendors", "fleet.view"], ["/inspections", "fleet.view"],
+  ["/drivers", "drivers.view"], ["/tracking", "tracking.view"],
   ["/reports", "reports.view"], ["/admin/members", "members.manage"], ["/admin/audit", "audit.view"], ["/admin", "company.manage"],
 ];
 

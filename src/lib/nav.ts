@@ -10,10 +10,10 @@ export type NavSection = { section: string; icon: string; items: NavItem[] };
 
 export const NAV: NavSection[] = [
   {
-    section: "Overview",
+    section: "Today",
     icon: "LayoutDashboard",
     items: [
-      { href: "/dashboard", label: "Overview", icon: "LayoutDashboard", perm: "dashboard.view", shortcut: "g o", description: "What needs you today, fleet at a glance" },
+      { href: "/dashboard", label: "Today", icon: "LayoutDashboard", perm: "dashboard.view", shortcut: "g o", description: "What needs a decision today" },
     ],
   },
   {
@@ -21,7 +21,7 @@ export const NAV: NavSection[] = [
     icon: "Truck",
     items: [
       { href: "/fleet", label: "Trucks", icon: "Truck", perm: "fleet.view", shortcut: "g t", description: "Every tractor, PM and paperwork" },
-      { href: "/fleet/trailers", label: "Trailers", icon: "Container", perm: "fleet.view", shortcut: "g r", description: "Status, pairing, location" },
+      { href: "/fleet/trailers", label: "Trailers", icon: "Container", perm: "fleet.view", shortcut: "g r", description: "Status, pairing, annual inspection" },
       { href: "/tracking", label: "Live map", icon: "Map", perm: "tracking.view", shortcut: "g m", description: "Where every unit is right now" },
     ],
   },
@@ -29,8 +29,19 @@ export const NAV: NavSection[] = [
     section: "Maintenance",
     icon: "Wrench",
     items: [
-      { href: "/maintenance", label: "Maintenance", icon: "Wrench", perm: "fleet.view", shortcut: "g s", description: "Spend, PM schedule, in shop, compliance" },
-      { href: "/maintenance/work-orders", label: "Work orders", icon: "ClipboardList", perm: "fleet.view", shortcut: "g w", description: "Repairs, PM and inspections" },
+      { href: "/maintenance/work-orders", label: "Repairs", icon: "ClipboardList", perm: "fleet.view", shortcut: "g w", description: "Repair orders from opening to invoice" },
+      { href: "/maintenance/oil", label: "Oil & PM", icon: "Droplet", perm: "fleet.view", shortcut: "g s", description: "Oil changes and service by odometer" },
+      { href: "/maintenance", label: "Shop overview", icon: "Wrench", perm: "fleet.view", description: "Spend, in shop, lease mileage, compliance" },
+      { href: "/vendors", label: "Vendors", icon: "Store", perm: "fleet.view", shortcut: "g v", description: "Shops, dealers, tire and road-side services" },
+    ],
+  },
+  {
+    section: "Inspections",
+    icon: "ClipboardCheck",
+    items: [
+      { href: "/inspections", label: "Pre-trip board", icon: "ClipboardCheck", perm: "fleet.view", shortcut: "g i", description: "Weekly walk-around videos and what they showed" },
+      { href: "/inspections/defects", label: "Defects", icon: "TriangleAlert", perm: "fleet.view", description: "Everything found wrong, until it is fixed and confirmed" },
+      { href: "/inspections/roadside", label: "Roadside", icon: "ShieldAlert", perm: "fleet.view", description: "DOT roadside inspections and violations" },
     ],
   },
   {
@@ -51,7 +62,7 @@ export const NAV: NavSection[] = [
     section: "Settings",
     icon: "Settings",
     items: [
-      { href: "/admin/company", label: "Company profile", icon: "Landmark", perm: "company.manage", shortcut: "g c" },
+      { href: "/admin/company", label: "Company profile", icon: "Landmark", perm: "company.manage", shortcut: "g c", description: "Name, units, time zone, documents" },
       { href: "/admin/members", label: "Members", icon: "ShieldCheck", perm: "members.manage", description: "Who works in this company and their role" },
       { href: "/admin/audit", label: "Audit log", icon: "ScrollText", perm: "audit.view" },
     ],
@@ -60,8 +71,9 @@ export const NAV: NavSection[] = [
 
 /** Breadcrumb titles for route segments that aren't nav items. */
 export const SEGMENT_LABELS: Record<string, string> = {
-  new: "New", edit: "Edit", "work-orders": "Work orders", trailers: "Trailers", account: "My account", admin: "Company",
-  company: "Company profile", members: "Members", audit: "Audit log", alerts: "Needs attention",
+  new: "New", edit: "Edit", "work-orders": "Repairs", trailers: "Trailers", account: "My account", admin: "Company",
+  company: "Company profile", members: "Members", audit: "Audit log", alerts: "Needs attention", oil: "Oil & PM",
+  defects: "Defects", roadside: "Roadside", vendors: "Vendors", inspections: "Pre-trip board",
 };
 
 export function allNavItems() {

@@ -10,6 +10,7 @@ import { attempt, fields, FormError, type ActionState } from "@/lib/action";
 import { COMPANY_COLORS, isRole } from "@/lib/constants";
 import { landingAfterSwitch } from "@/lib/nav";
 import { HOME } from "@/lib/permissions";
+import { guessLocale, isUnitSystem } from "@/lib/locale";
 
 // bcrypt hash of a random string; only used to equalise timing for unknown emails.
 const DUMMY_HASH = "$2b$10$Dfob35lSw0BVw8zEqfQSY.8DFhc6CSl6DeU4B3W3T1BW03c0vUecO";
@@ -30,6 +31,12 @@ async function signedIn(userId: string) {
 }
 
 const pickColor = () => COMPANY_COLORS[Math.floor(Math.random() * COMPANY_COLORS.length)];
+
+/** Units, time zone and currency for a new company, from the form's region picker (browser time zone). */
+function regionOf(f: ReturnType<typeof fields>) {
+  const units = f.str("units");
+  return guessLocale(f.str("timezone"), isUnitSystem(units) ? units : null);
+}
 
 /** A usable invite for `email`, or a FormError saying why not. */
 async function usableInvite(token: string, email?: string) {
@@ -122,7 +129,7 @@ export async function signup(_: ActionState, fd: FormData): Promise<ActionState>
       companyId = invite.companyId;
     } else {
       const company = await rootDb.company.create({
-        data: { name: companyName!, color: pickColor(), memberships: { create: { userId: user.id, role: "OWNER" } } },
+        data: { name: companyName!, color: pickColor(), ...regionOf(f), memberships: { create: { userId: user.id, role: "OWNER" } } },
       });
       companyId = company.id;
       await rootDb.auditLog.create({ data: { companyId, userId: user.id, action: "create", entity: "company", entityId: companyId, details: company.name } });
@@ -161,7 +168,7 @@ export async function createCompany(_: ActionState, fd: FormData): Promise<Actio
     const userId = f.str("userId") ?? ctx.active?.user.id ?? ctx.accounts[0]?.userId;
     if (!userId || !(await signedIn(userId))) throw new FormError("Sign in first.");
     const company = await rootDb.company.create({
-      data: { name, color: f.str("color") ?? pickColor(), memberships: { create: { userId, role: "OWNER" } } },
+      data: { name, color: f.str("color") ?? pickColor(), ...regionOf(f), memberships: { create: { userId, role: "OWNER" } } },
     });
     await rootDb.auditLog.create({ data: { companyId: company.id, userId, action: "create", entity: "company", entityId: company.id, details: name } });
     await activate(userId, company.id);

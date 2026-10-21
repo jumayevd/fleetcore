@@ -16,10 +16,10 @@ export { PERIODS, parsePeriod, periodRange, type PeriodKey } from "./period";
 /* Tabs                                                                */
 /* ------------------------------------------------------------------ */
 
-export const TABS = ["summary", "log", "pm", "lease", "shop", "compliance"] as const;
+export const TABS = ["summary", "log", "shop", "lease", "compliance"] as const;
 export type TabKey = (typeof TABS)[number];
 export const TAB_LABELS: Record<TabKey, string> = {
-  summary: "Summary", log: "Repair log", pm: "PM schedule", lease: "Lease mileage", shop: "In shop", compliance: "Compliance",
+  summary: "Summary", log: "Repair log", shop: "In the shop", lease: "Lease mileage", compliance: "Compliance",
 };
 export function parseTab(v: unknown): TabKey {
   return typeof v === "string" && (TABS as readonly string[]).includes(v) ? (v as TabKey) : "summary";
@@ -32,9 +32,6 @@ export function parseTab(v: unknown): TabKey {
 /** Whole days from `from` to `to` (never negative). */
 export const daysBetween = (from: Date | null | undefined, to: Date = new Date()) =>
   from ? Math.max(0, Math.floor((to.getTime() - from.getTime()) / DAY)) : 0;
-
-/** Days in the shop → tone: quiet until a week, caution to three weeks, then a problem. */
-export const shopTone = (days: number): Tone => (days > 21 ? "danger" : days > 7 ? "warn" : "neutral");
 
 /** First non-empty string from a searchParams value. */
 export const str = (v: string | string[] | undefined) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
@@ -57,89 +54,34 @@ export async function unitsInShopCount() {
   return countUnits(rows);
 }
 
-/** Pickers for the work order form: units with a one-line description, plus known vendors for autocomplete. */
-export async function workOrderFormOptions() {
-  const [trucks, trailers, vendors] = await Promise.all([
-    db.truck.findMany({ orderBy: { unitNumber: "asc" }, select: { id: true, unitNumber: true, make: true, model: true, odometerKm: true, lastPmKm: true, status: true } }),
-    db.trailer.findMany({ orderBy: { unitNumber: "asc" }, select: { id: true, unitNumber: true, type: true, status: true } }),
-    db.workOrder.findMany({ where: { vendor: { not: null } }, distinct: ["vendor"], select: { vendor: true }, orderBy: { vendor: "asc" } }),
-  ]);
-  return {
-    trucks: trucks.map((t) => ({
-      id: t.id, unitNumber: t.unitNumber, odometerKm: t.odometerKm, lastPmKm: t.lastPmKm,
-      detail: `${t.make} ${t.model}${t.status !== "ACTIVE" ? ` · ${t.status.toLowerCase().replace(/_/g, " ")}` : ""}`,
-    })),
-    trailers: trailers.map((t) => ({
-      id: t.id, unitNumber: t.unitNumber,
-      detail: `${EQUIPMENT_LABELS[t.type] ?? t.type}${t.status !== "EMPTY" && t.status !== "YARD" ? ` · ${t.status.toLowerCase().replace(/_/g, " ")}` : ""}`,
-    })),
-    vendors: vendors.map((v) => v.vendor!).filter(Boolean),
-  };
-}
-
-/* ------------------------------------------------------------------ */
-/* PM schedule                                                         */
-/* ------------------------------------------------------------------ */
-
-export type OpenPm = { id: string; number: number; status: string; truckId: string | null };
-/** The truck's most recent completed PM work order: what it cost and where it was done. */
-export type LastPmJob = { id: string; number: number; cost: number; vendor: string | null; completedAt: Date | null; truckId: string | null };
-export type PmRow = {
-  truck: Truck;
-  /** Odometer reading the next PM is due at (explicit, else last PM + interval). */
-  nextService: number | null;
-  /** Negative = overdue. */
-  kmLeft: number | null;
-  /** Share of the interval already driven (can exceed 1). */
-  used: number | null;
-  openPm: OpenPm | null;
-  lastJob: LastPmJob | null;
+/** A unit as the repair form offers it. */
+export type UnitOption = {
+  id: string; unitNumber: string; detail: string;
+  /** Trucks: current odometer, to prefill odometer in. */
+  odometerKm?: number;
+  /** Who drives it now (a trailer: the driver of the truck it is hooked to), the default for a driver charge. */
+  driverId?: string | null;
 };
 
-type PmFields = Pick<Truck, "nextServiceKm" | "lastPmKm" | "pmIntervalKm">;
-/** Odometer reading the next PM is due at: the explicit reading, else last PM + interval (same rule as the alerts). */
-export const pmNextService = (t: PmFields) => t.nextServiceKm ?? (t.lastPmKm != null ? t.lastPmKm + t.pmIntervalKm : null);
-
-export function pmRows(trucks: Truck[], openPm: OpenPm[], lastPm: Map<string, LastPmJob> = new Map()): PmRow[] {
-  return trucks
-    .filter((t) => t.status !== "INACTIVE")
-    .map((t) => {
-      const nextService = pmNextService(t);
-      const kmLeft = nextService != null ? nextService - t.odometerKm : null;
-      const used = t.pmIntervalKm > 0 && kmLeft != null ? (t.pmIntervalKm - kmLeft) / t.pmIntervalKm : null;
-      return { truck: t, nextService, kmLeft, used, openPm: openPm.find((w) => w.truckId === t.id) ?? null, lastJob: lastPm.get(t.id) ?? null };
-    })
-    .sort((a, b) => (a.kmLeft ?? Infinity) - (b.kmLeft ?? Infinity));
-}
-
-/**
- * Latest completed PM work order per truck. Two bounded queries: each truck's latest completion time, then the jobs
- * completed at exactly that time (one per truck in practice; the highest number wins a tie).
- */
-export async function lastPmJobs(truckIds: string[]) {
-  const byTruck = new Map<string, LastPmJob>();
-  if (!truckIds.length) return byTruck;
-  const where = { category: "PM", status: "DONE", truckId: { in: truckIds } };
-  const latest = await db.workOrder.groupBy({ by: ["truckId"], where: { ...where, completedAt: { not: null } }, _max: { completedAt: true } });
-  const pairs = latest.flatMap((l) => (l.truckId && l._max.completedAt ? [{ truckId: l.truckId, completedAt: l._max.completedAt }] : []));
-  if (!pairs.length) return byTruck;
-  const rows = await db.workOrder.findMany({
-    where: { ...where, OR: pairs },
-    orderBy: { number: "desc" },
-    select: { id: true, number: true, cost: true, vendor: true, completedAt: true, truckId: true },
-  });
-  for (const r of rows) if (r.truckId && !byTruck.has(r.truckId)) byTruck.set(r.truckId, r);
-  return byTruck;
-}
-
-export const pmTone = (kmLeft: number | null): Tone =>
-  kmLeft == null ? "neutral" : kmLeft < 0 ? "danger" : kmLeft <= 2000 ? "warn" : kmLeft <= 5000 ? "info" : "ok";
-
-export async function openPmWorkOrders(): Promise<OpenPm[]> {
-  return db.workOrder.findMany({
-    where: { category: "PM", status: { in: ["DRAFT", "OPEN", "IN_PROGRESS"] } },
-    select: { id: true, number: true, status: true, truckId: true },
-  });
+/** Pickers for the repair form: units with a one-line description, drivers (for a driver charge) and vendors. */
+export async function workOrderFormOptions() {
+  const [trucks, trailers, drivers] = await Promise.all([
+    db.truck.findMany({ orderBy: { unitNumber: "asc" }, select: { id: true, unitNumber: true, make: true, model: true, odometerKm: true, status: true, driverId: true, driver: { select: { name: true } } } }),
+    db.trailer.findMany({ orderBy: { unitNumber: "asc" }, select: { id: true, unitNumber: true, type: true, status: true, truck: { select: { unitNumber: true, driverId: true } } } }),
+    db.driver.findMany({ where: { status: { not: "INACTIVE" } }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+  ]);
+  const quiet = (s: string, normal: string[]) => (normal.includes(s) ? "" : ` · ${s.toLowerCase().replace(/_/g, " ")}`);
+  return {
+    trucks: trucks.map((t): UnitOption => ({
+      id: t.id, unitNumber: t.unitNumber, odometerKm: t.odometerKm, driverId: t.driverId,
+      detail: `${t.make} ${t.model}${t.driver ? ` · ${t.driver.name}` : ""}${quiet(t.status, ["ACTIVE"])}`,
+    })),
+    trailers: trailers.map((t): UnitOption => ({
+      id: t.id, unitNumber: t.unitNumber, driverId: t.truck?.driverId ?? null,
+      detail: `${EQUIPMENT_LABELS[t.type] ?? t.type}${t.truck ? ` · on ${t.truck.unitNumber}` : ""}${quiet(t.status, ["EMPTY", "YARD", "IN_USE"])}`,
+    })),
+    drivers,
+  };
 }
 
 /* ------------------------------------------------------------------ */

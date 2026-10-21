@@ -8,7 +8,7 @@ import { FilterChip, FilterField, FilterMenu } from "@/components/filter-menu";
 
 export type DriverFilterParams = {
   q?: string; type?: string; status?: string; inactive?: string;
-  atRisk?: string; papers?: string; hold?: string; truck?: string;
+  atRisk?: string; papers?: string; hold?: string; truck?: string; dispatcher?: string;
 };
 type Opt = { value: string; label: string };
 type Toggle = "atRisk" | "papers" | "hold" | "truck";
@@ -25,7 +25,7 @@ const QUICK: { key: Toggle; on: string; label: string; icon: ReactNode; title: s
  * Filter bar for the drivers roster. Everything lives in the URL: chips and selects apply immediately, search is
  * debounced. The server does the filtering.
  */
-export function DriverFilters({ params, types, statuses }: { params: DriverFilterParams; types: Opt[]; statuses: Opt[] }) {
+export function DriverFilters({ params, types, statuses, dispatchers = [] }: { params: DriverFilterParams; types: Opt[]; statuses: Opt[]; dispatchers?: string[] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [q, setQ] = useState(params.q ?? "");
@@ -49,7 +49,7 @@ export function DriverFilters({ params, types, statuses }: { params: DriverFilte
     start(() => router.replace("/drivers", { scroll: false }));
   };
 
-  const menuCount = [params.type, params.status, params.inactive].filter(Boolean).length;
+  const menuCount = [params.type, params.status, params.inactive, params.dispatcher].filter(Boolean).length;
   const anyFilter = Object.values(params).some(Boolean);
   const label = (list: Opt[], v?: string) => list.find((o) => o.value === v)?.label ?? v;
   const chip = (on: boolean) => cn(
@@ -61,7 +61,7 @@ export function DriverFilters({ params, types, statuses }: { params: DriverFilte
     <div className={cn("flex flex-wrap items-center gap-2", pending && "opacity-70")} aria-busy={pending || undefined}>
       <div className="relative">
         <Search className="pointer-events-none absolute inset-y-0 left-2.5 my-auto h-3.5 w-3.5 text-fg-faint" />
-        <input value={q} onChange={(e) => onSearch(e.target.value)} placeholder="Search drivers…" title="Name, phone, email, licence number, truck or plate" aria-label="Search drivers"
+        <input value={q} onChange={(e) => onSearch(e.target.value)} placeholder="Search drivers…" title="Name, phone, email, licence number, dispatcher, truck or plate" aria-label="Search drivers"
           onKeyDown={(e) => { if (e.key === "Enter") { if (timer.current) clearTimeout(timer.current); go({ q: q.trim() || undefined }); } }}
           className={cn(inputClass, "w-60 pl-8 pr-7")} />
         {q && (
@@ -83,7 +83,16 @@ export function DriverFilters({ params, types, statuses }: { params: DriverFilte
         })}
       </div>
 
-      <FilterMenu count={menuCount} label="More filters" onClear={() => go({ type: undefined, status: undefined, inactive: undefined })}>
+      <FilterMenu count={menuCount} label="More filters" onClear={() => go({ type: undefined, status: undefined, inactive: undefined, dispatcher: undefined })}>
+        {dispatchers.length > 0 && (
+          <FilterField label="Dispatcher">
+            <select value={params.dispatcher ?? ""} onChange={(e) => go({ dispatcher: e.target.value || undefined })} className={inputClass}>
+              <option value="">Any dispatcher</option>
+              <option value="none">No dispatcher set</option>
+              {dispatchers.map((d) => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </FilterField>
+        )}
         <FilterField label="Driver type">
           <select value={params.type ?? ""} onChange={(e) => go({ type: e.target.value || undefined })} className={inputClass}>
             <option value="">All types</option>
@@ -106,6 +115,7 @@ export function DriverFilters({ params, types, statuses }: { params: DriverFilte
         )}
       </FilterMenu>
 
+      {params.dispatcher && <FilterChip onRemove={() => go({ dispatcher: undefined })}>{params.dispatcher === "none" ? "No dispatcher" : `Dispatch: ${params.dispatcher}`}</FilterChip>}
       {params.type && <FilterChip onRemove={() => go({ type: undefined })}>{label(types, params.type)}</FilterChip>}
       {params.status && <FilterChip onRemove={() => go({ status: undefined })}>{label(statuses, params.status)} only</FilterChip>}
       {params.inactive && !params.status && <FilterChip onRemove={() => go({ inactive: undefined })}>Inactive shown</FilterChip>}

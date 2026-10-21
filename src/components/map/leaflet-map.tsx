@@ -4,6 +4,7 @@ import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { MapContainer, TileLayer, Marker, Polyline, Popup, CircleMarker, useMap } from "react-leaflet";
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
+import { useFormat } from "@/components/locale";
 
 // Default: OpenStreetMap (fine for dev/low volume). For production traffic set a
 // commercial tile provider via NEXT_PUBLIC_MAP_TILE_URL (e.g. MapTiler, Mapbox, Stadia).
@@ -29,7 +30,16 @@ export type MapTruck = {
   /** GPS fix is old — marker is faded with a dashed ring. */
   stale?: boolean;
   tone?: MapTone;
+  /** "stop": out of service (defect hold) — a stop sign instead of the truck, so it reads without colour. */
+  glyph?: "truck" | "stop";
 };
+
+/** Where the map opens before it knows any position: the company's part of the world, from its time zone. */
+function defaultView(tz: string): { center: [number, number]; zoom: number } {
+  if (tz.startsWith("America/")) return { center: [39.5, -96], zoom: 4 };
+  if (tz.startsWith("Europe/")) return { center: [50, 10], zoom: 4 };
+  return { center: [41.3, 69.24], zoom: 6 };
+}
 
 export type MapPointKind = "origin" | "dest" | "stop";
 export type MapPoint = {
@@ -110,9 +120,13 @@ function cachedIcon(key: string, build: () => L.DivIcon) {
 function truckIcon(t: MapTruck, selected: boolean, v: Vars) {
   const { fill, ink } = truckColor(t, selected, v);
   const heading = Math.round(t.heading / 5) * 5; // 5° steps: invisible on screen, keeps the cache warm
-  const key = ["t", t.unitNumber, selected, t.moving, t.stale, heading, fill, ink, v["--surface"], v["--fg"]].join("|");
+  const key = ["t", t.unitNumber, selected, t.moving, t.stale, t.glyph, heading, fill, ink, v["--surface"], v["--fg"]].join("|");
   return cachedIcon(key, () => buildTruckIcon(t, selected, heading, fill, ink, v));
 }
+
+const TRUCK_GLYPH = `<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>`;
+/** Octagon with a cross: out of service. */
+const STOP_GLYPH = `<path d="M2.586 16.726A2 2 0 0 1 2 15.312V8.688a2 2 0 0 1 .586-1.414l4.688-4.688A2 2 0 0 1 8.688 2h6.624a2 2 0 0 1 1.414.586l4.688 4.688A2 2 0 0 1 22 8.688v6.624a2 2 0 0 1-.586 1.414l-4.688 4.688a2 2 0 0 1-1.414.586H8.688a2 2 0 0 1-1.414-.586z"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>`;
 
 function buildTruckIcon(t: MapTruck, selected: boolean, heading: number, fill: string, ink: string, v: Vars) {
   const size = selected ? 36 : 28;
@@ -123,7 +137,7 @@ function buildTruckIcon(t: MapTruck, selected: boolean, heading: number, fill: s
     iconAnchor: [size / 2, size / 2],
     html: `<div style="position:relative;width:${size}px;height:${size}px;border-radius:9999px;background:${fill};border:${ring};box-shadow:0 1px 4px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;${t.stale ? "opacity:.6;" : ""}">
       ${t.moving ? `<div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%) rotate(${heading}deg);transform-origin:50% ${size / 2 + 8}px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:8px solid ${fill}"></div>` : ""}
-      <svg width="${Math.round(size * 0.52)}" height="${Math.round(size * 0.52)}" viewBox="0 0 24 24" fill="none" stroke="${ink}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>
+      <svg width="${Math.round(size * 0.52)}" height="${Math.round(size * 0.52)}" viewBox="0 0 24 24" fill="none" stroke="${ink}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${t.glyph === "stop" ? STOP_GLYPH : TRUCK_GLYPH}</svg>
     </div>
     <div style="position:absolute;top:${size + 3}px;left:50%;transform:translateX(-50%);background:${v["--fg"]};color:${v["--surface"]};font-family:var(--font-mono),ui-monospace,monospace;font-size:10px;font-weight:600;letter-spacing:-.01em;padding:1px 5px;border-radius:4px;white-space:nowrap;${t.stale ? "opacity:.7;" : ""}">${escapeHtml(t.unitNumber)}</div>`,
   });
@@ -197,7 +211,7 @@ function FlyTo({ target }: { target: [number, number] | null }) {
   return null;
 }
 
-export default function LeafletMap({ trucks = [], points = [], selectedId, onSelect, renderPopup, height = 520, fitKey = "all", flyTo = null, className }: {
+export default function LeafletMap({ trucks = [], points = [], selectedId, onSelect, renderPopup, height = 520, fitKey = "all", flyTo = null, className, center, zoom }: {
   trucks?: MapTruck[];
   points?: MapPoint[];
   selectedId?: string | null;
@@ -210,8 +224,13 @@ export default function LeafletMap({ trucks = [], points = [], selectedId, onSel
   fitKey?: string;
   flyTo?: [number, number] | null;
   className?: string;
+  /** Opening view before any position is known (defaults to the company's region, from its time zone). */
+  center?: [number, number];
+  zoom?: number;
 }) {
   const v = useThemeVars();
+  const f = useFormat();
+  const start = defaultView(f.tz);
   const positioned = trucks.filter((t) => t.lat != null && t.lng != null);
   const all: [number, number][] = [
     ...positioned.map((t) => [t.lat!, t.lng!] as [number, number]),
@@ -220,7 +239,7 @@ export default function LeafletMap({ trucks = [], points = [], selectedId, onSel
 
   return (
     <div style={{ height }} className={`overflow-hidden rounded-lg ${className ?? ""}`}>
-      <MapContainer center={[41.3, 69.24]} zoom={6} style={{ height: "100%", width: "100%" }} scrollWheelZoom>
+      <MapContainer center={center ?? start.center} zoom={zoom ?? start.zoom} style={{ height: "100%", width: "100%" }} scrollWheelZoom>
         <TileLayer attribution={TILE_ATTRIBUTION} url={TILE_URL} />
         <FitBounds points={all} fitKey={fitKey} />
         <FlyTo target={flyTo} />
@@ -256,7 +275,7 @@ export default function LeafletMap({ trucks = [], points = [], selectedId, onSel
                   <b className="num">{t.unitNumber}</b>
                   {t.driverName && <div>{t.driverName}</div>}
                   {t.label && <div className="text-fg-muted">{t.label}</div>}
-                  <div className="num text-fg-muted">{Math.round(t.speedKmh)} km/h</div>
+                  <div className="num text-fg-muted">{f.speed(t.speedKmh)}</div>
                 </div>
               </Popup>
             ))}

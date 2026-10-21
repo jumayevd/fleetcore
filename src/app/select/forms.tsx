@@ -6,6 +6,7 @@ import { acceptInvite, createCompany } from "@/app/actions/auth";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Input, cardClass, cn } from "@/components/ui";
 import { COMPANY_COLORS } from "@/lib/constants";
+import { RegionPicker } from "@/components/region-picker";
 
 /** "New company" tile: opens into a one-field form. The first company of an account starts open. */
 export function NewCompanyForm({ userId, first }: { userId: string; first: boolean }) {
@@ -32,6 +33,7 @@ export function NewCompanyForm({ userId, first }: { userId: string; first: boole
             className={cn("h-5 w-5 rounded-full ring-offset-2 ring-offset-surface transition-shadow", color === c && "ring-2 ring-fg-muted")} style={{ background: c }} />
         ))}
       </div>
+      <RegionPicker />
       <div className="mt-auto flex items-center gap-2">
         <SubmitButton pendingText="Creating…" className="flex-1">Create and open</SubmitButton>
         {!first && <button type="button" onClick={() => setOpen(false)} className="h-9 rounded-md px-2 text-[12px] font-medium text-fg-muted hover:bg-raised hover:text-fg">Cancel</button>}

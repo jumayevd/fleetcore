@@ -5,7 +5,10 @@ import { fleetSnapshot } from "@/lib/telemetry";
 
 export const dynamic = "force-dynamic";
 
-/** Live map polling: the active company's trucks in service with their last known position (see fleetSnapshot). */
+/**
+ * Live map polling: the active company's trucks in service with their last known position, oil service and defect
+ * hold (see fleetSnapshot). Distances and speeds are in the company's own unit.
+ */
 export async function GET() {
   const user = await getCurrentUser();
   // 401 (signed out / session expired) and 403 (role lacks tracking) differ on purpose: the live map

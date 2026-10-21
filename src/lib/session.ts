@@ -103,7 +103,7 @@ export async function writeActive(userId: string, companyId: string | null) {
 
 export type ActiveContext = {
   user: { id: string; name: string; email: string; phone: string | null; lastLoginAt: Date | null };
-  company: { id: string; name: string; color: string | null };
+  company: { id: string; name: string; color: string | null; units: string; timezone: string; currency: string };
   role: Role;
   membershipId: string;
 };
@@ -119,7 +119,7 @@ async function resolve(token: string | undefined, activeRaw: string | undefined)
     select: {
       id: true, role: true, active: true,
       user: { select: { id: true, name: true, email: true, phone: true, lastLoginAt: true, active: true } },
-      company: { select: { id: true, name: true, color: true } },
+      company: { select: { id: true, name: true, color: true, units: true, timezone: true, currency: true } },
     },
   });
   if (!m || !m.active || !m.user.active || !isRole(m.role)) return { accounts, active: null };

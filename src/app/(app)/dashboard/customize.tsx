@@ -11,7 +11,7 @@ function writeHidden(keys: Set<OverviewSection>) {
   document.cookie = `${OVERVIEW_COOKIE}=${[...keys].join(",")}; path=/; max-age=31536000; samesite=lax`;
 }
 
-/** "Customize" menu on the overview: a switch per section. Saved in this browser; the page re-renders without them. */
+/** "Customize" menu on Today: a switch per section. Saved in this browser; the page re-renders without them. */
 export function CustomizeOverview({ hidden: initial }: { hidden: OverviewSection[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -47,7 +47,7 @@ export function CustomizeOverview({ hidden: initial }: { hidden: OverviewSection
       {open && (
         <div className="pop-in absolute right-0 top-full z-40 mt-2 w-80 overflow-hidden rounded-lg border border-line bg-overlay shadow-float">
           <div className="flex items-center justify-between px-4 pb-1 pt-3">
-            <p className="text-[13px] font-semibold text-fg">Show on overview</p>
+            <p className="text-[13px] font-semibold text-fg">Show on Today</p>
             {hidden.size > 0 && (
               <button type="button" onClick={() => save(new Set())} className="text-[12px] font-medium text-accent-text hover:underline">Show all</button>
             )}

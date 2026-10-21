@@ -3,7 +3,8 @@ import type { Prisma } from "@prisma/client";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { rootDb } from "@/lib/db-root";
-import { dateTime, daysAgo, number } from "@/lib/format";
+import { daysAgo, number } from "@/lib/format";
+import { getFormat } from "@/lib/format-server";
 import { Badge, Card, FilterPills, InfoTip, LinkButton, PageHeader, Table } from "@/components/ui";
 import { AuditFilters } from "./filters";
 import { auditHref, isoDay, type AuditFilterParams } from "./shared";
@@ -13,6 +14,8 @@ export const metadata = { title: "Audit log" };
 
 const PAGE_SIZE = 50;
 const str = (v: string | string[] | undefined) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+/** "2026-10-31" → "2026-11-01" (calendar arithmetic, no time zone involved). */
+const nextDay = (key: string) => new Date(Date.parse(`${key}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
 
 export default async function AuditPage({ searchParams }: PageProps<"/admin/audit">) {
   const me = await requireUser("audit.view");
@@ -21,6 +24,8 @@ export default async function AuditPage({ searchParams }: PageProps<"/admin/audi
     entity: str(sp.entity), user: str(sp.user), action: str(sp.action), from: isoDay(str(sp.from)), to: isoDay(str(sp.to)), q: str(sp.q),
   };
   const requested = Math.max(1, Math.floor(Number(sp.page)) || 1);
+  const f = await getFormat();
+  const dateTime = f.dateTime;
 
   const where: Prisma.AuditLogWhereInput = {};
   if (params.entity) where.entity = params.entity;
@@ -29,8 +34,9 @@ export default async function AuditPage({ searchParams }: PageProps<"/admin/audi
   else if (params.user) where.userId = params.user;
   if (params.from || params.to) {
     where.createdAt = {
-      ...(params.from ? { gte: new Date(`${params.from}T00:00:00`) } : {}),
-      ...(params.to ? { lt: new Date(new Date(`${params.to}T00:00:00`).getTime() + 86_400_000) } : {}),
+      // Whole days in the company's time zone.
+      ...(params.from ? { gte: f.parseDate(params.from) ?? new Date(`${params.from}T00:00:00`) } : {}),
+      ...(params.to ? { lt: f.parseDate(nextDay(params.to)) ?? new Date(new Date(`${params.to}T00:00:00`).getTime() + 86_400_000) } : {}),
     };
   }
   if (params.q) where.details = { contains: params.q, mode: "insensitive" };

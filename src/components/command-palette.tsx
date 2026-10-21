@@ -31,9 +31,14 @@ export function CommandPalette({ onClose, role, active, accounts, onSwitch }: {
   const actions = useMemo<Item[]>(() => {
     const a: Item[] = [];
     if (can(role, "fleet.edit")) {
+      a.push({ key: "new-wo", title: "New repair", subtitle: "Open a repair order for a truck or trailer", href: "/maintenance/work-orders/new", group: "Actions", icon: "action" });
+      a.push({ key: "log-oil", title: "Log an oil change", subtitle: "Resets the truck's oil interval", href: "/maintenance/oil?log=1", group: "Actions", icon: "action" });
+      a.push({ key: "review-pti", title: "Review walk-arounds", subtitle: "This week's pre-trip board", href: "/inspections", group: "Actions", icon: "action" });
+      a.push({ key: "new-defect", title: "Report a defect", subtitle: "Something wrong with a truck or trailer", href: "/inspections/defects?new=1", group: "Actions", icon: "action" });
+      a.push({ key: "new-roadside", title: "Record a roadside inspection", subtitle: "Report, violations and corrections", href: "/inspections/roadside/new", group: "Actions", icon: "action" });
       a.push({ key: "new-truck", title: "Add truck", href: "/fleet/new", group: "Actions", icon: "action" });
       a.push({ key: "new-trailer", title: "Add trailer", href: "/fleet/trailers/new", group: "Actions", icon: "action" });
-      a.push({ key: "new-wo", title: "New work order", subtitle: "Repair, PM or inspection", href: "/maintenance/work-orders/new", group: "Actions", icon: "action" });
+      a.push({ key: "new-vendor", title: "Add vendor", subtitle: "Shop, dealer, tire or road service", href: "/vendors/new", group: "Actions", icon: "action" });
     }
     if (can(role, "drivers.edit")) a.push({ key: "new-driver", title: "Add driver", href: "/drivers/new", group: "Actions", icon: "action" });
     if (can(role, "members.manage")) a.push({ key: "invite", title: "Invite a teammate", href: "/admin/members", group: "Actions", icon: "action" });
@@ -100,7 +105,7 @@ export function CommandPalette({ onClose, role, active, accounts, onSwitch }: {
       <div className="pop-in w-full max-w-xl overflow-hidden rounded-lg border border-line bg-overlay shadow-float [transform-origin:top_center]" onMouseDown={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-2 border-b border-line px-3">
           <Search className="h-4 w-4 shrink-0 text-fg-subtle" />
-          <input autoFocus value={q} onChange={(e) => search(e.target.value)} placeholder={`Search trucks, trailers, drivers, work orders in ${active.companyName}…`}
+          <input autoFocus value={q} onChange={(e) => search(e.target.value)} placeholder={`Search units, drivers, repairs (RO-…), vendors, defects in ${active.companyName}…`}
             className="h-11 w-full bg-transparent text-[14px] text-fg outline-none placeholder:text-fg-faint" aria-label="Search" />
           <Kbd>esc</Kbd>
         </div>

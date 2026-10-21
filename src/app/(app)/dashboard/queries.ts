@@ -1,103 +1,60 @@
 import "server-only";
-import { endOfDay, format, startOfDay, startOfMonth, subMonths } from "date-fns";
 import { db, rootDb } from "@/lib/db";
 import { kmDriven } from "@/lib/mileage";
-
-const NOT_STARTED = ["DRAFT", "OPEN"];
-const OPEN_WORK = ["DRAFT", "OPEN", "IN_PROGRESS"];
+import { fromZoned, zonedParts, type Formatter } from "@/lib/locale";
 
 /* ------------------------------------------------------------------ */
-/* Today in the shop                                                   */
+/* This month's spend (money.view only)                                */
 /* ------------------------------------------------------------------ */
 
-const jobSelect = {
-  id: true, number: true, title: true, status: true, priority: true, category: true, vendor: true, scheduledAt: true, inAt: true,
-  truck: { select: { id: true, unitNumber: true } },
-  trailer: { select: { id: true, unitNumber: true } },
-} as const;
+export type SpendMonth = {
+  /** "October" */
+  label: string;
+  /** Completed repairs by completion date: the invoice total, else the job cost. */
+  maintenance: number;
+  fuel: number;
+  total: number;
+  /** Part of `maintenance` charged to drivers. */
+  driverCharges: number;
+  /** Distance driven, from odometer readings (company unit). */
+  distance: number;
+};
 
 /**
- * The shop's day: jobs in progress, jobs booked for today, and jobs booked for an earlier day that never started
- * (the same rule as the "overdue work order" alert). Up to `take` of each, plus the totals for "All N" links.
+ * Maintenance and fuel for this calendar month so far and for all of last month, with month boundaries in the company's
+ * time zone. Voided repairs never count.
  */
-export async function shopToday(now: Date, take = 6) {
-  const dayStart = startOfDay(now);
-  const dayEnd = endOfDay(now);
-  const inProgressWhere = { status: "IN_PROGRESS" };
-  const todayWhere = { status: { in: NOT_STARTED }, scheduledAt: { gte: dayStart, lte: dayEnd } };
-  const overdueWhere = { status: { in: NOT_STARTED }, scheduledAt: { lt: dayStart } };
-  const [inProgress, today, overdue, nInProgress, nToday, nOverdue] = await Promise.all([
-    db.workOrder.findMany({ where: inProgressWhere, orderBy: [{ inAt: { sort: "asc", nulls: "last" } }, { scheduledAt: "asc" }], take, select: jobSelect }),
-    db.workOrder.findMany({ where: todayWhere, orderBy: { scheduledAt: "asc" }, take, select: jobSelect }),
-    db.workOrder.findMany({ where: overdueWhere, orderBy: { scheduledAt: "asc" }, take, select: jobSelect }),
-    db.workOrder.count({ where: inProgressWhere }),
-    db.workOrder.count({ where: todayWhere }),
-    db.workOrder.count({ where: overdueWhere }),
+export async function monthSpend(f: Formatter, now: Date) {
+  const p = zonedParts(now, f.tz);
+  const thisStart = fromZoned(p.y, p.m, 1, 0, 0, f.tz);
+  const lastStart = p.m === 1 ? fromZoned(p.y - 1, 12, 1, 0, 0, f.tz) : fromZoned(p.y, p.m - 1, 1, 0, 0, f.tz);
+  const [work, fuel, distThis, distLast] = await Promise.all([
+    db.workOrder.findMany({
+      where: { status: "DONE", voidedAt: null, completedAt: { gte: lastStart, lte: now } },
+      select: { completedAt: true, cost: true, laborCost: true, partsCost: true, invoiceTotal: true, payer: true },
+    }),
+    db.fuelLog.findMany({ where: { date: { gte: lastStart, lte: now } }, select: { date: true, cost: true } }),
+    kmDriven(thisStart, now),
+    kmDriven(lastStart, thisStart),
   ]);
-  return { inProgress, today, overdue, counts: { inProgress: nInProgress, today: nToday, overdue: nOverdue } };
-}
-export type ShopDay = Awaited<ReturnType<typeof shopToday>>;
-export type ShopJob = ShopDay["inProgress"][number];
-
-/** Open work orders (draft, open, in progress) and how many of them are past their booked day without starting. */
-export async function workOrderCounts(now: Date) {
-  const [open, overdue] = await Promise.all([
-    db.workOrder.count({ where: { status: { in: OPEN_WORK } } }),
-    db.workOrder.count({ where: { status: { in: NOT_STARTED }, scheduledAt: { lt: startOfDay(now) } } }),
-  ]);
-  return { open, overdue };
-}
-
-/** Open PM work orders for the given trucks, earliest booking first (the "Coming up" PM rows say "booked"). */
-export async function openPmJobs(truckIds: string[]) {
-  if (truckIds.length === 0) return new Map<string, { id: string; number: number; scheduledAt: Date }>();
-  const rows = await db.workOrder.findMany({
-    where: { truckId: { in: truckIds }, category: "PM", status: { in: OPEN_WORK } },
-    orderBy: { scheduledAt: "asc" },
-    select: { id: true, number: true, scheduledAt: true, truckId: true },
-  });
-  const byTruck = new Map<string, { id: string; number: number; scheduledAt: Date }>();
-  for (const r of rows) if (r.truckId && !byTruck.has(r.truckId)) byTruck.set(r.truckId, r);
-  return byTruck;
-}
-
-/* ------------------------------------------------------------------ */
-/* Costs                                                               */
-/* ------------------------------------------------------------------ */
-
-export type CostMonth = { key: string; month: string; maintenance: number; fuel: number; total: number };
-
-/**
- * Maintenance (completed work orders, by completion date) and fuel (fills, by date) for the last `months` calendar
- * months including this one, plus kilometres driven this month and last month from odometer readings.
- */
-export async function costsByMonth(now: Date, months = 6) {
-  const from = startOfMonth(subMonths(now, months - 1));
-  const thisMonth = startOfMonth(now);
-  const lastMonth = startOfMonth(subMonths(now, 1));
-  const [work, fuel, kmNow, kmPrev] = await Promise.all([
-    db.workOrder.findMany({ where: { status: "DONE", completedAt: { gte: from } }, select: { completedAt: true, cost: true, laborCost: true, partsCost: true } }),
-    db.fuelLog.findMany({ where: { date: { gte: from } }, select: { date: true, cost: true } }),
-    kmDriven(thisMonth, now),
-    kmDriven(lastMonth, thisMonth),
-  ]);
-  const rows: CostMonth[] = Array.from({ length: months }, (_, i) => {
-    const m = startOfMonth(subMonths(now, months - 1 - i));
-    return { key: format(m, "yyyy-MM"), month: format(m, "MMM"), maintenance: 0, fuel: 0, total: 0 };
-  });
-  const byKey = new Map(rows.map((r) => [r.key, r]));
+  const month = new Intl.DateTimeFormat("en-US", { month: "long", timeZone: f.tz });
+  const blank = (start: Date, distance: number): SpendMonth => ({ label: month.format(start), maintenance: 0, fuel: 0, total: 0, driverCharges: 0, distance });
+  const cur = blank(thisStart, distThis.total);
+  const prev = blank(lastStart, distLast.total);
+  const bucket = (d: Date) => (d >= thisStart ? cur : prev);
   for (const w of work) {
-    const r = w.completedAt && byKey.get(format(w.completedAt, "yyyy-MM"));
-    // `cost` is the job total; older jobs may only carry labour and parts.
-    if (r) r.maintenance += w.cost || w.laborCost + w.partsCost;
+    if (!w.completedAt) continue;
+    // `invoiceTotal` is what the shop billed; older jobs only carry cost, or labour and parts.
+    const amount = w.invoiceTotal ?? (w.cost || w.laborCost + w.partsCost);
+    const b = bucket(w.completedAt);
+    b.maintenance += amount;
+    if (w.payer === "DRIVER") b.driverCharges += amount;
   }
-  for (const f of fuel) {
-    const r = byKey.get(format(f.date, "yyyy-MM"));
-    if (r) r.fuel += f.cost;
-  }
-  for (const r of rows) r.total = r.maintenance + r.fuel;
-  return { months: rows, kmThisMonth: kmNow.total, kmLastMonth: kmPrev.total };
+  for (const x of fuel) bucket(x.date).fuel += x.cost;
+  for (const b of [cur, prev]) b.total = b.maintenance + b.fuel;
+  return { thisMonth: cur, lastMonth: prev, thisStart };
 }
+export type MonthSpend = Awaited<ReturnType<typeof monthSpend>>;
 
 /* ------------------------------------------------------------------ */
 /* Getting started                                                     */

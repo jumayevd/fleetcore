@@ -17,7 +17,8 @@ export type CurrentUser = {
   lastLoginAt: Date | null;
   role: Role;
   membershipId: string;
-  company: { id: string; name: string; color: string | null };
+  /** units / timezone / currency: see src/lib/locale.ts (use getFormat() rather than reading them directly). */
+  company: { id: string; name: string; color: string | null; units: string; timezone: string; currency: string };
 };
 
 const toUser = (a: ActiveContext): CurrentUser => ({ ...a.user, role: a.role, membershipId: a.membershipId, company: a.company });

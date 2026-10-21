@@ -1,13 +1,17 @@
 import type { Tone } from "@/components/ui";
 import { CITIES, humanize } from "@/lib/constants";
 import { daysUntil } from "@/lib/format";
+import type { Formatter } from "@/lib/locale";
+import { SERVICE_STATE_TONE, type ServiceStatus } from "@/lib/service";
+
+/* Pure helpers shared by the truck and trailer pages, their forms and the fleet actions (client-safe). */
 
 /* ------------------------------------------------------------------ */
 /* Labels                                                              */
 /* ------------------------------------------------------------------ */
 
 export const TRUCK_STATUS_LABELS: Record<string, string> = {
-  ACTIVE: "Active", MAINTENANCE: "In shop", OUT_OF_SERVICE: "Out of service", INACTIVE: "Inactive",
+  ACTIVE: "Available", MAINTENANCE: "In shop", OUT_OF_SERVICE: "Out of service", INACTIVE: "Inactive",
 };
 
 export const OWNERSHIP_TONE: Record<string, Tone> = { COMPANY: "neutral", OWNER_OPERATOR: "progress", LEASED: "info" };
@@ -19,7 +23,7 @@ export const FUEL_TYPES = [
 export const FUEL_TYPE_LABELS: Record<string, string> = Object.fromEntries(FUEL_TYPES.map((f) => [f.value, f.label]));
 
 /** Telematics vendors offered in the trailer form's datalist (free text is still allowed). */
-export const GPS_PROVIDERS = ["Teltonika", "Wialon", "Samsara", "Geotab", "Navixy"];
+export const GPS_PROVIDERS = ["Samsara", "Motive", "Geotab", "Omnitracs", "SkyBitz", "Teltonika"];
 
 /**
  * Trailer statuses that physically leave the tractor, so setting one clears the pairing. In use and Empty stay hooked:
@@ -30,34 +34,70 @@ export const UNHOOKED_TRAILER_STATUSES: readonly string[] = ["DROPPED", "YARD", 
 /** Odometer readings this far above the last one need a second look before they are saved (an extra digit). */
 export const ODOMETER_JUMP_KM = 50_000;
 
-/** An odometer nobody updated for this long makes the PM countdown unreliable. */
-export const READINGS_STALE_DAYS = 30;
-
-/** The truck and trailer tables stop at this many rows (KPI tiles still count every unit). */
+/** The truck and trailer tables stop at this many rows (the counters still count every unit). */
 export const LIST_LIMIT = 500;
 
+/** Repair orders still open on a unit (scheduled or in the shop). */
+export const OPEN_REPAIR_STATUSES = ["DRAFT", "OPEN", "IN_PROGRESS"];
+
 /* ------------------------------------------------------------------ */
-/* Preventive maintenance                                              */
+/* Truck list views                                                    */
 /* ------------------------------------------------------------------ */
 
-const PM_DUE_SOON_KM = 2000;
+export const TRUCK_VIEWS = ["fleet", "off", "archived"] as const;
+export type TruckView = (typeof TRUCK_VIEWS)[number];
+export const TRUCK_VIEW_LABELS: Record<TruckView, string> = { fleet: "The fleet", off: "Off the road", archived: "Archived" };
+/** Which statuses each view lists. */
+export const TRUCK_VIEW_STATUSES: Record<TruckView, readonly string[]> = {
+  fleet: ["ACTIVE", "MAINTENANCE", "OUT_OF_SERVICE"],
+  off: ["MAINTENANCE", "OUT_OF_SERVICE"],
+  archived: ["INACTIVE"],
+};
 
-export type PmInput = { odometerKm: number; pmIntervalKm: number; lastPmKm: number | null; nextServiceKm: number | null };
-export type PmState = "unknown" | "overdue" | "due" | "ok";
+/* ------------------------------------------------------------------ */
+/* Oil / PM service (the rule itself is serviceStatus in src/lib/service.ts) */
+/* ------------------------------------------------------------------ */
+
+export type ServiceSummary = { tone: Tone; text: string; detail: string | null };
 
 /**
- * Next service is the explicit `nextServiceKm`, else last PM + interval (same rule as alerts.ts).
- * `left` < 0 means overdue; `pct` is how far through the interval the unit is (for a progress bar).
+ * One line for a truck's next oil service, in the company's units: "3,939 mi · ≈ 147 days", "1,204 mi over",
+ * "No recent reading" (with "≥ 8,092 mi used as of Sep 24"). `days` is the estimate from recent driving; null hides it.
  */
-export function pmStatus(t: PmInput): { next: number | null; left: number | null; state: PmState; tone: Tone; pct: number | null } {
-  const next = t.nextServiceKm ?? (t.lastPmKm != null ? t.lastPmKm + t.pmIntervalKm : null);
-  if (next == null) return { next: null, left: null, state: "unknown", tone: "neutral", pct: null };
-  const left = next - t.odometerKm;
-  const state: PmState = left < 0 ? "overdue" : left < PM_DUE_SOON_KM ? "due" : "ok";
-  const tone: Tone = state === "overdue" ? "danger" : state === "due" ? "warn" : "ok";
-  const start = t.lastPmKm ?? next - t.pmIntervalKm;
-  const pct = Math.min(1, Math.max(0, (t.odometerKm - start) / Math.max(1, next - start)));
-  return { next, left, state, tone, pct };
+export function serviceSummary(s: ServiceStatus, f: Formatter, days: number | null): ServiceSummary {
+  const tone = SERVICE_STATE_TONE[s.state];
+  const asOf = s.readingAt ? ` as of ${f.day(s.readingAt)}` : "";
+  switch (s.state) {
+    case "unknown":
+      return { tone, text: "No oil change recorded", detail: "Log the last oil change to start the countdown" };
+    case "overdue":
+      return { tone, text: `${f.dist(-(s.left ?? 0))} over`, detail: s.stale ? `at least that far${asOf}` : `due at ${f.dist(s.dueAtKm)}` };
+    case "no_reading":
+      return {
+        tone, text: "No recent reading",
+        detail: s.used != null ? `≥ ${f.dist(s.used)} used${asOf}` : `${f.dist(s.left)} left${asOf}`,
+      };
+    default:
+      return { tone, text: `${f.dist(s.left)}${days != null ? ` · ≈ ${f.number(days)} days` : ""}`, detail: `due at ${f.dist(s.dueAtKm)}` };
+  }
+}
+
+/** "10,000 mi · Day cab type" / "30,000 mi · this truck's own interval". */
+export function intervalText(s: Pick<ServiceStatus, "interval" | "intervalFrom">, f: Formatter) {
+  return `${f.dist(s.interval)} · ${s.intervalFrom ? `${s.intervalFrom} type` : "this truck's own interval"}`;
+}
+
+/* ------------------------------------------------------------------ */
+/* Defects                                                             */
+/* ------------------------------------------------------------------ */
+
+type DefectLike = { status: string; severity: string; dueAt: Date | null; holdsUnit: boolean };
+
+/** A defect that needs a decision today: it keeps the unit off the road, is rated "fix before next load", or is past due. */
+export function isUrgentDefect(d: DefectLike, now: Date = new Date()) {
+  if (d.status === "CLOSED") return false;
+  if (d.holdsUnit) return true;
+  return d.status === "OPEN" && (d.severity === "NOW" || (d.dueAt != null && d.dueAt < now));
 }
 
 /* ------------------------------------------------------------------ */
@@ -71,7 +111,7 @@ export type LeaseInput = {
 export type LeaseState = "ok" | "near" | "buffer" | "over";
 
 /**
- * allowed = start + annual limit; hard cap = allowed + buffer. Over the hard cap costs `rate` per km.
+ * allowed = start + annual limit; hard cap = allowed + buffer. Over the hard cap costs `rate` per distance unit.
  * Mirrors the alert rule in src/lib/alerts.ts so the truck page and the alert agree.
  */
 export function leaseStatus(t: LeaseInput) {
@@ -115,16 +155,21 @@ export function pingSourceLabel(src: string | null | undefined) {
 }
 
 /**
- * A place typed by hand → what to store. When it names a known city ("Samarkand", "Samarkand depot") the unit gets
- * that city's coordinates, so it shows on the map; anything else is kept as text with no position.
+ * A place typed by hand → what to store. When it names a known city ("Joliet, IL", "Joliet yard") the unit gets that
+ * city's coordinates, so it shows on the map; anything else is kept as text with no position.
  */
 export function placeFromText(text: string): { locationName: string; lat: number | null; lng: number | null } {
   const name = text.trim().replace(/\s+/g, " ");
   const lower = name.toLowerCase();
-  const city = CITIES.find((c) => c.name.toLowerCase() === lower)
-    ?? CITIES.find((c) => new RegExp(`(^|[^a-z])${c.name.toLowerCase()}([^a-z]|$)`).test(lower));
+  // "Joliet, IL" also answers to "Joliet".
+  const bare = (c: string) => c.toLowerCase().replace(/,\s*[a-z]{2}$/, "");
+  const escape = (s: string) => s.replace(/[.*+?^$|()[\]\\{}]/g, "\\$&");
+  const mentions = (c: string) => new RegExp("(^|[^a-z])" + escape(bare(c)) + "([^a-z]|$)").test(lower);
+  const city = CITIES.find((c) => c.name.toLowerCase() === lower || bare(c.name) === lower)
+    ?? CITIES.find((c) => lower.includes(c.name.toLowerCase()))
+    ?? CITIES.find((c) => mentions(c.name));
   if (!city) return { locationName: name, lat: null, lng: null };
-  return { locationName: city.name.toLowerCase() === lower ? city.name : name, lat: city.lat, lng: city.lng };
+  return { locationName: city.name.toLowerCase() === lower || bare(city.name) === lower ? city.name : name, lat: city.lat, lng: city.lng };
 }
 
 export function pingStale(d: Date | string | null | undefined, hours = 1) {
@@ -151,16 +196,20 @@ export function sinceShort(d: Date | string | null | undefined) {
   return `${Math.floor(days / 30)}mo`;
 }
 
-/** Whole days since a timestamp (status timers, time in shop). */
+/** Whole days since a timestamp (status timers, time in shop, reading age). */
 export function daysSince(d: Date | string) {
   return Math.max(0, Math.floor((Date.now() - new Date(d).getTime()) / 86_400_000));
 }
+
+/* ------------------------------------------------------------------ */
+/* Paperwork                                                           */
+/* ------------------------------------------------------------------ */
 
 /**
  * Earliest of the given dates, ignoring missing ones. Paperwork expiry is the earlier of the date on the unit record and
  * the expiry on the newest uploaded document of that kind, so a stale record date can't hide an expired certificate.
  */
-function earliest(...dates: (Date | null | undefined)[]): Date | null {
+export function earliest(...dates: (Date | null | undefined)[]): Date | null {
   let min: Date | null = null;
   for (const d of dates) if (d && (!min || d < min)) min = d;
   return min;
@@ -195,6 +244,11 @@ export function paperworkExpiry(
   };
 }
 
+/** Record dates of a unit per document kind (what the panel shows when a slot has no file, or no date on the file). */
+export function recordedExpiry(unit: { insuranceExpiry: Date | null; inspectionExpiry: Date | null; registrationExpiry?: Date | null }) {
+  return { REGISTRATION: unit.registrationExpiry ?? null, INSURANCE: unit.insuranceExpiry, INSPECTION: unit.inspectionExpiry };
+}
+
 /** How many of the dates have passed, and how many fall within the next EXPIRY_SOON_DAYS days. */
 export function expiryCounts(dates: (Date | null)[]) {
   let expired = 0;
@@ -208,11 +262,7 @@ export function expiryCounts(dates: (Date | null)[]) {
   return { expired, soon };
 }
 
-/* ------------------------------------------------------------------ */
-/* Documents & notes                                                   */
-/* ------------------------------------------------------------------ */
-
-/** unitId → set of required document kinds on file. */
+/** unitId → set of document kinds on file. */
 export function docsByUnit(rows: { id: string | null; kind: string }[]) {
   const m = new Map<string, Set<string>>();
   for (const r of rows) {
@@ -227,9 +277,13 @@ export function missingDocs(have: Set<string> | undefined, required: readonly st
   return required.filter((k) => !have?.has(k));
 }
 
+/* ------------------------------------------------------------------ */
+/* Notes                                                               */
+/* ------------------------------------------------------------------ */
+
 export type TruckNote = { date: string | null; author: string | null; text: string };
 
-/** Notes are stored newest-first as "YYYY-MM-DD Name: text" lines (see addTruckNote). */
+/** Notes are stored newest-first as "YYYY-MM-DD Name: text" lines (see addTruckNote; the day is company time). */
 export function parseNotes(notes: string | null | undefined): TruckNote[] {
   if (!notes) return [];
   return notes.split("\n").map((l) => l.trim()).filter(Boolean).map((line) => {
@@ -237,3 +291,6 @@ export function parseNotes(notes: string | null | undefined): TruckNote[] {
     return m ? { date: m[1], author: m[2], text: m[3] } : { date: null, author: null, text: line };
   });
 }
+
+/** A "YYYY-MM-DD" day as an instant that falls on that day in every time zone within ±12 h (for display only). */
+export const dayAsDate = (key: string) => new Date(`${key}T12:00:00.000Z`);

@@ -1,7 +1,8 @@
 import "server-only";
-import { addMonths, format, startOfMonth, subMonths } from "date-fns";
 import { db } from "./db";
 import { kmDriven } from "./mileage";
+import { getLocale } from "./format-server";
+import { fromZoned, zonedParts } from "./locale";
 
 /*
  * Fleet analytics shared by Maintenance, Reports and the overview. Distances come from odometer readings (kmDriven);
@@ -22,13 +23,15 @@ const round2 = (v: number) => Math.round(v * 100) / 100;
 /* ------------------------------------------------------------------ */
 
 /**
- * Completed work in [from, to): spend, cost per km driven (odometer based), spend by vendor / category / unit, and the
- * units that cost far more than the median. `open` is what is in the shop right now.
+ * Completed work in [from, to): spend, cost per distance driven (odometer based), spend by vendor / repair type /
+ * category / unit, time off the road, and the units that cost far more than the median. `open` is what is in the
+ * shop right now. A void order is never DONE, so it counts nowhere. Distances are in the company's own unit.
  */
 export async function maintenanceSummary(from: Date, to: Date, driven?: Driven) {
+  const unitPick = { truck: { select: { id: true, unitNumber: true } }, trailer: { select: { id: true, unitNumber: true } } };
   const [done, open, km] = await Promise.all([
-    db.workOrder.findMany({ where: { status: "DONE", completedAt: { gte: from, lt: to } }, include: { truck: { select: { id: true, unitNumber: true } }, trailer: { select: { unitNumber: true } } } }),
-    db.workOrder.findMany({ where: { status: "IN_PROGRESS" }, include: { truck: { select: { id: true, unitNumber: true } }, trailer: { select: { unitNumber: true } } } }),
+    db.workOrder.findMany({ where: { status: "DONE", voidedAt: null, completedAt: { gte: from, lt: to } }, include: { ...unitPick, vendorRef: { select: { id: true, name: true } } } }),
+    db.workOrder.findMany({ where: { status: "IN_PROGRESS", voidedAt: null }, include: unitPick }),
     driven ? driven.total : kmDriven(from, to).then((d) => d.total),
   ]);
   const spend = done.reduce((a, w) => a + w.cost, 0);
@@ -39,13 +42,21 @@ export async function maintenanceSummary(from: Date, to: Date, driven?: Driven) 
   };
   const perUnit = group((w) => w.truck?.unitNumber ?? w.trailer?.unitNumber ?? "—");
   const median = perUnit.length ? [...perUnit].sort((a, b) => a.cost - b.cost)[Math.floor(perUnit.length / 2)].cost : 0;
+  const timed = done.filter((w) => w.inAt && w.outAt && w.outAt >= w.inAt);
+  const shopMs = timed.reduce((a, w) => a + (w.outAt!.getTime() - w.inAt!.getTime()), 0);
+  // Vendor ids per name, so a chart bar can link to the vendor.
+  const vendorIds = new Map<string, string>();
+  for (const w of done) if (w.vendorRef) vendorIds.set(w.vendorRef.name, w.vendorRef.id);
   return {
     spend, records: done.length, km, costPerKm: km ? spend / km : 0,
     openCount: open.length, open,
-    byVendor: group((w) => w.vendor ?? NO_VENDOR).slice(0, 8),
+    byVendor: group((w) => w.vendorRef?.name ?? w.vendor ?? NO_VENDOR).slice(0, 8).map((v) => ({ ...v, vendorId: vendorIds.get(v.name) ?? null })),
+    byRepairType: group((w) => w.repairType),
     byCategory: group((w) => w.category),
     perUnit, median,
     flagged: perUnit.filter((u) => u.cost > median * 1.8 && u.cost > 500),
+    /** Average time off the road per completed job with in / out times (ms), null without any. */
+    avgShopMs: timed.length ? shopMs / timed.length : null,
   };
 }
 
@@ -74,23 +85,29 @@ export type MonthSpend = {
  * months including the current one (which runs to `now`).
  */
 export async function monthlyFleetSpend(months = 6, now = new Date()): Promise<MonthSpend[]> {
-  const start = startOfMonth(subMonths(now, months - 1));
+  // Calendar months in the company's time zone, so a job finished late on the 31st lands in the month it was done.
+  const { timezone: tz } = await getLocale();
+  const p = zonedParts(now, tz);
+  const monthAt = (offset: number) => fromZoned(p.y, p.m + offset, 1, 0, 0, tz);
+  const keyOf = (d: Date) => { const z = zonedParts(d, tz); return `${z.y}-${String(z.m).padStart(2, "0")}`; };
+  const labelFmt = new Intl.DateTimeFormat("en-US", { month: "short", year: "2-digit", timeZone: tz });
+  const start = monthAt(-(months - 1));
   const [work, fuel] = await Promise.all([
-    db.workOrder.findMany({ where: { status: "DONE", completedAt: { gte: start, lt: now } }, select: { completedAt: true, cost: true } }),
+    db.workOrder.findMany({ where: { status: "DONE", voidedAt: null, completedAt: { gte: start, lt: now } }, select: { completedAt: true, cost: true } }),
     db.fuelLog.findMany({ where: { date: { gte: start, lt: now } }, select: { date: true, cost: true, liters: true } }),
   ]);
   const buckets: MonthSpend[] = Array.from({ length: months }, (_, i) => {
-    const from = addMonths(start, i);
+    const from = monthAt(i - (months - 1));
     const last = i === months - 1;
-    return { key: format(from, "yyyy-MM"), label: format(from, "MMM yy"), from, to: last ? now : addMonths(start, i + 1), partial: last, maintenance: 0, jobs: 0, fuel: 0, liters: 0, fills: 0 };
+    return { key: keyOf(from), label: labelFmt.format(from), from, to: last ? now : monthAt(i - (months - 1) + 1), partial: last, maintenance: 0, jobs: 0, fuel: 0, liters: 0, fills: 0 };
   });
   const byKey = new Map(buckets.map((b) => [b.key, b]));
   for (const w of work) {
-    const b = w.completedAt ? byKey.get(format(w.completedAt, "yyyy-MM")) : undefined;
+    const b = w.completedAt ? byKey.get(keyOf(w.completedAt)) : undefined;
     if (b) { b.maintenance += w.cost; b.jobs++; }
   }
   for (const f of fuel) {
-    const b = byKey.get(format(f.date, "yyyy-MM"));
+    const b = byKey.get(keyOf(f.date));
     if (b) { b.fuel += f.cost; b.liters += f.liters; b.fills++; }
   }
   return buckets.map((b) => ({ ...b, maintenance: round2(b.maintenance), fuel: round2(b.fuel), liters: Math.round(b.liters) }));
@@ -128,8 +145,8 @@ export type TruckCostRow = {
 export async function truckCosts(from: Date, to: Date, driven?: Driven) {
   const [trucks, work, trailerWork, fuel, km] = await Promise.all([
     db.truck.findMany({ select: { id: true, unitNumber: true, make: true, model: true, status: true, group: true }, orderBy: { unitNumber: "asc" } }),
-    db.workOrder.groupBy({ by: ["truckId"], where: { status: "DONE", completedAt: { gte: from, lt: to }, truckId: { not: null } }, _sum: { cost: true }, _count: { _all: true } }),
-    db.workOrder.aggregate({ where: { status: "DONE", completedAt: { gte: from, lt: to }, truckId: null, trailerId: { not: null } }, _sum: { cost: true }, _count: { _all: true } }),
+    db.workOrder.groupBy({ by: ["truckId"], where: { status: "DONE", voidedAt: null, completedAt: { gte: from, lt: to }, truckId: { not: null } }, _sum: { cost: true }, _count: { _all: true } }),
+    db.workOrder.aggregate({ where: { status: "DONE", voidedAt: null, completedAt: { gte: from, lt: to }, truckId: null, trailerId: { not: null } }, _sum: { cost: true }, _count: { _all: true } }),
     db.fuelLog.groupBy({ by: ["truckId"], where: { date: { gte: from, lt: to } }, _sum: { cost: true, liters: true }, _count: { _all: true } }),
     driven ?? kmDriven(from, to),
   ]);
@@ -195,7 +212,8 @@ export async function shopDowntime(from: Date, to: Date) {
   const start = from.getTime();
   const end = Math.min(to.getTime(), now);
   const jobs = await db.workOrder.findMany({
-    where: { inAt: { not: null, lt: to }, status: { in: ["IN_PROGRESS", "DONE", "CANCELLED"] }, OR: [{ outAt: null }, { outAt: { gt: from } }] },
+    // A void order (booked twice, opened by mistake) is no time off the road.
+    where: { inAt: { not: null, lt: to }, voidedAt: null, status: { in: ["IN_PROGRESS", "DONE", "CANCELLED"] }, OR: [{ outAt: null }, { outAt: { gt: from } }] },
     select: {
       id: true, number: true, title: true, status: true, inAt: true, outAt: true, truckId: true, trailerId: true,
       truck: { select: { unitNumber: true } }, trailer: { select: { unitNumber: true } },

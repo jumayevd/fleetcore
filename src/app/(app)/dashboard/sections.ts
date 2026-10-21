@@ -1,11 +1,14 @@
-/** Overview sections a person can show or hide (client-safe: used by the page and the Customize menu). */
+/**
+ * Today sections a person can show or hide (client-safe: used by the page and the Customize menu). The keys are the
+ * ones the first overview used, so choices people already made carry over.
+ */
 export const OVERVIEW_SECTIONS = [
-  { key: "numbers", label: "Key numbers", hint: "Trucks available, in shop, PM, paperwork, drivers, work orders" },
-  { key: "today", label: "Today in the shop", hint: "Work in progress, booked for today, overdue" },
+  { key: "numbers", label: "Fleet today", hint: "Oil, walk-arounds, defects, parts, papers, the shop, DOT inspections" },
+  { key: "attention", label: "Needs a decision today", hint: "Every open item with the one button that sorts it" },
+  { key: "today", label: "In the shop", hint: "Units at a shop: stage, promised date, downtime" },
+  { key: "costs", label: "This month's spend", hint: "Maintenance and fuel, this month against last" },
+  { key: "upcoming", label: "Coming up", hint: "Papers expiring and oil services due in the next 30 days" },
   { key: "fleet", label: "Live fleet", hint: "Map of every truck, with status counts" },
-  { key: "attention", label: "Needs attention", hint: "Compliance, maintenance, drivers and fleet items" },
-  { key: "upcoming", label: "Coming up", hint: "Expiries and PM due in the next 30 days" },
-  { key: "costs", label: "Costs", hint: "Maintenance and fuel spend by month, cost per km" },
 ] as const;
 
 export type OverviewSection = (typeof OVERVIEW_SECTIONS)[number]["key"];

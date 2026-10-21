@@ -1,17 +1,24 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { Pencil, Phone, Plus, Wrench } from "lucide-react";
+import { notFound, redirect } from "next/navigation";
+import { Pencil, Phone, Wrench } from "lucide-react";
 import { getCurrentUser, requireUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { db } from "@/lib/db";
-import { EQUIPMENT_LABELS, TRAILER_STATUS_LABELS, WORK_ORDER_CATEGORY_LABELS } from "@/lib/constants";
-import { REQUIRED_UNIT_DOCS, DOC_KIND_LABELS } from "@/lib/documents";
-import { kg, money, date, ago, daysUntil } from "@/lib/format";
-import { Badge, Card, DL, EmptyState, ExpiryBadge, LinkButton, PageHeader, Stat, Table } from "@/components/ui";
+import { EQUIPMENT_LABELS, REPAIR_STAGE_LABELS, TRAILER_STATUS_LABELS } from "@/lib/constants";
+import { REQUIRED_UNIT_DOCS, DOC_KIND_LABELS, UNIT_DOC_SLOTS } from "@/lib/documents";
+import { ago, daysUntil } from "@/lib/format";
+import { getFormat } from "@/lib/format-server";
+import { roLabel } from "@/lib/service";
+import { Badge, Card, DL, ExpiryBadge, LinkButton, PageHeader, Stat } from "@/components/ui";
 import { LeafletMap } from "@/components/map";
 import { DocumentsPanel } from "@/components/documents/panel";
-import { WorkOrderActions } from "../../work-order-actions";
-import { docExpiryByUnit, missingDocs, paperworkExpiry, pingStale, sinceShort, TRUCK_STATUS_LABELS } from "../../lib";
+import { UnitRepairs } from "@/components/fleet/unit-repairs";
+import { UnitDefects } from "@/components/fleet/unit-defects";
+import { UnitSafetyHistory } from "@/components/fleet/unit-safety";
+import { CompletenessCard, FixLink, FixNote, TrailerFix, type Prompt } from "../../[id]/complete";
+import { CompletedRepairs } from "../../repair-history";
+import { openDefects, openRepairs } from "../../data";
+import { docExpiryByUnit, missingDocs, paperworkExpiry, pingStale, recordedExpiry, sinceShort, TRUCK_STATUS_LABELS } from "../../lib";
 import { TrailerStatusControl } from "../status-control";
 
 export async function generateMetadata({ params }: PageProps<"/fleet/trailers/[id]">) {
@@ -20,34 +27,50 @@ export async function generateMetadata({ params }: PageProps<"/fleet/trailers/[i
   return { title: r?.unitNumber ?? "Not found" };
 }
 
-export default async function TrailerDetail({ params }: PageProps<"/fleet/trailers/[id]">) {
+/** The trailer page is one page of sections; tab links (shared with the truck page) land on the matching section. */
+const TAB_SECTIONS: Record<string, string> = { documents: "documents", compliance: "documents", maintenance: "repairs", history: "history", defects: "defects" };
+
+export default async function TrailerDetail({ params, searchParams }: PageProps<"/fleet/trailers/[id]">) {
   const user = await requireUser("fleet.view");
+  const f = await getFormat();
   const { id } = await params;
+  const tab = (await searchParams).tab;
+  if (typeof tab === "string" && TAB_SECTIONS[tab]) redirect(`/fleet/trailers/${id}#${TAB_SECTIONS[tab]}`);
   const editable = can(user.role, "fleet.edit");
+  const showMoney = can(user.role, "money.view");
 
   const trailer = await db.trailer.findUnique({
     where: { id },
-    include: {
-      truck: { select: { id: true, unitNumber: true, make: true, model: true, status: true, driver: { select: { id: true, name: true, phone: true } } } },
-      workOrders: { orderBy: [{ status: "asc" }, { scheduledAt: "desc" }], take: 30 },
-      _count: { select: { workOrders: true } },
-    },
+    include: { truck: { select: { id: true, unitNumber: true, make: true, model: true, status: true, driver: { select: { id: true, name: true, phone: true, dispatcher: true } } } } },
   });
   if (!trailer) notFound();
-  const docRows = await db.document.findMany({
-    where: { trailerId: id, kind: { in: [...REQUIRED_UNIT_DOCS] } }, orderBy: { createdAt: "desc" }, select: { kind: true, expiresAt: true },
-  });
-  const missing = missingDocs(new Set(docRows.map((d) => d.kind)), REQUIRED_UNIT_DOCS);
+  const [docRows, repairs, defects] = await Promise.all([
+    db.document.findMany({ where: { trailerId: id, kind: { in: [...UNIT_DOC_SLOTS.trailer] } }, orderBy: { createdAt: "desc" }, select: { kind: true, expiresAt: true } }),
+    openRepairs("trailer", [id]),
+    openDefects("trailer", [id]),
+  ]);
+  const repair = repairs.get(id);
+  const defect = defects.get(id);
+  const have = new Set(docRows.map((d) => d.kind));
+  const missing = missingDocs(have, REQUIRED_UNIT_DOCS);
   // Same rule as the trailer list: the earlier of the record date and the newest uploaded document's expiry.
   const paper = paperworkExpiry(trailer, docExpiryByUnit(docRows.map((d) => ({ id, kind: d.kind, expiresAt: d.expiresAt }))).get(id));
-  const openWo = trailer.workOrders.filter((w) => ["OPEN", "IN_PROGRESS", "DRAFT"].includes(w.status));
-  const inProgress = openWo.filter((w) => w.status === "IN_PROGRESS").length;
-  const sortedWo = [...openWo.sort((a, b) => a.scheduledAt.getTime() - b.scheduledAt.getTime()), ...trailer.workOrders.filter((w) => !openWo.includes(w))];
-  const inShopDays = (w: { inAt: Date | null; outAt: Date | null }) => w.inAt ? Math.max(0, Math.round(((w.outAt ?? new Date()).getTime() - w.inAt.getTime()) / 86_400_000)) : null;
   const typeLabel = EQUIPMENT_LABELS[trailer.type] ?? trailer.type;
-  const newWorkOrder = `/maintenance/work-orders/new?trailer=${id}`;
+  const newRepair = `/maintenance/work-orders/new?trailer=${id}`;
   const tile = (href: string, node: React.ReactNode) => <Link href={href} className="group block rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">{node}</Link>;
   const tileClass = "h-full transition-colors group-hover:border-line-strong";
+  const inspectionDays = daysUntil(paper.INSPECTION);
+
+  const prompts: Prompt[] = [];
+  if (!have.has("REGISTRATION")) {
+    prompts.push({ key: "reg", text: "No registration on file", hint: "Roadside and the paperwork alerts look for it.",
+      fix: editable ? <FixLink href="#doc-REGISTRATION">Attach</FixLink> : <FixNote href="#documents">See documents</FixNote> });
+  }
+  if (!trailer.plate?.trim()) prompts.push({ key: "plate", text: "Add the plate", fix: editable ? <TrailerFix trailerId={id} field="plate" /> : undefined });
+  if (!trailer.inspectionExpiry) {
+    prompts.push({ key: "inspection", text: "Add the annual inspection date", hint: "When the next annual inspection is due, so it shows up 30 days ahead.",
+      fix: editable ? <TrailerFix trailerId={id} field="inspectionExpiry" /> : undefined });
+  }
 
   return (
     <>
@@ -55,7 +78,7 @@ export default async function TrailerDetail({ params }: PageProps<"/fleet/traile
         title={<span className="num">{trailer.unitNumber}</span>}
         subtitle={
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <TrailerStatusControl id={id} status={trailer.status} locationName={trailer.locationName} editable={editable} since={`${sinceShort(trailer.statusSince)} · since ${date(trailer.statusSince)}`} />
+            <TrailerStatusControl id={id} status={trailer.status} locationName={trailer.locationName} editable={editable} since={`${sinceShort(trailer.statusSince)} · since ${f.date(trailer.statusSince)}`} />
             <span>{typeLabel}{trailer.year ? ` · ${trailer.year}` : ""}</span>
             {trailer.plate && <span>Plate <span className="num text-fg">{trailer.plate}</span></span>}
           </span>
@@ -63,60 +86,39 @@ export default async function TrailerDetail({ params }: PageProps<"/fleet/traile
         actions={editable && (
           <>
             <LinkButton href={`/fleet/trailers/${id}/edit`} variant="secondary"><Pencil />Edit</LinkButton>
-            <LinkButton href={newWorkOrder}><Wrench />New work order</LinkButton>
+            <LinkButton href={newRepair}><Wrench />Create repair</LinkButton>
           </>
         )}
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
         {tile(trailer.truck ? `/fleet/${trailer.truck.id}` : editable ? `/fleet/trailers/${id}/edit` : "#pairing",
           <Stat className={tileClass} label="Paired truck" value={trailer.truck ? trailer.truck.unitNumber : "—"}
             hint={trailer.truck ? `${trailer.truck.make} ${trailer.truck.model}${trailer.truck.driver ? ` · ${trailer.truck.driver.name}` : ""}` : "not paired with a truck"} tone={trailer.truck ? "info" : "neutral"} />)}
-        {tile("#work-orders", <Stat className={tileClass} label="Open work orders" value={openWo.length}
-          hint={inProgress ? `${inProgress} in the shop now` : openWo.length ? "scheduled" : "nothing open"} tone={inProgress ? "warn" : "neutral"} />)}
-        {tile("#where", <Stat className={tileClass} label="Location" value={<span className="text-[15px]">{trailer.locationName ?? "Unknown"}</span>}
-          hint={trailer.lastPingAt ? `${ago(trailer.lastPingAt)} · ${trailer.gpsProvider ?? "GPS"}` : trailer.gpsProvider ? `${trailer.gpsProvider} · no ping yet` : "no tracker fitted"} />)}
+        {tile(repair ? `/maintenance/work-orders/${repair.id}` : "#repairs",
+          <Stat className={tileClass} label="Open repair" value={repair ? roLabel(repair.number) : "None"}
+            hint={repair ? (repair.status === "IN_PROGRESS" ? (repair.stage ? REPAIR_STAGE_LABELS[repair.stage] ?? repair.stage : "In the shop") : `Scheduled ${f.day(repair.scheduledAt)}`) : "nothing open"}
+            tone={repair?.status === "IN_PROGRESS" ? "warn" : "neutral"} />)}
+        {tile("#defects", <Stat className={tileClass} label="Open defects" value={defect?.open ?? 0}
+          hint={defect?.urgent ? `${defect.urgent} to fix before the next load` : defect ? "none urgent" : "nothing reported"} tone={defect?.urgent ? "danger" : defect ? "warn" : "neutral"} />)}
+        {tile("#doc-INSPECTION", <Stat className={tileClass} label="Annual inspection" value={paper.INSPECTION ? f.day(paper.INSPECTION) : "—"}
+          hint={inspectionDays == null ? "no date recorded" : inspectionDays < 0 ? `expired ${-inspectionDays}d ago` : `due in ${inspectionDays}d`}
+          tone={inspectionDays == null ? "neutral" : inspectionDays < 0 ? "danger" : inspectionDays <= 30 ? "warn" : "neutral"} />)}
         {tile("#documents", <Stat className={tileClass} label="Paperwork" value={`${REQUIRED_UNIT_DOCS.length - missing.length}/${REQUIRED_UNIT_DOCS.length}`}
           hint={missing.length ? `missing ${missing.map((m) => DOC_KIND_LABELS[m].toLowerCase()).join(", ")}` : "all required documents on file"} tone={missing.length ? "warn" : "ok"} />)}
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3">
         <div className="space-y-4 xl:col-span-2">
-          <Card id="work-orders" className="scroll-mt-20" title="Work orders" flush actions={
-            <span className="text-[11px] text-fg-subtle">
-              <span className="num">{openWo.length}</span> open
-              {trailer._count.workOrders > trailer.workOrders.length && <> · <Link href={`/maintenance/work-orders?unit=${id}&status=all`} className="font-medium text-fg-muted hover:text-fg">All {trailer._count.workOrders} in Maintenance →</Link></>}
-            </span>
-          }>
-            {sortedWo.length > 0 && (
-              <Table head={["#", "Work", "Category", "Vendor", "Scheduled", "In shop", "Cost", "Status", ""]}>
-                {sortedWo.map((w) => {
-                  const days = inShopDays(w);
-                  return (
-                    <tr key={w.id} className={w.status === "CANCELLED" ? "opacity-60" : undefined}>
-                      <td><Link href={`/maintenance/work-orders/${w.id}`} className="num font-medium hover:underline">#{w.number}</Link></td>
-                      <td className="max-w-64 truncate" title={w.title}>{w.title}</td>
-                      <td className="whitespace-nowrap text-fg-muted">{WORK_ORDER_CATEGORY_LABELS[w.category] ?? w.category}</td>
-                      <td className="max-w-36 truncate text-fg-muted">{w.vendor ?? "—"}</td>
-                      <td className="whitespace-nowrap text-fg-muted">{date(w.scheduledAt)}</td>
-                      <td className="whitespace-nowrap text-fg-muted">{days == null ? "—" : <span className="num">{days}d{!w.outAt && w.status === "IN_PROGRESS" ? " so far" : ""}</span>}</td>
-                      <td className="num whitespace-nowrap">{w.cost ? money(w.cost) : <span className="text-fg-faint">—</span>}</td>
-                      <td><Badge value={w.status} dot /></td>
-                      <td className="text-right">{editable && <WorkOrderActions id={w.id} status={w.status} />}</td>
-                    </tr>
-                  );
-                })}
-              </Table>
-            )}
-            {sortedWo.length === 0 && (
-              <EmptyState icon={<Wrench />} title="No work orders yet"
-                description={editable ? "Repairs, tyre jobs and inspections for this trailer live here. Starting one moves the trailer to Shop." : "Repairs and inspections for this trailer will appear here."}
-                action={editable && <LinkButton href={newWorkOrder} variant="secondary"><Plus />New work order</LinkButton>} />
-            )}
-          </Card>
-
+          <CompletenessCard prompts={prompts} unitLabel={trailer.unitNumber} />
+          <div id="repairs" className="scroll-mt-20"><UnitRepairs unit={{ type: "trailer", id }} editable={editable} /></div>
+          <div id="defects" className="scroll-mt-20"><UnitDefects unit={{ type: "trailer", id }} editable={editable} /></div>
           <div id="documents" className="scroll-mt-20">
-            <DocumentsPanel user={user} target={{ type: "trailer", id }} path={`/fleet/trailers/${id}`} withExpiry required={[...REQUIRED_UNIT_DOCS]} />
+            <DocumentsPanel user={user} target={{ type: "trailer", id }} path={`/fleet/trailers/${id}`} required={[...REQUIRED_UNIT_DOCS]} recorded={recordedExpiry(trailer)} />
+          </div>
+          <div id="history" className="scroll-mt-20 space-y-4">
+            <UnitSafetyHistory unit={{ type: "trailer", id }} />
+            <CompletedRepairs unit={{ type: "trailer", id }} showMoney={showMoney} limit={20} />
           </div>
         </div>
 
@@ -137,7 +139,7 @@ export default async function TrailerDetail({ params }: PageProps<"/fleet/traile
                 ["Location", trailer.locationName ?? "Unknown"],
                 ["Last GPS ping", trailer.lastPingAt ? ago(trailer.lastPingAt) : "never"],
                 ["GPS provider", trailer.gpsProvider ?? "None"],
-                ["Status since", `${date(trailer.statusSince)} · ${sinceShort(trailer.statusSince)}`],
+                ["Status since", `${f.date(trailer.statusSince)} · ${sinceShort(trailer.statusSince)}`],
               ]} />
             </div>
           </Card>
@@ -160,7 +162,10 @@ export default async function TrailerDetail({ params }: PageProps<"/fleet/traile
                 <p className="eyebrow mb-1">Driver</p>
                 {trailer.truck?.driver ? (
                   <div className="flex items-center justify-between gap-2">
-                    <Link href={`/drivers/${trailer.truck.driver.id}`} className="text-[13px] font-medium text-fg hover:underline">{trailer.truck.driver.name}</Link>
+                    <div className="min-w-0">
+                      <Link href={`/drivers/${trailer.truck.driver.id}`} className="text-[13px] font-medium text-fg hover:underline">{trailer.truck.driver.name}</Link>
+                      {trailer.truck.driver.dispatcher && <p className="truncate text-[11px] text-fg-subtle">Dispatch {trailer.truck.driver.dispatcher}</p>}
+                    </div>
                     {trailer.truck.driver.phone && <a href={`tel:${trailer.truck.driver.phone}`} className="inline-flex h-7 items-center gap-1 rounded-md border border-line px-2 text-[12px] text-fg-muted hover:bg-raised hover:text-fg"><Phone className="h-3.5 w-3.5" />Call</a>}
                   </div>
                 ) : <p className="text-[13px] text-fg-muted">{trailer.truck ? "The paired truck has no driver" : "—"}</p>}
@@ -171,13 +176,13 @@ export default async function TrailerDetail({ params }: PageProps<"/fleet/traile
           <Card title="Unit" actions={editable && <LinkButton href={`/fleet/trailers/${id}/edit`} variant="ghost" size="sm"><Pencil />Edit</LinkButton>}>
             <DL items={[
               ["Type", typeLabel],
-              ["Capacity", <span key="c" className="num">{kg(trailer.capacityKg)}</span>],
+              ["Capacity", <span key="c" className="num">{f.weight(trailer.capacityKg)}</span>],
               ["Plate", trailer.plate ? <span key="p" className="num">{trailer.plate}</span> : "—"],
               ["Year", trailer.year ? <span key="y" className="num">{trailer.year}</span> : "—"],
+              ["Annual inspection", <span key="n" className="inline-flex items-center gap-1.5">{paper.INSPECTION && <span className="num">{f.date(paper.INSPECTION)}</span>}<ExpiryBadge days={inspectionDays} /></span>],
               ["Insurance", <ExpiryBadge key="i" days={daysUntil(paper.INSURANCE)} />],
-              ["Inspection", <ExpiryBadge key="n" days={daysUntil(paper.INSPECTION)} />],
               ["Registration", <ExpiryBadge key="r" days={daysUntil(paper.REGISTRATION)} />],
-              ["Added", date(trailer.createdAt)],
+              ["Added", f.date(trailer.createdAt)],
               ["Status", TRAILER_STATUS_LABELS[trailer.status] ?? trailer.status],
             ]} />
             {trailer.notes && <p className="mt-4 whitespace-pre-line border-t border-line pt-3 text-[12px] leading-5 text-fg-muted">{trailer.notes}</p>}

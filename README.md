@@ -1,9 +1,10 @@
 # FleetCore — for fleet specialists
 
-A workspace for the person who keeps trucks on the road: trucks and trailers, PM by odometer, work orders and shop
-time, expiring paperwork, drivers' licences and medicals, fuel and maintenance costs, and a live map. It started as a
-copy of the full FleetOps platform with dispatch, loads, customers, billing, claims and chat taken out, and with **accounts and
-companies** added so one specialist can work for several fleets.
+A workspace for the person who keeps trucks on the road: what needs a decision today, repair orders from the shop
+visit to the invoice, oil changes by odometer, the weekly walk-around (pre-trip) video review and the defects it finds,
+roadside inspections, expiring paperwork, drivers, fuel and repair costs, and a live map. It started as a copy of the
+full FleetOps platform with dispatch, loads, customers, billing, claims and chat taken out, and with **accounts and
+companies** added so one specialist can work for several fleets — each in its own units and time zone.
 
 ## Live
 
@@ -41,17 +42,31 @@ invites and companies. Raw SQL is not scoped — don't use it for company data.
 
 | Module | Highlights |
 |---|---|
-| **Overview** | Six numbers, what needs you today, the shop today, coming-up expiries and PM, live fleet, costs; set-up checklist for a new company |
-| **Trucks & trailers** | Status, ownership and lease caps, PM by odometer, readings (odometer / fuel / location), paperwork with expiry, notes, costs per truck (fuel + maintenance per km, L/100 km), documents |
-| **Maintenance** | Spend summary, repair log, PM schedule, lease mileage, in shop, compliance; work orders numbered per company |
-| **Drivers** | Cleared to drive, assigned truck, licence and medical expiry, hold, safety score, documents, fuel by driver |
-| **Live map** | Rolling / idle / stopped / in shop / no signal, filters, truck details |
-| **Reports** | Maintenance and fuel spend, km driven, cost per km, downtime, by truck, category and vendor; CSV export |
-| **Settings** | Company profile and badge colour, company documents, members and invitations, audit log |
+| **Today** | Eight tiles that each open the filtered page where you act (oil overdue / due, walk-around issues, videos missing, waiting on parts, papers holding dispatch, in the shop, DOT inspections due); one "needs a decision" list with a single action per row; who is in the shop; this month's spend |
+| **Trucks & trailers** | Status counters, column chooser, next service in distance and ≈days, completeness prompts with one-click fixes, document slots (issued / expires), maintenance, expenses (fuel economy, fuel cost per distance, driver charges), history, readings with "as of" |
+| **Repairs** | Repair orders (RO-0001…): stage pipeline with history, downtime clock, job lines by system, who pays (company / driver / investigation / warranty) and "driver told", invoice, void, notes, CSV |
+| **Oil & PM** | Truck types with their own oil interval, the board (overdue / due / on schedule / no recent reading), book a shop, log an oil change |
+| **Vendors** | Shops, dealers, tire and road service, with their repairs and spend; tidy up free-text shop names |
+| **Inspections** | Weekly walk-around board (videos in, to review, nothing sent), component-by-component review, defects with owner and due date — a "fix before next load" defect takes the truck out of service until someone confirms the repair; roadside inspections with violations and corrections |
+| **Drivers** | Cleared to drive, assigned truck, dispatcher, licence and medical expiry, hold, safety score, documents |
+| **Live map** | Rolling / idle / stopped / in shop / out of service / no signal, filters, truck details |
+| **Reports** | Spend, distance, cost per distance, downtime, repairs by type and system, repeat repairs, driver charges, defects, walk-around compliance, roadside; CSV export |
+| **Settings** | Company profile, **region & units**, company documents, members and invitations, audit log |
 | **Fleet assistant** | Ask about the active company's fleet in plain language (Vercel AI Gateway) |
 
-Distances come from odometer readings (fuel fills, work orders, manual readings) — `src/lib/mileage.ts` — since there are
-no loads in this product.
+Distances come from odometer readings (fuel fills, repairs, manual readings) — `src/lib/mileage.ts` — since there are
+no loads in this product. The oil-change rule is in `src/lib/service.ts`: a reading older than 14 days makes "used" a
+lower bound and shows "no recent reading" rather than "on schedule".
+
+### Units, time zone and currency
+
+Each company has its own (Settings → Company profile → Region & units): **imperial** (mi, gal, MPG, lb, mph, US dates
+and 12-hour times) or **metric** (km, L, L/100 km, kg, km/h), an IANA time zone and a currency. Values are stored in
+the company's own units — a column named `odometerKm` holds miles for an imperial company — so only labels and
+fuel-economy maths change; switching units offers to convert what is stored. Dates and the walk-around week (Sunday
+start for imperial, Monday for metric) follow the company's time zone, and the top bar shows the viewer's own clock
+next to the company's. Server code formats with `await getFormat()`, client code with `useFormat()`
+(`src/lib/locale.ts`).
 
 ## Local development
 
@@ -61,10 +76,12 @@ npm run setup      # local PostgreSQL in ./.pgdata on port 5434, migrations, dem
 npm run dev        # http://localhost:3000 — one-click demo logins, password demo1234
 ```
 
-Demo data (`prisma/seed.ts`): four companies. **aziza@demo.local** owns Silk Road Freight, is a fleet specialist at
-Caspian Carriers and has an open invitation to Turon Logistics; **aziza@nomadtrucking.demo** is the same person's second
-login for Nomad Trucking. Sign in with one, then *Add another account* from the company menu to try switching. Also:
-owner@demo.local, timur@nomadtrucking.demo, bekzod@demo.local, viewer@demo.local.
+Demo data (`prisma/seed.ts`): four companies. Silk Road Freight (Chicago area) and Caspian Carriers (Pennsylvania /
+New Jersey) are US fleets in miles and US time zones; Nomad Trucking (Fergana valley) is metric on Tashkent time.
+**aziza@demo.local** owns Silk Road Freight, is a fleet specialist at Caspian Carriers and has an open invitation to
+Turon Logistics; **aziza@nomadtrucking.demo** is the same person's second login for Nomad Trucking. Sign in with one,
+then *Add another account* from the company menu to try switching. Also: owner@demo.local, timur@nomadtrucking.demo,
+bekzod@demo.local, viewer@demo.local. All names, shops, phone numbers (555-01xx) and DOT numbers are made up.
 
 | Command | What it does |
 |---|---|
@@ -86,7 +103,7 @@ it elsewhere):
 2. Add a **new** Neon database from the Vercel Marketplace (sets `DATABASE_URL`, `DATABASE_URL_UNPOOLED`) and a private
    Blob store (`BLOB_READ_WRITE_TOKEN`).
 3. Set `AUTH_SECRET` (random 32-byte hex) and `DEMO_MODE=false`; optionally `APP_URL` for invitation links.
-4. Deploy. The build runs `prisma migrate deploy`, which creates the schema from `prisma/migrations/0_init`.
+4. Deploy. The build runs `prisma migrate deploy`, which applies `prisma/migrations` (`0_init`, `1_shop_and_inspections`).
 5. Open `/signup` to create the first account and company. Seed demo data into production only on purpose:
    `CONFIRM_SEED=yes` (it wipes the database).
 

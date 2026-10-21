@@ -5,6 +5,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { signup } from "@/app/actions/auth";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Field, Input } from "@/components/ui";
+import { RegionPicker } from "@/components/region-picker";
 
 export function SignupForm({ invite }: { invite: { token: string; email: string } | null }) {
   const [show, setShow] = useState(false);
@@ -28,9 +29,10 @@ export function SignupForm({ invite }: { invite: { token: string; email: string 
       </Field>
       {!invite && (
         <Field label="Company you manage" required hint="The fleet's name as your team knows it. You can rename it later.">
-          <Input name="company" required maxLength={80} placeholder="Silk Road Freight" autoComplete="organization" />
+          <Input name="company" required maxLength={80} placeholder="Blue Ridge Freight" autoComplete="organization" />
         </Field>
       )}
+      {!invite && <RegionPicker />}
       <SubmitButton className="w-full" pendingText="Creating your workspace…">{invite ? "Create account and join" : "Create account"}</SubmitButton>
     </ActionForm>
   );

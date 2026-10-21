@@ -10,6 +10,7 @@ import { daysUntil, number } from "@/lib/format";
 import { Avatar, Badge, Card, Chip, EmptyState, ExpiryBadge, InfoTip, LinkButton, PageHeader, Stat, Table, cn } from "@/components/ui";
 import { DriverFilters } from "./filters";
 import { LinkRow } from "./link-row";
+import { dispatcherOptions } from "./data";
 import {
   AT_RISK_SCORE, DRIVER_TYPE_TONE, EMPLOYMENT_LABELS, atRiskWhere, clearance, clearedWhere, expiredWhere, expiringWhere, riskReasons, scoreGrade,
 } from "./shared";
@@ -37,6 +38,7 @@ export default async function DriversPage({ searchParams }: PageProps<"/drivers"
     papers: flag(sp.papers),
     hold: flag(sp.hold),
     truck: str(sp.truck) === "none" ? "none" : undefined,
+    dispatcher: str(sp.dispatcher),
   };
 
   // Filtering happens in the database; only the rows on screen are loaded.
@@ -51,16 +53,17 @@ export default async function DriversPage({ searchParams }: PageProps<"/drivers"
       params.atRisk ? atRiskWhere(now) : {},
       params.papers ? expiringWhere(now) : {},
       params.truck ? { truck: { is: null } } : {},
+      params.dispatcher === "none" ? { dispatcher: null } : params.dispatcher ? { dispatcher: params.dispatcher } : {},
       params.q ? {
         OR: [
-          { name: text }, { phone: text }, { phone2: text }, { email: text }, { licenseNumber: text },
+          { name: text }, { phone: text }, { phone2: text }, { email: text }, { licenseNumber: text }, { dispatcher: text },
           { truck: { is: { unitNumber: text } } }, { truck: { is: { plate: text } } },
         ],
       } : {},
     ],
   };
 
-  const [drivers, matched, byState, cleared, noTruck, papersDue, papersExpired, risky] = await Promise.all([
+  const [drivers, matched, byState, cleared, noTruck, papersDue, papersExpired, risky, dispatchers] = await Promise.all([
     db.driver.findMany({
       where, orderBy: { name: "asc" }, take: LIMIT,
       include: { truck: { select: { id: true, unitNumber: true, make: true, model: true, status: true } } },
@@ -73,6 +76,7 @@ export default async function DriversPage({ searchParams }: PageProps<"/drivers"
     db.driver.count({ where: { AND: [working, expiringWhere(now)] } }),
     db.driver.count({ where: { AND: [working, expiredWhere(now)] } }),
     db.driver.count({ where: { AND: [working, atRiskWhere(now)] } }),
+    dispatcherOptions(),
   ]);
 
   const tally = (keep: (g: (typeof byState)[number]) => boolean) => byState.reduce((a, g) => a + (keep(g) ? g._count : 0), 0);
@@ -153,7 +157,7 @@ export default async function DriversPage({ searchParams }: PageProps<"/drivers"
       </div>
 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <DriverFilters params={params}
+        <DriverFilters params={params} dispatchers={dispatchers}
           types={DRIVER_TYPES.map((t) => ({ value: t, label: DRIVER_TYPE_LABELS[t] }))}
           statuses={DRIVER_STATUSES.map((s) => ({ value: s, label: EMPLOYMENT_LABELS[s] }))} />
         <p className="num text-[12px] text-fg-subtle">
@@ -166,6 +170,7 @@ export default async function DriversPage({ searchParams }: PageProps<"/drivers"
           "Driver",
           <span key="clear" className="inline-flex items-center gap-1">Cleared to drive<InfoTip>Cleared: active, not on hold, and licence and medical certificate in date.</InfoTip></span>,
           "Truck",
+          <span key="dispatch" className="inline-flex items-center gap-1">Dispatcher<InfoTip>Who dispatches the driver. Walk-around videos and repairs are chased through them.</InfoTip></span>,
           <span key="score" className="inline-flex items-center gap-1">Safety<InfoTip>Grade A from 90 · B from 80 · C from 70 · D below. At risk: score under {AT_RISK_SCORE}, or licence or medical expired or expiring within 30 days.</InfoTip></span>,
           "Licence", "Medical",
           <span key="scans" className="inline-flex items-center gap-1">Scans<InfoTip>Licence and medical certificate scans on file. Upload them on the driver&apos;s Documents tab.</InfoTip></span>,
@@ -204,6 +209,11 @@ export default async function DriversPage({ searchParams }: PageProps<"/drivers"
                   ) : d.status === "ACTIVE" && editable && can(user.role, "fleet.edit") ? (
                     <Link href={`/drivers/${d.id}#truck`} className="text-[12px] font-medium text-accent-text hover:underline">Assign truck</Link>
                   ) : <span className="text-fg-faint">—</span>}
+                </td>
+                <td className="max-w-40 truncate">
+                  {d.dispatcher
+                    ? <Link href={`/drivers?dispatcher=${encodeURIComponent(d.dispatcher)}`} className="text-fg-muted hover:text-fg hover:underline" title={`Drivers dispatched by ${d.dispatcher}`}>{d.dispatcher}</Link>
+                    : editable ? <Link href={`/drivers/${d.id}/edit`} className="text-[12px] text-fg-subtle hover:text-fg hover:underline">Set</Link> : <span className="text-fg-faint">—</span>}
                 </td>
                 <td>
                   <span className="inline-flex items-center gap-1.5">

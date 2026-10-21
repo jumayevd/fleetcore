@@ -4,7 +4,8 @@ import { requireUser } from "@/lib/auth";
 import { rootDb } from "@/lib/db-root";
 import { assignableRoles } from "@/lib/permissions";
 import { ROLES, ROLE_HINTS, ROLE_LABELS, isRole } from "@/lib/constants";
-import { ago, date, daysAgo } from "@/lib/format";
+import { ago, daysAgo } from "@/lib/format";
+import { getFormat } from "@/lib/format-server";
 import { inviteMember } from "@/app/actions/members";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Badge, Card, Chip, Disclosure, Field, InfoTip, Input, PageHeader, Select, Stat, Table, cardClass, cn } from "@/components/ui";
@@ -25,13 +26,14 @@ async function origin() {
 export default async function MembersPage() {
   const me = await requireUser("members.manage");
   const companyId = me.company.id;
-  const [members, invites, base] = await Promise.all([
+  const [members, invites, base, { date }] = await Promise.all([
     rootDb.membership.findMany({
       where: { companyId, active: true },
       include: { user: { select: { id: true, name: true, email: true, phone: true, lastLoginAt: true } } },
     }),
     rootDb.invite.findMany({ where: { companyId, acceptedAt: null }, orderBy: { createdAt: "desc" }, include: { invitedBy: { select: { name: true } } } }),
     origin(),
+    getFormat(),
   ]);
   const rank = (r: string) => ROLES.indexOf(r as (typeof ROLES)[number]);
   const rows = members.sort((a, b) => rank(a.role) - rank(b.role) || a.user.name.localeCompare(b.user.name));

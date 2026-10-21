@@ -4,8 +4,9 @@ import { getCurrentUser } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import { ALLOWED_TYPES, MAX_UPLOAD_BYTES, makeKey, saveFile } from "@/lib/storage";
 import { canUploadDoc, ownerData, DOC_KIND_LABELS, type DocOwner, type DocTarget } from "@/lib/documents";
+import { parseDateInput } from "@/lib/locale";
 
-const OWNERS: DocOwner[] = ["truck", "trailer", "driver", "workOrder", "company"];
+const OWNERS: DocOwner[] = ["truck", "trailer", "driver", "workOrder", "roadside", "company"];
 
 /** Does the parent record exist in the active company? (The scope makes another company's id "not found".) */
 async function parentExists(t: DocTarget) {
@@ -14,11 +15,12 @@ async function parentExists(t: DocTarget) {
     case "trailer": return (await db.trailer.count({ where: { id: t.id } })) > 0;
     case "driver": return (await db.driver.count({ where: { id: t.id } })) > 0;
     case "workOrder": return (await db.workOrder.count({ where: { id: t.id } })) > 0;
+    case "roadside": return (await db.roadsideInspection.count({ where: { id: t.id } })) > 0;
     case "company": return true;
   }
 }
 
-/** Multipart upload: file, kind, one of truckId/trailerId/driverId/workOrderId (or company=1), optional expiresAt/notes. */
+/** Multipart upload: file, kind, one of truckId/trailerId/driverId/workOrderId/roadsideId (or company=1), optional issuedAt/expiresAt/notes. */
 export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Sign in required" }, { status: 401 });
@@ -42,8 +44,10 @@ export async function POST(req: Request) {
   if (!(await canUploadDoc(user, target, kind))) return NextResponse.json({ error: "You can't upload this document here" }, { status: 403 });
   if (!(await parentExists(target))) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const expiresRaw = form.get("expiresAt");
-  const expiresAt = typeof expiresRaw === "string" && expiresRaw ? new Date(expiresRaw) : null;
+  // Dates typed on the form are calendar days in the company's time zone.
+  const day = (k: string) => { const v = form.get(k); return typeof v === "string" && v ? parseDateInput(v, user.company.timezone) ?? new Date(v) : null; };
+  const expiresAt = day("expiresAt");
+  const issuedAt = day("issuedAt");
   const notes = typeof form.get("notes") === "string" ? String(form.get("notes")).trim() || null : null;
 
   const storageKey = makeKey(`${user.company.id}/${target.type}/${target.id}`, file.name);
@@ -51,7 +55,8 @@ export async function POST(req: Request) {
   const doc = await db.document.create({
     data: {
       kind, name: file.name.slice(0, 200), storageKey, contentType, size: file.size,
-      expiresAt: expiresAt && !Number.isNaN(expiresAt.getTime()) ? expiresAt : null, notes,
+      expiresAt: expiresAt && !Number.isNaN(expiresAt.getTime()) ? expiresAt : null,
+      issuedAt: issuedAt && !Number.isNaN(issuedAt.getTime()) ? issuedAt : null, notes,
       ...ownerData(target), uploadedById: user.id,
     },
   });

@@ -23,7 +23,7 @@ export const toneVar = (tone: ChartTone) => `var(${toneVarName(tone)})`;
 export { fmtCompact, fmtMoneyCompact };
 
 /** Value formatter: a function (client callers) or a preset name (server components can't pass functions). */
-export type Format = ((v: number) => string) | "money" | "moneyCompact" | "compact" | "number" | "percent" | "km";
+export type Format = ((v: number) => string) | "money" | "moneyCompact" | "compact" | "number" | "percent" | "km" | "mi";
 export function resolveFormat(f: Format | undefined, fallback: (v: number) => string): (v: number) => string {
   if (!f) return fallback;
   if (typeof f === "function") return f;
@@ -33,6 +33,7 @@ export function resolveFormat(f: Format | undefined, fallback: (v: number) => st
     case "compact": return fmtCompact;
     case "percent": return (v) => `${Math.round(v)}%`;
     case "km": return (v) => `${number(v)} km`;
+    case "mi": return (v) => `${number(v)} mi`;
     default: return (v) => number(v);
   }
 }

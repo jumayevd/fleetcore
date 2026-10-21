@@ -5,7 +5,8 @@ import { rootDb } from "@/lib/db-root";
 import { can } from "@/lib/permissions";
 import { allNavItems } from "@/lib/nav";
 import { ROLE_LABELS, isRole } from "@/lib/constants";
-import { ago, date, dateTime } from "@/lib/format";
+import { ago } from "@/lib/format";
+import { getFormat } from "@/lib/format-server";
 import { changePassword, updateProfile } from "@/app/actions/auth";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { AppearanceControls } from "@/components/appearance";
@@ -26,6 +27,7 @@ export default async function AccountPage() {
     },
   });
   const jumps = allNavItems().filter((i) => i.shortcut && can(me.role, i.perm));
+  const { date, dateTime } = await getFormat();
 
   return (
     <>

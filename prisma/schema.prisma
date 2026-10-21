@@ -29,28 +29,48 @@ datasource db {
  */
 
 model User {
-  id           String       @id @default(cuid())
-  name         String
-  email        String       @unique
-  passwordHash String
-  phone        String?
-  active       Boolean      @default(true)
-  lastLoginAt  DateTime?
-  createdAt    DateTime     @default(now())
-  memberships  Membership[]
-  invitesSent  Invite[]
-  workOrders   WorkOrder[]
-  documents    Document[]
-  audits       AuditLog[]
+  id            String               @id @default(cuid())
+  name          String
+  email         String               @unique
+  passwordHash  String
+  phone         String?
+  active        Boolean              @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime             @default(now())
+  memberships   Membership[]
+  invitesSent   Invite[]
+  workOrders    WorkOrder[]
+  documents     Document[]
+  audits        AuditLog[]
+  woEvents      WorkOrderEvent[]
+  walkReviews   WalkAround[]
+  defectsOwned  Defect[]             @relation("DefectOwner")
+  defectsClosed Defect[]             @relation("DefectCloser")
+  roadside      RoadsideInspection[]
 }
 
 /// One fleet's workspace. Everything a fleet specialist works with belongs to exactly one company.
 model Company {
-  id          String       @id @default(cuid())
+  id          String               @id @default(cuid())
   name        String
   /// Hex colour of the workspace badge, so it is obvious which company you are working in.
   color       String?
-  createdAt   DateTime     @default(now())
+  /// "imperial" (mi, gal, MPG, lb) or "metric" (km, L, L/100 km, kg). Every distance, volume and weight stored for this
+  /// company is in its own system: fields named …Km / …L / …Kg hold miles / gallons / pounds for an imperial company.
+  units       String               @default("imperial")
+  /// IANA time zone the company works in. Dates and times show in it; the viewer's own clock is shown next to it.
+  timezone    String               @default("America/New_York")
+  currency    String               @default("USD")
+  createdAt   DateTime             @default(now())
+  truckTypes  TruckType[]
+  vendors     Vendor[]
+  woLines     WorkOrderLine[]
+  woEvents    WorkOrderEvent[]
+  walkArounds WalkAround[]
+  walkRatings WalkAroundRating[]
+  defects     Defect[]
+  roadside    RoadsideInspection[]
+  violations  RoadsideViolation[]
   memberships Membership[]
   invites     Invite[]
   drivers     Driver[]
@@ -109,40 +129,45 @@ model Invite {
  */
 
 model Driver {
-  id            String     @id @default(cuid())
-  companyId     String     @default("") // set by the company scope (src/lib/db.ts); "" fails the foreign key
-  company       Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  id            String               @id @default(cuid())
+  companyId     String               @default("") // set by the company scope (src/lib/db.ts); "" fails the foreign key
+  company       Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
   name          String
   phone         String?
   phone2        String?
   email         String?
   licenseNumber String
-  licenseClass  String     @default("CE")
+  licenseClass  String               @default("CE")
   licenseExpiry DateTime
   medicalExpiry DateTime?
   /// Employment: ACTIVE | ON_LEAVE | INACTIVE
-  status        String     @default("ACTIVE")
+  status        String               @default("ACTIVE")
   /// COMPANY | OWNER_OPERATOR | LEASE
-  type          String     @default("COMPANY")
+  type          String               @default("COMPANY")
   /// Kept off the road (safety or paperwork) until released.
-  hold          Boolean    @default(false)
+  hold          Boolean              @default(false)
   holdReason    String?
   /// Safety score, 0–100.
-  score         Int        @default(100)
-  hireDate      DateTime   @default(now())
+  score         Int                  @default(100)
+  hireDate      DateTime             @default(now())
+  /// Who dispatches this driver (a name or a team), so PTI videos and repairs can be chased with the right person.
+  dispatcher    String?
   notes         String?
-  createdAt     DateTime   @default(now())
-  truck         Truck?     @relation("TruckDriver")
+  createdAt     DateTime             @default(now())
+  truck         Truck?               @relation("TruckDriver")
   fuelLogs      FuelLog[]
   documents     Document[]
+  charges       WorkOrder[]          @relation("WorkOrderDriverCharge")
+  walkArounds   WalkAround[]
+  roadside      RoadsideInspection[]
 
   @@index([companyId])
 }
 
 model Truck {
-  id                 String      @id @default(cuid())
-  companyId          String      @default("") // set by the company scope (src/lib/db.ts); "" fails the foreign key
-  company            Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  id                 String               @id @default(cuid())
+  companyId          String               @default("") // set by the company scope (src/lib/db.ts); "" fails the foreign key
+  company            Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
   unitNumber         String
   make               String
   model              String
@@ -150,22 +175,22 @@ model Truck {
   vin                String?
   plate              String
   /// ACTIVE | MAINTENANCE | OUT_OF_SERVICE | INACTIVE
-  status             String      @default("ACTIVE")
+  status             String               @default("ACTIVE")
   /// COMPANY | OWNER_OPERATOR | LEASED
-  ownership          String      @default("COMPANY")
+  ownership          String               @default("COMPANY")
   group              String? // fleet group / terminal label
   lessor             String?
   leaseStartKm       Int?
   leaseAnnualLimitKm Int?
   leaseBufferPct     Float?
   leaseOverageRate   Float? // currency per km over the cap
-  odometerKm         Int         @default(0)
-  fuelType           String      @default("DIESEL")
-  fuelCapacityL      Int         @default(600)
+  odometerKm         Int                  @default(0)
+  fuelType           String               @default("DIESEL")
+  fuelCapacityL      Int                  @default(600)
   insuranceExpiry    DateTime?
   inspectionExpiry   DateTime?
   registrationExpiry DateTime?
-  pmIntervalKm       Int         @default(30000)
+  pmIntervalKm       Int                  @default(30000)
   lastPmKm           Int?
   lastPmAt           DateTime?
   nextServiceKm      Int?
@@ -176,37 +201,49 @@ model Truck {
   heading            Float?
   fuelPct            Float?
   engineOn           Boolean?
-  fuelEconomy        Float? // L/100km, rolling
+  fuelEconomy        Float? // rolling, in the company's economy unit (MPG imperial, L/100 km metric)
   locationName       String?
   lastPingAt         DateTime?
   pingSource         String? // MANUAL | DEVICE | SAMSARA | …
-  driverId           String?     @unique
-  driver             Driver?     @relation("TruckDriver", fields: [driverId], references: [id], onDelete: SetNull)
+  driverId           String?              @unique
+  driver             Driver?              @relation("TruckDriver", fields: [driverId], references: [id], onDelete: SetNull)
+  /// The type sets the oil-change interval (pmIntervalKm is the truck's own interval when it has no type).
+  truckTypeId        String?
+  truckType          TruckType?           @relation(fields: [truckTypeId], references: [id], onDelete: SetNull)
+  /// When the odometer above was read. A stale reading makes "due" figures lower bounds.
+  odometerAt         DateTime?
+  inServiceAt        DateTime?
+  homeTerminal       String?
+  color              String?
+  engineHours        Int?
   notes              String?
-  createdAt          DateTime    @default(now())
+  createdAt          DateTime             @default(now())
   workOrders         WorkOrder[]
   fuelLogs           FuelLog[]
   documents          Document[]
   trailers           Trailer[]
+  walkArounds        WalkAround[]
+  defects            Defect[]
+  roadside           RoadsideInspection[]
 
   @@unique([companyId, unitNumber])
   @@index([companyId, status])
 }
 
 model Trailer {
-  id               String      @id @default(cuid())
-  companyId        String      @default("") // set by the company scope (src/lib/db.ts); "" fails the foreign key
-  company          Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  id               String               @id @default(cuid())
+  companyId        String               @default("") // set by the company scope (src/lib/db.ts); "" fails the foreign key
+  company          Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
   unitNumber       String
   type             String // DRY_VAN | REEFER | FLATBED | TANKER | CONTAINER
   capacityKg       Int
   plate            String?
   year             Int?
   /// IN_USE | EMPTY | DROPPED | YARD | SHOP | OUT_OF_SERVICE
-  status           String      @default("EMPTY")
-  statusSince      DateTime    @default(now())
+  status           String               @default("EMPTY")
+  statusSince      DateTime             @default(now())
   truckId          String? // currently paired tractor
-  truck            Truck?      @relation(fields: [truckId], references: [id], onDelete: SetNull)
+  truck            Truck?               @relation(fields: [truckId], references: [id], onDelete: SetNull)
   lat              Float?
   lng              Float?
   locationName     String?
@@ -215,9 +252,11 @@ model Trailer {
   insuranceExpiry  DateTime?
   inspectionExpiry DateTime?
   notes            String?
-  createdAt        DateTime    @default(now())
+  createdAt        DateTime             @default(now())
   documents        Document[]
   workOrders       WorkOrder[]
+  defects          Defect[]
+  roadside         RoadsideInspection[]
 
   @@unique([companyId, unitNumber])
   @@index([companyId, status])
@@ -225,37 +264,63 @@ model Trailer {
 
 /// Shop work: PM, repairs, inspections. Numbered per company (#1, #2, …).
 model WorkOrder {
-  id          String     @id @default(cuid())
-  companyId   String     @default("") // set by the company scope (src/lib/db.ts); "" fails the foreign key
-  company     Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  number      Int
-  truckId     String?
-  truck       Truck?     @relation(fields: [truckId], references: [id], onDelete: Cascade)
-  trailerId   String?
-  trailer     Trailer?   @relation(fields: [trailerId], references: [id], onDelete: Cascade)
-  title       String
-  description String?
+  id               String           @id @default(cuid())
+  companyId        String           @default("") // set by the company scope (src/lib/db.ts); "" fails the foreign key
+  company          Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  number           Int
+  truckId          String?
+  truck            Truck?           @relation(fields: [truckId], references: [id], onDelete: Cascade)
+  trailerId        String?
+  trailer          Trailer?         @relation(fields: [trailerId], references: [id], onDelete: Cascade)
+  title            String
+  description      String?
   /// PM | ENGINE | COOLING | TIRES | BRAKES | ELECTRICAL | BODY | TOWING | INSPECTION | OTHER
-  category    String     @default("OTHER")
+  category         String           @default("OTHER")
   /// LOW | MEDIUM | HIGH | URGENT
-  priority    String     @default("MEDIUM")
+  priority         String           @default("MEDIUM")
   /// DRAFT | OPEN | IN_PROGRESS | DONE | CANCELLED
-  status      String     @default("OPEN")
-  vendor      String?
-  scheduledAt DateTime
-  inAt        DateTime? // unit entered the shop
-  outAt       DateTime? // unit left the shop
-  completedAt DateTime?
-  odometerKm  Int?
-  laborCost   Float      @default(0)
-  partsCost   Float      @default(0)
-  cost        Float      @default(0)
-  notes       String?
-  createdById String?
-  createdBy   User?      @relation(fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  documents   Document[]
+  status           String           @default("OPEN")
+  vendor           String?
+  scheduledAt      DateTime
+  inAt             DateTime? // unit entered the shop
+  outAt            DateTime? // unit left the shop
+  completedAt      DateTime?
+  odometerKm       Int?
+  laborCost        Float            @default(0)
+  partsCost        Float            @default(0)
+  cost             Float            @default(0)
+  notes            String?
+  /// OIL_CHANGE | DOT_INSPECTION | PM_INSPECTION | REPAIR | ENGINE | ELECTRICAL | FRAME | BODY | STEER | DPF | INJECTOR | COMPUTER | ACCIDENT | TIRES | OTHER
+  repairType       String           @default("REPAIR")
+  /// Where a job in the shop has got to: DIAGNOSING | WAITING_APPROVAL | WAITING_PARTS | IN_REPAIR | QUALITY_CHECK | READY_PICKUP
+  stage            String?
+  stageAt          DateTime?
+  /// The date the shop promised the unit back.
+  promisedAt       DateTime?
+  odometerOutKm    Int?
+  technician       String?
+  vendorId         String?
+  vendorRef        Vendor?          @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  /// Who pays: COMPANY | DRIVER (charged to chargeDriverId) | INVESTIGATION (held) | WARRANTY (claimed back)
+  payer            String           @default("COMPANY")
+  chargeDriverId   String?
+  chargeDriver     Driver?          @relation("WorkOrderDriverCharge", fields: [chargeDriverId], references: [id], onDelete: SetNull)
+  /// Nothing comes off a driver's pay until they have been told.
+  driverInformedAt DateTime?
+  invoiceNumber    String?
+  invoiceTotal     Float?
+  /// PAID | PAY_LATER
+  paymentStatus    String?
+  voidedAt         DateTime?
+  voidReason       String?
+  createdById      String?
+  createdBy        User?            @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  documents        Document[]
+  lines            WorkOrderLine[]
+  events           WorkOrderEvent[]
+  defects          Defect[]
 
   @@unique([companyId, number])
   @@index([companyId, status])
@@ -283,34 +348,39 @@ model FuelLog {
 /// Files attached to trucks, trailers, drivers, work orders, or the company itself.
 /// Bytes live in Vercel Blob (prod) or ./storage (local dev).
 model Document {
-  id           String     @id @default(cuid())
-  companyId    String     @default("") // set by the company scope (src/lib/db.ts); "" fails the foreign key
-  company      Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  id           String              @id @default(cuid())
+  companyId    String              @default("") // set by the company scope (src/lib/db.ts); "" fails the foreign key
+  company      Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   kind         String
   name         String
-  storageKey   String     @unique
+  storageKey   String              @unique
   contentType  String
   size         Int
   expiresAt    DateTime?
   notes        String?
-  isCompany    Boolean    @default(false)
+  isCompany    Boolean             @default(false)
   truckId      String?
-  truck        Truck?     @relation(fields: [truckId], references: [id], onDelete: Cascade)
+  truck        Truck?              @relation(fields: [truckId], references: [id], onDelete: Cascade)
   trailerId    String?
-  trailer      Trailer?   @relation(fields: [trailerId], references: [id], onDelete: Cascade)
+  trailer      Trailer?            @relation(fields: [trailerId], references: [id], onDelete: Cascade)
   driverId     String?
-  driver       Driver?    @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  driver       Driver?             @relation(fields: [driverId], references: [id], onDelete: Cascade)
   workOrderId  String?
-  workOrder    WorkOrder? @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  workOrder    WorkOrder?          @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  roadsideId   String?
+  roadside     RoadsideInspection? @relation(fields: [roadsideId], references: [id], onDelete: Cascade)
+  /// When the paper was issued (annual inspection, registration…), next to expiresAt.
+  issuedAt     DateTime?
   uploadedById String?
-  uploadedBy   User?      @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
-  createdAt    DateTime   @default(now())
+  uploadedBy   User?               @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime            @default(now())
 
   @@index([companyId])
   @@index([truckId])
   @@index([trailerId])
   @@index([driverId])
   @@index([workOrderId])
+  @@index([roadsideId])
 }
 
 model AuditLog {
@@ -339,4 +409,232 @@ model AppSetting {
   updatedAt DateTime @updatedAt
 
   @@unique([companyId, key])
+}
+
+/**
+ * ------------------------------------------------------------------
+ */
+/**
+ * Shop
+ */
+/**
+ * ------------------------------------------------------------------
+ */
+
+/// A kind of truck with its own oil-change interval (in the company's distance unit).
+model TruckType {
+  id            String   @id @default(cuid())
+  companyId     String   @default("") // set by the company scope (src/lib/db.ts); "" fails the foreign key
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name          String
+  oilIntervalKm Int
+  createdAt     DateTime @default(now())
+  trucks        Truck[]
+
+  @@unique([companyId, name])
+}
+
+/// A shop, dealer, tire service, road-side service or parts supplier the fleet uses.
+model Vendor {
+  id          String      @id @default(cuid())
+  companyId   String      @default("") // set by the company scope (src/lib/db.ts); "" fails the foreign key
+  company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name        String
+  /// DEALER | SHOP | TIRE | MOBILE | TOWING | PARTS | OTHER
+  type        String      @default("SHOP")
+  phone       String?
+  email       String?
+  address     String?
+  city        String?
+  contactName String?
+  notes       String?
+  active      Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  workOrders  WorkOrder[]
+
+  @@unique([companyId, name])
+}
+
+/// One line of "what was done" on a repair order: the system, the work and what it cost.
+model WorkOrderLine {
+  id          String    @id @default(cuid())
+  companyId   String    @default("") // set by the company scope (src/lib/db.ts); "" fails the foreign key
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  workOrderId String
+  workOrder   WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  /// BODY | BRAKES | ELECTRICAL | TIRES | ENGINE | COOLING | EXHAUST | HVAC | SUSPENSION | PM | FEES | OTHER
+  system      String
+  work        String
+  amount      Float     @default(0)
+  position    Int       @default(0)
+
+  @@index([workOrderId])
+}
+
+/// The repair order's timeline: stage changes, notes, "driver told", invoice.
+model WorkOrderEvent {
+  id          String    @id @default(cuid())
+  companyId   String    @default("") // set by the company scope (src/lib/db.ts); "" fails the foreign key
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  workOrderId String
+  workOrder   WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  /// STAGE | NOTE | STATUS | DRIVER_INFORMED | INVOICE | VOID
+  kind        String
+  stage       String?
+  body        String?
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+
+  @@index([workOrderId, createdAt])
+}
+
+/**
+ * ------------------------------------------------------------------
+ */
+/**
+ * Inspections
+ */
+/**
+ * ------------------------------------------------------------------
+ */
+
+/// The weekly pre-trip walk-around of one truck: did the video come, what did the reviewer see.
+model WalkAround {
+  id           String             @id @default(cuid())
+  companyId    String             @default("") // set by the company scope (src/lib/db.ts); "" fails the foreign key
+  company      Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  truckId      String
+  truck        Truck              @relation(fields: [truckId], references: [id], onDelete: Cascade)
+  driverId     String?
+  driver       Driver?            @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  /// First day of the week, as a calendar date in the company's time zone.
+  weekStart    DateTime           @db.Date
+  /// AWAITING | RECEIVED | MISSING
+  video        String             @default("AWAITING")
+  receivedAt   DateTime?
+  /// CLEAN | ISSUES (set when reviewed)
+  result       String?
+  reviewedById String?
+  reviewedBy   User?              @relation(fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt   DateTime?
+  notes        String?
+  createdAt    DateTime           @default(now())
+  ratings      WalkAroundRating[]
+  defects      Defect[]
+
+  @@unique([truckId, weekStart])
+  @@index([companyId, weekStart])
+}
+
+/// One component's rating on a walk-around. A rating carries forward until the component is rated again.
+model WalkAroundRating {
+  id           String     @id @default(cuid())
+  companyId    String     @default("") // set by the company scope (src/lib/db.ts); "" fails the foreign key
+  company      Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  walkAroundId String
+  walkAround   WalkAround @relation(fields: [walkAroundId], references: [id], onDelete: Cascade)
+  /// One of PTI_COMPONENTS in src/lib/constants.ts
+  component    String
+  /// GOOD | SOON | NOW | UNSEEN
+  rating       String
+
+  @@unique([walkAroundId, component])
+}
+
+/// Something wrong with a unit, found on a walk-around or reported. Numbered per company (DEF-0001…).
+/// A NOW defect takes the truck out of service until someone verifies the repair.
+model Defect {
+  id           String      @id @default(cuid())
+  companyId    String      @default("") // set by the company scope (src/lib/db.ts); "" fails the foreign key
+  company      Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  number       Int
+  truckId      String?
+  truck        Truck?      @relation(fields: [truckId], references: [id], onDelete: Cascade)
+  trailerId    String?
+  trailer      Trailer?    @relation(fields: [trailerId], references: [id], onDelete: Cascade)
+  walkAroundId String?
+  walkAround   WalkAround? @relation(fields: [walkAroundId], references: [id], onDelete: SetNull)
+  component    String
+  description  String
+  /// NOW (before the next load) | SOON (within 2 weeks) | WATCH
+  severity     String
+  /// OPEN | REPAIRED (waiting for someone to confirm) | CLOSED
+  status       String      @default("OPEN")
+  /// True while this defect keeps the truck out of service.
+  holdsUnit    Boolean     @default(false)
+  foundAt      DateTime    @default(now())
+  dueAt        DateTime?
+  ownerId      String?
+  owner        User?       @relation("DefectOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  workOrderId  String?
+  workOrder    WorkOrder?  @relation(fields: [workOrderId], references: [id], onDelete: SetNull)
+  repairedAt   DateTime?
+  closedAt     DateTime?
+  closedById   String?
+  closedBy     User?       @relation("DefectCloser", fields: [closedById], references: [id], onDelete: SetNull)
+  closeNote    String?
+  createdAt    DateTime    @default(now())
+
+  @@unique([companyId, number])
+  @@index([companyId, status])
+  @@index([truckId])
+}
+
+/**
+ * ------------------------------------------------------------------
+ */
+/**
+ * Safety & compliance
+ */
+/**
+ * ------------------------------------------------------------------
+ */
+
+/// A roadside (DOT) inspection report and what has to be corrected.
+model RoadsideInspection {
+  id              String              @id @default(cuid())
+  companyId       String              @default("") // set by the company scope (src/lib/db.ts); "" fails the foreign key
+  company         Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  inspectedAt     DateTime
+  reportNumber    String?
+  /// Inspection level 1–6
+  level           Int                 @default(1)
+  state           String?
+  location        String?
+  driverId        String?
+  driver          Driver?             @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  truckId         String?
+  truck           Truck?              @relation(fields: [truckId], references: [id], onDelete: SetNull)
+  trailerId       String?
+  trailer         Trailer?            @relation(fields: [trailerId], references: [id], onDelete: SetNull)
+  /// CLEAN | VIOLATIONS | OOS
+  result          String              @default("CLEAN")
+  correctionDueAt DateTime?
+  /// OPEN | CORRECTED | CLOSED
+  status          String              @default("OPEN")
+  notes           String?
+  createdById     String?
+  createdBy       User?               @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt       DateTime            @default(now())
+  violations      RoadsideViolation[]
+  documents       Document[]
+
+  @@index([companyId, inspectedAt])
+}
+
+model RoadsideViolation {
+  id           String             @id @default(cuid())
+  companyId    String             @default("") // set by the company scope (src/lib/db.ts); "" fails the foreign key
+  company      Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  inspectionId String
+  inspection   RoadsideInspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  code         String?
+  description  String
+  /// DRIVER | TRUCK | TRAILER
+  unit         String             @default("TRUCK")
+  oos          Boolean            @default(false)
+  correctedAt  DateTime?
+
+  @@index([inspectionId])
 }

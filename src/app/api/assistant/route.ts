@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { APICallError, createAgentUIStreamResponse, NoSuchModelError } from "ai";
 import { getCurrentUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import { normalizeLocale } from "@/lib/locale";
 import { assistantModelId, createFleetAgent, isAssistantConfigured } from "@/lib/assistant/agent";
 import { prepareHistory } from "@/lib/assistant/history";
 import {
@@ -44,7 +45,7 @@ export async function GET() {
   return NextResponse.json<AssistantInfo>(
     {
       configured: isAssistantConfigured(), companyId: user.company.id, company: user.company.name,
-      intro: introFor(user.role, user.company.name), prompts: promptsFor(user.role),
+      intro: introFor(user.role, user.company.name), prompts: promptsFor(user.role, user.company.units),
     },
     { headers: NO_STORE },
   );
@@ -81,8 +82,12 @@ export async function POST(req: Request) {
   if (!uiMessages) return fail(400, "The conversation payload isn't valid. Clear the chat and try again.", "BAD_REQUEST");
   if (uiMessages.length === 0) return fail(400, "Send a message from the user", "BAD_REQUEST");
 
-  // Tools run pinned to this company (see tools.ts), whatever the browser does while the answer streams.
-  const agent = createFleetAgent({ role: user.role, name: user.name, company: { id: user.company.id, name: user.company.name } });
+  // Tools run pinned to this company (see tools.ts), whatever the browser does while the answer streams, and answer in
+  // its units, time zone and currency.
+  const agent = createFleetAgent({
+    role: user.role, name: user.name,
+    company: { id: user.company.id, name: user.company.name, locale: normalizeLocale(user.company) },
+  });
   const who = `${user.email} @ ${user.company.id}`;
   try {
     return await createAgentUIStreamResponse({
