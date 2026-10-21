@@ -1,0 +1,55 @@
+{
+  "name": "web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "node scripts/dev-db.mjs && next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "db:seed": "dotenv -e .env.local -- prisma db seed",
+    "setup": "node scripts/dev-db.mjs && npm run db:migrate && npm run db:seed",
+    "postinstall": "prisma generate",
+    "db:migrate": "dotenv -e .env.local -- prisma migrate deploy",
+    "db:migrate:dev": "dotenv -e .env.local -- prisma migrate dev",
+    "db:stop": "node scripts/dev-db.mjs stop",
+    "env:pull": "vercel env pull .env.vercel --yes"
+  },
+  "dependencies": {
+    "@ai-sdk/react": "^4.0.130",
+    "@prisma/client": "^6.19.3",
+    "@vercel/blob": "^2.8.0",
+    "ai": "^7.0.127",
+    "bcryptjs": "^3.0.3",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.4.0",
+    "jose": "^6.2.12",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^1.49.0",
+    "next": "16.3.7",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-leaflet": "^5.0.0",
+    "recharts": "^3.10.1",
+    "server-only": "^0.0.1",
+    "tailwind-merge": "^3.7.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/leaflet": "^1.9.22",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "dotenv-cli": "^11.0.0",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.7",
+    "prisma": "^6.19.3",
+    "tailwindcss": "^4",
+    "tsx": "^4.23.15",
+    "typescript": "^5"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  }
+}

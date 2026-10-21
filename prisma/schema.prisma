@@ -1,0 +1,532 @@
+// FleetOps data model (v2).
+// Postgres (Neon via the Vercel Marketplace). DATABASE_URL is the pooled
+// connection for the app; DATABASE_URL_UNPOOLED is used for migrations.
+// Status/role fields are strings; allowed values live in src/lib/constants.ts.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+/// Dispatcher team. Drivers and loads are grouped by team on the boards.
+model Team {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  color     String? // hex, for board headers
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  users     User[]
+  drivers   Driver[]
+  loads     Load[]
+}
+
+model User {
+  id               String     @id @default(cuid())
+  name             String
+  email            String     @unique
+  passwordHash     String
+  role             String // OWNER | ADMIN | DISPATCHER | FLEET_MANAGER | ACCOUNTANT | DRIVER
+  phone            String?
+  active           Boolean    @default(true)
+  lastLoginAt      DateTime?
+  teamId           String?
+  team             Team?      @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  // Telegram alerts: chat linked via /start <telegramLinkCode> to the bot
+  telegramChatId   String?    @unique
+  telegramLinkCode String?    @unique
+  telegramAlerts   Boolean    @default(true)
+  createdAt        DateTime   @default(now())
+  driver           Driver?
+  dispatched       Load[]     @relation("Dispatcher")
+  events           LoadEvent[]
+  audits           AuditLog[]
+  documents        Document[]
+  statusEvents     DriverStatusEvent[]
+  boardCells       BoardCell[]
+  workOrders       WorkOrder[]
+  claimsCreated    Claim[]    @relation("ClaimCreator")
+  claimsAssigned   Claim[]    @relation("ClaimAssignee")
+  claimNotes       ClaimNote[]
+  chatMessages     ChatMessage[]
+  announcements    Announcement[]
+}
+
+model Driver {
+  id                String    @id @default(cuid())
+  userId            String?   @unique
+  user              User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  name              String
+  phone             String?
+  phone2            String?
+  email             String?
+  licenseNumber     String
+  licenseClass      String    @default("CE")
+  licenseExpiry     DateTime
+  medicalExpiry     DateTime?
+  /// Employment: ACTIVE | ON_LEAVE | INACTIVE
+  status            String    @default("ACTIVE")
+  /// COMPANY | OWNER_OPERATOR | LEASE
+  type              String    @default("COMPANY")
+  teamId            String?
+  team              Team?     @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  /// Dispatch board state: READY | DISPATCHED | AT_PICKUP | EN_ROUTE | UNLOADING | STOP | REST | HOME | VACATION
+  boardStatus       String    @default("READY")
+  boardStatusSince  DateTime  @default(now())
+  /// True while a dispatcher has overridden the automatically derived board status.
+  boardStatusManual Boolean   @default(false)
+  hold              Boolean   @default(false)
+  holdReason        String?
+  score             Int       @default(100)
+  hireDate          DateTime  @default(now())
+  payPerKm          Float     @default(0.35)
+  rating            Float     @default(5)
+  notes             String?
+  createdAt         DateTime  @default(now())
+  loads             Load[]
+  fuelLogs          FuelLog[]
+  truck             Truck?    @relation("TruckDriver")
+  documents         Document[]
+  statusEvents      DriverStatusEvent[]
+  boardCells        BoardCell[]
+  claims            Claim[]
+}
+
+/// History of board status changes (auto and manual) — powers "active since" and audit.
+model DriverStatusEvent {
+  id        String   @id @default(cuid())
+  driverId  String
+  driver    Driver   @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  status    String
+  source    String // AUTO | MANUAL
+  note      String?
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  at        DateTime @default(now())
+
+  @@index([driverId, at])
+}
+
+/// Per-day board annotations: highlight colours and free-text notes on a driver row.
+model BoardCell {
+  id          String   @id @default(cuid())
+  date        DateTime @db.Date
+  driverId    String
+  driver      Driver   @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  column      String // e.g. "row", "notes", "eta"
+  color       String?
+  note        String?
+  updatedById String?
+  updatedBy   User?    @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt   DateTime @updatedAt
+
+  @@unique([date, driverId, column])
+}
+
+model Truck {
+  id                 String      @id @default(cuid())
+  unitNumber         String      @unique
+  make               String
+  model              String
+  year               Int
+  vin                String?
+  plate              String
+  /// ACTIVE | MAINTENANCE | OUT_OF_SERVICE | INACTIVE
+  status             String      @default("ACTIVE")
+  /// COMPANY | OWNER_OPERATOR | LEASED
+  ownership          String      @default("COMPANY")
+  group              String? // fleet group / company label
+  lessor             String?
+  leaseStartKm       Int?
+  leaseAnnualLimitKm Int?
+  leaseBufferPct     Float?
+  leaseOverageRate   Float? // currency per km over the cap
+  odometerKm         Int         @default(0)
+  fuelType           String      @default("DIESEL")
+  fuelCapacityL      Int         @default(600)
+  insuranceExpiry    DateTime?
+  inspectionExpiry   DateTime?
+  registrationExpiry DateTime?
+  pmIntervalKm       Int         @default(30000)
+  lastPmKm           Int?
+  lastPmAt           DateTime?
+  nextServiceKm      Int?
+  // Last known telemetry
+  lat                Float?
+  lng                Float?
+  speedKmh           Float?
+  heading            Float?
+  fuelPct            Float?
+  engineOn           Boolean?
+  fuelEconomy        Float? // L/100km, rolling
+  locationName       String?
+  lastPingAt         DateTime?
+  pingSource         String? // SIMULATED | DEVICE | SAMSARA
+  driverId           String?     @unique
+  driver             Driver?     @relation("TruckDriver", fields: [driverId], references: [id], onDelete: SetNull)
+  notes              String?
+  createdAt          DateTime    @default(now())
+  loads              Load[]
+  workOrders         WorkOrder[]
+  fuelLogs           FuelLog[]
+  documents          Document[]
+  trailers           Trailer[]
+  claims             Claim[]
+}
+
+model Trailer {
+  id               String      @id @default(cuid())
+  unitNumber       String      @unique
+  type             String // DRY_VAN | REEFER | FLATBED | TANKER | CONTAINER
+  capacityKg       Int
+  plate            String?
+  year             Int?
+  /// IN_USE | EMPTY | DROPPED | YARD | SHOP | OUT_OF_SERVICE
+  status           String      @default("EMPTY")
+  statusSince      DateTime    @default(now())
+  truckId          String? // currently paired tractor
+  truck            Truck?      @relation(fields: [truckId], references: [id], onDelete: SetNull)
+  lat              Float?
+  lng              Float?
+  locationName     String?
+  gpsProvider      String?
+  lastPingAt       DateTime?
+  insuranceExpiry  DateTime?
+  inspectionExpiry DateTime?
+  notes            String?
+  createdAt        DateTime    @default(now())
+  loads            Load[]
+  documents        Document[]
+  workOrders       WorkOrder[]
+  claims           Claim[]
+}
+
+/// Shippers, brokers and consignees.
+model Customer {
+  id           String     @id @default(cuid())
+  name         String
+  /// SHIPPER | BROKER | BOTH
+  kind         String     @default("SHIPPER")
+  contactName  String?
+  email        String?
+  phone        String?
+  address      String?
+  city         String?
+  country      String?    @default("Uzbekistan")
+  taxId        String?
+  paymentTerms Int        @default(30)
+  creditLimit  Float      @default(50000)
+  notes        String?
+  createdAt    DateTime   @default(now())
+  loads        Load[]
+  brokerLoads  Load[]     @relation("BrokerLoads")
+  invoices     Invoice[]
+  documents    Document[]
+  claims       Claim[]
+}
+
+model Load {
+  id           String      @id @default(cuid())
+  reference    String      @unique
+  customerId   String
+  customer     Customer    @relation(fields: [customerId], references: [id])
+  brokerId     String?
+  broker       Customer?   @relation("BrokerLoads", fields: [brokerId], references: [id], onDelete: SetNull)
+  customerRef  String? // customer / broker reference number
+  teamId       String?
+  team         Team?       @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  /// PLANNED | ASSIGNED | IN_TRANSIT | DELIVERED | INVOICED | CANCELLED | TONU
+  status       String      @default("PLANNED")
+  priority     String      @default("NORMAL") // LOW | NORMAL | HIGH | URGENT
+  // Route summary (first pickup → last delivery); detail lives in stops
+  originName   String
+  originCity   String
+  originLat    Float
+  originLng    Float
+  destName     String
+  destCity     String
+  destLat      Float
+  destLng      Float
+  pickupAt     DateTime
+  deliveryAt   DateTime
+  distanceKm   Float
+  emptyKm      Float       @default(0)
+  // Cargo
+  commodity    String
+  weightKg     Float
+  pallets      Int?
+  equipment    String      @default("DRY_VAN")
+  temperatureC Float?
+  hazmat       Boolean     @default(false)
+  // Money
+  rate         Float
+  driverPay    Float       @default(0)
+  fuelCost     Float       @default(0)
+  otherCost    Float       @default(0)
+  /// NONE | MISSING_DOCS | READY_TO_INVOICE | INVOICED | PAID
+  billingStage String      @default("NONE")
+  // Assignment
+  truckId      String?
+  truck        Truck?      @relation(fields: [truckId], references: [id], onDelete: SetNull)
+  trailerId    String?
+  trailer      Trailer?    @relation(fields: [trailerId], references: [id], onDelete: SetNull)
+  driverId     String?
+  driver       Driver?     @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  dispatcherId String?
+  dispatcher   User?       @relation("Dispatcher", fields: [dispatcherId], references: [id], onDelete: SetNull)
+  // Execution
+  departedAt   DateTime?
+  deliveredAt  DateTime?
+  podSignedBy  String?
+  notes        String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  stops        Stop[]
+  events       LoadEvent[]
+  invoice      Invoice?
+  documents    Document[]
+  claims       Claim[]
+
+  @@index([status])
+  @@index([pickupAt])
+  @@index([driverId, status])
+}
+
+/// Multi-stop routing. Loads have at least one PICKUP and one DELIVERY.
+model Stop {
+  id          String    @id @default(cuid())
+  loadId      String
+  load        Load      @relation(fields: [loadId], references: [id], onDelete: Cascade)
+  seq         Int
+  type        String // PICKUP | DELIVERY
+  name        String
+  address     String?
+  city        String
+  lat         Float
+  lng         Float
+  windowStart DateTime?
+  windowEnd   DateTime?
+  arrivedAt   DateTime?
+  departedAt  DateTime?
+  /// PENDING | ARRIVED | DONE
+  status      String    @default("PENDING")
+  notes       String?
+
+  @@index([loadId, seq])
+}
+
+model LoadEvent {
+  id        String   @id @default(cuid())
+  loadId    String
+  load      Load     @relation(fields: [loadId], references: [id], onDelete: Cascade)
+  type      String // CREATED | ASSIGNED | STATUS | NOTE | CHECK_CALL | ISSUE | DOCUMENT | BILLING | EDIT
+  message   String
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  lat       Float?
+  lng       Float?
+  createdAt DateTime @default(now())
+
+  @@index([loadId])
+}
+
+/// Shop work: PM, repairs, inspections. Replaces the old MaintenanceRecord.
+model WorkOrder {
+  id          String    @id @default(cuid())
+  number      Int       @unique @default(autoincrement())
+  truckId     String?
+  truck       Truck?    @relation(fields: [truckId], references: [id], onDelete: Cascade)
+  trailerId   String?
+  trailer     Trailer?  @relation(fields: [trailerId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  /// PM | ENGINE | COOLING | TIRES | BRAKES | ELECTRICAL | BODY | TOWING | INSPECTION | OTHER
+  category    String    @default("OTHER")
+  /// LOW | MEDIUM | HIGH | URGENT
+  priority    String    @default("MEDIUM")
+  /// DRAFT | OPEN | IN_PROGRESS | DONE | CANCELLED
+  status      String    @default("OPEN")
+  vendor      String?
+  scheduledAt DateTime
+  inAt        DateTime? // unit entered the shop
+  outAt       DateTime? // unit left the shop
+  completedAt DateTime?
+  odometerKm  Int?
+  laborCost   Float     @default(0)
+  partsCost   Float     @default(0)
+  cost        Float     @default(0)
+  notes       String?
+  createdById String?
+  createdBy   User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  documents   Document[]
+
+  @@index([status])
+  @@index([truckId])
+}
+
+model FuelLog {
+  id         String   @id @default(cuid())
+  truckId    String
+  truck      Truck    @relation(fields: [truckId], references: [id], onDelete: Cascade)
+  driverId   String?
+  driver     Driver?  @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  liters     Float
+  cost       Float
+  odometerKm Int?
+  station    String?
+  date       DateTime @default(now())
+}
+
+model Invoice {
+  id         String    @id @default(cuid())
+  number     String    @unique
+  customerId String
+  customer   Customer  @relation(fields: [customerId], references: [id])
+  loadId     String?   @unique
+  load       Load?     @relation(fields: [loadId], references: [id], onDelete: SetNull)
+  amount     Float
+  taxRate    Float     @default(0.12)
+  status     String    @default("DRAFT") // DRAFT | SENT | PAID | VOID
+  issuedAt   DateTime  @default(now())
+  dueAt      DateTime
+  paidAt     DateTime?
+  notes      String?
+  createdAt  DateTime  @default(now())
+}
+
+/// Cargo / liability / equipment claims.
+model Claim {
+  id            String      @id @default(cuid())
+  number        String      @unique
+  /// CARGO_DAMAGE | CARGO_LOSS | LATE_CARGO | OSD | ACCIDENT | EQUIPMENT_DAMAGE | INJURY | OTHER
+  type          String
+  /// LOW | MEDIUM | HIGH | CRITICAL
+  severity      String      @default("MEDIUM")
+  /// REPORTED | UNDER_REVIEW | DOCS_COLLECTED | SUBMITTED | NEGOTIATION | APPROVED | DENIED | PAID | CLOSED | DISPUTED | LITIGATION
+  status        String      @default("REPORTED")
+  incidentAt    DateTime
+  location      String?
+  description   String
+  /// OURS | THIRD_PARTY | SHARED | UNKNOWN
+  fault         String      @default("UNKNOWN")
+  amountClaimed Float       @default(0)
+  amountSettled Float?
+  driverId      String?
+  driver        Driver?     @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  loadId        String?
+  load          Load?       @relation(fields: [loadId], references: [id], onDelete: SetNull)
+  truckId       String?
+  truck         Truck?      @relation(fields: [truckId], references: [id], onDelete: SetNull)
+  trailerId     String?
+  trailer       Trailer?    @relation(fields: [trailerId], references: [id], onDelete: SetNull)
+  customerId    String?
+  customer      Customer?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  assignedToId  String?
+  assignedTo    User?       @relation("ClaimAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  createdById   String?
+  createdBy     User?       @relation("ClaimCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  closedAt      DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  documents     Document[]
+  notes         ClaimNote[]
+
+  @@index([status])
+}
+
+model ClaimNote {
+  id        String   @id @default(cuid())
+  claimId   String
+  claim     Claim    @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  body      String
+  createdAt DateTime @default(now())
+}
+
+/// Files attached to loads (RC, BOL, POD…), trucks, trailers, drivers, customers, work orders,
+/// claims, or the company itself. Bytes live in Vercel Blob (prod) or ./storage (local dev).
+model Document {
+  id           String     @id @default(cuid())
+  kind         String
+  name         String
+  storageKey   String     @unique
+  contentType  String
+  size         Int
+  expiresAt    DateTime?
+  notes        String?
+  isCompany    Boolean    @default(false)
+  loadId       String?
+  load         Load?      @relation(fields: [loadId], references: [id], onDelete: Cascade)
+  truckId      String?
+  truck        Truck?     @relation(fields: [truckId], references: [id], onDelete: Cascade)
+  trailerId    String?
+  trailer      Trailer?   @relation(fields: [trailerId], references: [id], onDelete: Cascade)
+  driverId     String?
+  driver       Driver?    @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  customerId   String?
+  customer     Customer?  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  workOrderId  String?
+  workOrder    WorkOrder? @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  claimId      String?
+  claim        Claim?     @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  uploadedById String?
+  uploadedBy   User?      @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime   @default(now())
+
+  @@index([loadId])
+  @@index([truckId])
+  @@index([trailerId])
+  @@index([driverId])
+  @@index([customerId])
+  @@index([claimId])
+}
+
+/// Team chat. room = "company" | "load:<loadId>" | "team:<teamId>"
+model ChatMessage {
+  id        String   @id @default(cuid())
+  room      String
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([room, createdAt])
+}
+
+model Announcement {
+  id        String    @id @default(cuid())
+  title     String
+  body      String
+  pinned    Boolean   @default(false)
+  authorId  String?
+  author    User?     @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  entity    String
+  entityId  String?
+  details   String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+/// Small key/value store for runtime settings (company profile JSON, weekly goals, linked Telegram group).
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}

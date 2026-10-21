@@ -1,0 +1,10 @@
+# Never upload local-only / secret files with `vercel deploy`
+DEMO-CREDENTIALS.local.txt
+.env
+.env.*
+!.env.example
+storage
+prisma/*.db
+prisma/*.db-journal
+.next
+node_modules

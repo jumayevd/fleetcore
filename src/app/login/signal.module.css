@@ -1,0 +1,148 @@
+/* Quiet "live signal" ornament for the sign-in page. CSS only — no images. */
+
+.grid {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(var(--line-strong) 1px, transparent 1.2px);
+  background-size: 22px 22px;
+  opacity: 0.55;
+  mask-image: radial-gradient(ellipse 70% 60% at 35% 45%, black 20%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 35% 45%, black 20%, transparent 75%);
+  pointer-events: none;
+}
+
+.board {
+  position: relative;
+  margin-top: 2.5rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--canvas) 70%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--fg-subtle);
+}
+
+.lanes {
+  display: grid;
+  gap: 18px;
+  padding: 18px 14px 16px;
+}
+
+.lane {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) 84px;
+  align-items: center;
+  gap: 14px;
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+
+.unit {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.track {
+  position: relative;
+  height: 1px;
+  background: var(--line-strong);
+}
+.track::before,
+.track::after {
+  content: "";
+  position: absolute;
+  top: -2.5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.track::before {
+  left: 0;
+  background: var(--info);
+}
+.track::after {
+  right: 0;
+  background: var(--surface);
+  border: 1.5px solid var(--accent);
+}
+
+/* The runner spans the track and slides its own width; the dot sits on its left edge. */
+.runner {
+  position: absolute;
+  inset: 0;
+  animation: travel var(--dur, 16s) linear infinite;
+  animation-delay: var(--delay, 0s);
+  will-change: transform;
+}
+.dot {
+  position: absolute;
+  left: 0;
+  top: -3.5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.dot::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1px solid var(--accent);
+  opacity: 0;
+  animation: ping 2.4s ease-out infinite;
+  animation-delay: var(--delay, 0s);
+}
+
+.eta {
+  text-align: right;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-subtle);
+}
+
+.foot {
+  display: flex;
+  gap: 16px;
+  padding: 8px 14px 10px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--fg-subtle);
+}
+.foot b {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+@keyframes travel {
+  from { transform: translateX(0); }
+  to { transform: translateX(calc(100% - 8px)); }
+}
+@keyframes ping {
+  0% { transform: scale(0.6); opacity: 0.7; }
+  80%, 100% { transform: scale(1.8); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .runner {
+    animation: none;
+    transform: translateX(var(--rest, 55%));
+  }
+  .dot::after {
+    animation: none;
+  }
+}

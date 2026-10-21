@@ -1,0 +1,410 @@
+@import "tailwindcss";
+
+/* Theme: <html data-theme="light|dark">. See docs/design-system.md */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+  /* Neutrals: cool graphite, white cards floating on a soft canvas */
+  --canvas: #f3f4f7;
+  --surface: #ffffff;
+  --raised: #f5f6f8;
+  --sunken: #eceef2;
+  --overlay: #ffffff;
+  --line: #e7e9ee;
+  --line-strong: #d3d8e0;
+  --fg: #101828;
+  --fg-muted: #475467;
+  --fg-subtle: #667085;
+  --fg-faint: #98a2b3;
+  /* Accent: one confident blue for actions, selection, focus and live state */
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-text: #1d4ed8;
+  --accent-soft: #eef4ff;
+  --on-accent: #ffffff;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --on-primary: #ffffff;
+  /* Brand mark (logo tile) */
+  --mark: #f5a524;
+  --on-mark: #1c1400;
+  /* Status */
+  --ok: #067647;
+  --ok-soft: #ecfdf3;
+  --warn: #c4320a;
+  --warn-soft: #fff4ed;
+  --danger: #d92d20;
+  --danger-soft: #fef3f2;
+  --info: #0e7490;
+  --info-soft: #ecfcff;
+  --progress: #6938ef;
+  --progress-soft: #f4f3ff;
+  --neutral-soft: #f0f2f5;
+  /* Categorical hues: avatars, team marks, KPI icon tiles. Never status. */
+  --hue-1: #2563eb; --hue-1-soft: #eaf1ff;
+  --hue-2: #7c3aed; --hue-2-soft: #f3efff;
+  --hue-3: #0d9488; --hue-3-soft: #e6f7f4;
+  --hue-4: #d97706; --hue-4-soft: #fff5e1;
+  --hue-5: #db2777; --hue-5-soft: #fdeef6;
+  --hue-6: #16a34a; --hue-6-soft: #e9f8ef;
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.04);
+  --shadow-lift: 0 2px 4px -1px rgba(16, 24, 40, 0.05), 0 8px 16px -4px rgba(16, 24, 40, 0.08);
+  --shadow-float: 0 12px 24px -4px rgba(16, 24, 40, 0.14), 0 4px 8px -2px rgba(16, 24, 40, 0.06);
+  --scrim: rgba(16, 24, 40, 0.4);
+  /* Muted basemap so routes and trucks carry the colour */
+  --map-filter: saturate(0.3) brightness(1.04) contrast(0.94);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --canvas: #0b0d12;
+  --surface: #12151c;
+  --raised: #1a1e27;
+  --sunken: #0e1117;
+  --overlay: #171b24;
+  --line: #242a35;
+  --line-strong: #353d4b;
+  --fg: #f0f2f5;
+  --fg-muted: #a9b1be;
+  --fg-subtle: #7d8697;
+  --fg-faint: #545d6c;
+  --accent: #3b82f6;
+  --accent-hover: #60a5fa;
+  --accent-text: #8ab8ff;
+  --accent-soft: rgba(59, 130, 246, 0.16);
+  --on-accent: #ffffff;
+  --primary: #3b82f6;
+  --primary-hover: #4f91f8;
+  --on-primary: #ffffff;
+  --mark: #f5a524;
+  --on-mark: #1c1400;
+  --ok: #47cd89;
+  --ok-soft: rgba(71, 205, 137, 0.14);
+  --warn: #fd853a;
+  --warn-soft: rgba(253, 133, 58, 0.14);
+  --danger: #f97066;
+  --danger-soft: rgba(249, 112, 102, 0.14);
+  --info: #22ccee;
+  --info-soft: rgba(34, 204, 238, 0.14);
+  --progress: #9b8afb;
+  --progress-soft: rgba(155, 138, 251, 0.16);
+  --neutral-soft: rgba(255, 255, 255, 0.06);
+  --hue-1: #7aa7ff; --hue-1-soft: rgba(96, 145, 255, 0.16);
+  --hue-2: #b69cff; --hue-2-soft: rgba(155, 120, 255, 0.16);
+  --hue-3: #4fd1c0; --hue-3-soft: rgba(45, 212, 191, 0.14);
+  --hue-4: #fbbf4d; --hue-4-soft: rgba(251, 191, 36, 0.14);
+  --hue-5: #f77fb8; --hue-5-soft: rgba(244, 114, 182, 0.15);
+  --hue-6: #5ee08f; --hue-6-soft: rgba(74, 222, 128, 0.14);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.3), 0 10px 20px -6px rgba(0, 0, 0, 0.5);
+  --shadow-float: 0 16px 32px -8px rgba(0, 0, 0, 0.6), 0 4px 8px -2px rgba(0, 0, 0, 0.4);
+  --scrim: rgba(0, 0, 0, 0.6);
+  --map-filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9) saturate(0.55);
+}
+
+/* ------------------------------------------------------------------ */
+/* Personal appearance: accent colour, density, font                   */
+/* (set on <html> from cookies; see lib/theme.ts and appearance.tsx)   */
+/* ------------------------------------------------------------------ */
+
+:root[data-accent="indigo"] {
+  --accent: #4f46e5; --accent-hover: #4338ca; --accent-text: #4338ca; --accent-soft: #eef2ff; --on-accent: #ffffff;
+  --primary: #4f46e5; --primary-hover: #4338ca; --on-primary: #ffffff;
+}
+:root[data-accent="violet"] {
+  --accent: #7c3aed; --accent-hover: #6d28d9; --accent-text: #6d28d9; --accent-soft: #f5f3ff; --on-accent: #ffffff;
+  --primary: #7c3aed; --primary-hover: #6d28d9; --on-primary: #ffffff;
+}
+:root[data-accent="teal"] {
+  --accent: #0d9488; --accent-hover: #0f766e; --accent-text: #0f766e; --accent-soft: #effcf9; --on-accent: #ffffff;
+  --primary: #0d9488; --primary-hover: #0f766e; --on-primary: #ffffff;
+}
+:root[data-accent="green"] {
+  --accent: #16a34a; --accent-hover: #15803d; --accent-text: #15803d; --accent-soft: #effbf3; --on-accent: #ffffff;
+  --primary: #16a34a; --primary-hover: #15803d; --on-primary: #ffffff;
+}
+:root[data-accent="amber"] {
+  --accent: #d97706; --accent-hover: #b45309; --accent-text: #b45309; --accent-soft: #fff8e6; --on-accent: #ffffff;
+  --primary: #f59e0b; --primary-hover: #fbbf24; --on-primary: #1c1400;
+}
+:root[data-accent="graphite"] {
+  --accent: #344054; --accent-hover: #1d2939; --accent-text: #1d2939; --accent-soft: #f2f4f7; --on-accent: #ffffff;
+  --primary: #101828; --primary-hover: #1d2939; --on-primary: #ffffff;
+}
+:root[data-theme="dark"][data-accent="indigo"] {
+  --accent: #6366f1; --accent-hover: #818cf8; --accent-text: #a5b4fc; --accent-soft: rgba(99, 102, 241, 0.18);
+  --primary: #6366f1; --primary-hover: #7c7ff4;
+}
+:root[data-theme="dark"][data-accent="violet"] {
+  --accent: #8b5cf6; --accent-hover: #a78bfa; --accent-text: #c4b5fd; --accent-soft: rgba(139, 92, 246, 0.18);
+  --primary: #8b5cf6; --primary-hover: #9d74f7;
+}
+:root[data-theme="dark"][data-accent="teal"] {
+  --accent: #2dd4bf; --accent-hover: #5eead4; --accent-text: #5eead4; --accent-soft: rgba(45, 212, 191, 0.14);
+  --primary: #0f9f90; --primary-hover: #14b8a6;
+}
+:root[data-theme="dark"][data-accent="green"] {
+  --accent: #4ade80; --accent-hover: #86efac; --accent-text: #86efac; --accent-soft: rgba(74, 222, 128, 0.14);
+  --primary: #16a34a; --primary-hover: #22c55e;
+}
+:root[data-theme="dark"][data-accent="amber"] {
+  --accent: #fbbf24; --accent-hover: #fcd34d; --accent-text: #fcd34d; --accent-soft: rgba(251, 191, 36, 0.14);
+  --primary: #f59e0b; --primary-hover: #fbbf24; --on-primary: #1c1400;
+}
+:root[data-theme="dark"][data-accent="graphite"] {
+  --accent: #d0d5dd; --accent-hover: #f2f4f7; --accent-text: #e4e7ec; --accent-soft: rgba(255, 255, 255, 0.08); --on-accent: #101828;
+  --primary: #f2f4f7; --primary-hover: #ffffff; --on-primary: #101828;
+}
+
+/* Density scales every rem-based space and control height; text sizes stay put. */
+:root { font-size: 14px; }
+:root[data-density="compact"] { font-size: 13px; }
+:root[data-density="comfortable"] { font-size: 15.5px; }
+
+/* Font choice */
+:root { --font-ui: var(--font-inter); }
+:root[data-font="geist"] { --font-ui: var(--font-geist-sans); }
+:root[data-font="system"] { --font-ui: ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+
+@theme inline {
+  --font-sans: var(--font-ui), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-sunken: var(--sunken);
+  --color-overlay: var(--overlay);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-fg-faint: var(--fg-faint);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-text: var(--accent-text);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-mark: var(--mark);
+  --color-on-mark: var(--on-mark);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-on-primary: var(--on-primary);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-progress: var(--progress);
+  --color-progress-soft: var(--progress-soft);
+  --color-neutral-soft: var(--neutral-soft);
+  /* Backdrop behind drawers and dialogs. */
+  --color-scrim: var(--scrim);
+
+  --color-hue-1: var(--hue-1);
+  --color-hue-1-soft: var(--hue-1-soft);
+  --color-hue-2: var(--hue-2);
+  --color-hue-2-soft: var(--hue-2-soft);
+  --color-hue-3: var(--hue-3);
+  --color-hue-3-soft: var(--hue-3-soft);
+  --color-hue-4: var(--hue-4);
+  --color-hue-4-soft: var(--hue-4-soft);
+  --color-hue-5: var(--hue-5);
+  --color-hue-5-soft: var(--hue-5-soft);
+  --color-hue-6: var(--hue-6);
+  --color-hue-6-soft: var(--hue-6-soft);
+
+  --shadow-card: var(--shadow-card);
+  --shadow-lift: var(--shadow-lift);
+  --shadow-float: var(--shadow-float);
+  /* Fixed px (not rem) so density changes spacing, not corner shapes. */
+  --radius-md: 8px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+}
+
+body {
+  background: var(--canvas);
+  color: var(--fg);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+html {
+  background: var(--canvas);
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+/* Tabular numerals for metrics, IDs and money: columns line up, in the same face as the text. */
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  letter-spacing: -0.005em;
+}
+
+/* Finer icon strokes read lighter and more refined at UI sizes. */
+svg.lucide {
+  stroke-width: 1.75;
+}
+/* Small label above a value or section: sentence case, quiet, no tracking. */
+.eyebrow {
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--fg-muted);
+}
+
+/* Quiet scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+/* Focus ring: accent */
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Native form controls pick up the theme */
+input[type="date"],
+input[type="datetime-local"],
+input[type="time"] {
+  color-scheme: inherit;
+}
+
+/* Leaflet */
+.truck-marker {
+  background: transparent;
+  border: none;
+}
+.leaflet-container {
+  font-family: inherit;
+  background: var(--sunken);
+}
+.leaflet-tile-pane {
+  filter: var(--map-filter);
+}
+.leaflet-control-zoom a,
+.leaflet-control-attribution {
+  background: var(--surface) !important;
+  color: var(--fg-muted) !important;
+  border-color: var(--line) !important;
+}
+.leaflet-control-attribution a {
+  color: var(--fg-muted) !important;
+}
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: var(--overlay);
+  color: var(--fg);
+  box-shadow: var(--shadow-float);
+}
+
+@media print {
+  html,
+  body {
+    background: #fff;
+    color: #000;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Motion                                                              */
+/* ------------------------------------------------------------------ */
+
+/* Page content fades up on navigation (template.tsx). fill-mode backwards: no transform remains afterwards,
+   so fixed and sticky descendants behave normally once the animation ends. */
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.page-enter > * {
+  animation: page-enter 0.24s cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+}
+
+/* Menus, popovers and dialogs */
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+.pop-in {
+  animation: pop-in 0.14s ease-out backwards;
+  transform-origin: top right;
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.fade-in {
+  animation: fade-in 0.16s ease-out backwards;
+}
+
+/* Mobile navigation drawer */
+@keyframes drawer-in {
+  from { transform: translateX(-100%); }
+  to { transform: none; }
+}
+.drawer-in {
+  animation: drawer-in 0.22s cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+}
+
+/* Skeletons appear only if a page takes longer than a blink, so fast navigations never flash. */
+.skeleton-delay {
+  animation: fade-in 0.2s ease-out 0.12s backwards;
+}
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+.skeleton {
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--sunken) 0%, var(--raised) 50%, var(--sunken) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+/* Navigation progress bar (components/nav-progress.tsx) */
+@keyframes nav-grow {
+  from { transform: scaleX(0.08); }
+  to { transform: scaleX(0.9); }
+}
+.nav-progress {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 70;
+  height: 2px;
+  background: var(--accent);
+  transform-origin: left;
+  pointer-events: none;
+}
+.nav-progress[data-state="loading"] {
+  animation: nav-grow 6s cubic-bezier(0.1, 0.7, 0.2, 1) forwards, fade-in 0.2s ease 0.1s backwards;
+}
+.nav-progress[data-state="done"] {
+  transform: scaleX(1);
+  opacity: 0;
+  transition: transform 0.2s ease, opacity 0.3s ease 0.15s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-enter > *,
+  .pop-in,
+  .fade-in,
+  .drawer-in,
+  .skeleton-delay {
+    animation: none;
+  }
+  .skeleton {
+    animation: none;
+  }
+}
