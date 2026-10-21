@@ -5,6 +5,13 @@ time, expiring paperwork, drivers' licences and medicals, fuel and maintenance c
 copy of the full FleetOps platform with dispatch, loads, customers, billing, claims and chat taken out, and with **accounts and
 companies** added so one specialist can work for several fleets.
 
+## Live
+
+- Production: **https://fleetcore-uz.vercel.app** (Vercel project `fleetcore`, region `fra1`). Every push to `main` deploys.
+- Its own Neon database (`fleetcore-db`) and private Blob store (`fleetcore-docs`); nothing is shared with FleetOps.
+- Production holds the demo companies; their shared password is in `DEMO-CREDENTIALS.local.txt` (git-ignored, never
+  deployed). Demo logins are hidden on the sign-in page (`DEMO_MODE=false`).
+
 ## Accounts and companies
 
 - An **account** is a sign-in (email + password). A **company** is one fleet's workspace; it owns every truck, trailer,
@@ -71,9 +78,11 @@ The local cluster uses port **5434** so it can run next to the full platform's (
 
 ## Deploying (Vercel project `fleetcore`)
 
-This copy has its own database and must not share the full platform's:
+FleetCore has its own database and must not share the full platform's. This is how `fleetcore` was set up (to repeat
+it elsewhere):
 
-1. Push this folder to its own repository and import it as a **new** Vercel project (region `fra1` is set in `vercel.json`).
+1. Push this folder to its own repository and create a **new** Vercel project connected to it (`vercel.json` pins the
+   framework to Next.js and the region to `fra1`).
 2. Add a **new** Neon database from the Vercel Marketplace (sets `DATABASE_URL`, `DATABASE_URL_UNPOOLED`) and a private
    Blob store (`BLOB_READ_WRITE_TOKEN`).
 3. Set `AUTH_SECRET` (random 32-byte hex) and `DEMO_MODE=false`; optionally `APP_URL` for invitation links.
