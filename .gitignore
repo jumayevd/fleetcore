@@ -59,3 +59,5 @@ DEMO-CREDENTIALS.local.txt
 
 # local tool config
 /.claude/launch.json
+.vercel
+.env*
