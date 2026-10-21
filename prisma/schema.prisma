@@ -1,4 +1,4 @@
-// FleetOps Fleet data model.
+// FleetCore data model.
 // Postgres (Neon via the Vercel Marketplace). DATABASE_URL is the pooled
 // connection for the app; DATABASE_URL_UNPOOLED is used for migrations.
 // Status/role fields are strings; allowed values live in src/lib/constants.ts.

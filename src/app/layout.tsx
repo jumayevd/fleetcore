@@ -10,7 +10,7 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: { default: "FleetOps", template: "%s · FleetOps" },
+  title: { default: "FleetCore", template: "%s · FleetCore" },
   description: "Trucks, trailers, maintenance and compliance for fleet specialists, across every company you work for.",
 };
 

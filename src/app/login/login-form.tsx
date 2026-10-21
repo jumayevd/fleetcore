@@ -44,7 +44,7 @@ export function LoginForm({ demoAccounts, defaultEmail, invite, submitLabel }: {
         <button type="submit" disabled={pending} aria-busy={pending || undefined} className={cn(buttonClass("primary"), "w-full")}>
           {pending ? "Signing in…" : submitLabel}
         </button>
-        <p className="text-[11px] text-fg-subtle">One account can work for several companies. Forgot your password? Ask your FleetOps administrator to reset it.</p>
+        <p className="text-[11px] text-fg-subtle">One account can work for several companies. Forgot your password? Ask your FleetCore administrator to reset it.</p>
       </form>
 
       {demoAccounts.length > 0 && !invite && (

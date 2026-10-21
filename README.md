@@ -1,8 +1,8 @@
-# FleetOps Fleet — for fleet specialists
+# FleetCore — for fleet specialists
 
 A workspace for the person who keeps trucks on the road: trucks and trailers, PM by odometer, work orders and shop
-time, expiring paperwork, drivers' licences and medicals, fuel and maintenance costs, and a live map. It is a copy of
-the full FleetOps platform with dispatch, loads, customers, billing, claims and chat taken out, and with **accounts and
+time, expiring paperwork, drivers' licences and medicals, fuel and maintenance costs, and a live map. It started as a
+copy of the full FleetOps platform with dispatch, loads, customers, billing, claims and chat taken out, and with **accounts and
 companies** added so one specialist can work for several fleets.
 
 ## Accounts and companies
@@ -69,7 +69,7 @@ owner@demo.local, timur@nomadtrucking.demo, bekzod@demo.local, viewer@demo.local
 
 The local cluster uses port **5434** so it can run next to the full platform's (5433).
 
-## Deploying as its own Vercel project
+## Deploying (Vercel project `fleetcore`)
 
 This copy has its own database and must not share the full platform's:
 

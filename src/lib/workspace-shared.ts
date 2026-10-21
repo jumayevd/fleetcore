@@ -8,7 +8,7 @@ import type { Role } from "./constants";
 /** Name of the cookie that says which signed-in account and company this browser is working in ("<userId>.<companyId>"). */
 export const ACTIVE_COOKIE = "fo_active";
 /** Same-origin channel: a tab that switches company tells the others, so a stale tab never edits the wrong company. */
-export const WORKSPACE_CHANNEL = "fleetops-workspace";
+export const WORKSPACE_CHANNEL = "fleetcore-workspace";
 
 export type WorkspaceCompany = { id: string; name: string; color: string | null; role: Role };
 /** One signed-in account and the companies it can open. */

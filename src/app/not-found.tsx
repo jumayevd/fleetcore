@@ -6,7 +6,7 @@ export default async function NotFound() {
   const { accounts, active } = await getSessionContext();
   return (
     <main className="flex min-h-dvh items-center justify-center bg-canvas px-5">
-      <title>Page not found · FleetOps</title>
+      <title>Page not found · FleetCore</title>
       <div className="w-full max-w-md rounded-lg border border-line bg-surface p-8">
         <p className="eyebrow">Error <span className="num">404</span></p>
         <h1 className="mt-2 text-lg font-semibold tracking-tight text-fg">Page not found</h1>

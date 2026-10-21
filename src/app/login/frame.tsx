@@ -9,8 +9,7 @@ export function Wordmark() {
       <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-mark bg-linear-to-br from-white/25 to-white/0 text-on-mark shadow-card">
         <Truck className="h-4 w-4" />
       </span>
-      <span className="text-[15px] font-semibold tracking-tight text-fg">FleetOps</span>
-      <span className="eyebrow mt-px">Fleet</span>
+      <span className="text-[15px] font-semibold tracking-tight text-fg">FleetCore</span>
     </div>
   );
 }
@@ -43,7 +42,7 @@ export function AuthFrame({ children }: { children: ReactNode }) {
           </p>
           <Signal />
         </div>
-        <p className="relative z-10 text-[11px] text-fg-subtle">© {year} FleetOps · Day and night themes · Keyboard first</p>
+        <p className="relative z-10 text-[11px] text-fg-subtle">© {year} FleetCore · Day and night themes · Keyboard first</p>
       </section>
 
       <section className="flex items-center justify-center px-5 py-14 sm:px-8">

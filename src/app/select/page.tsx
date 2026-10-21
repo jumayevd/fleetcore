@@ -56,7 +56,7 @@ export default async function SelectCompanyPage({ searchParams }: PageProps<"/se
   return (
     <div className="min-h-dvh bg-canvas">
       <header className="flex h-14 items-center justify-between gap-3 px-4 lg:px-8">
-        <Link href={ctx.active ? "/dashboard" : "/select"} aria-label="FleetOps" className="min-w-0"><Wordmark /></Link>
+        <Link href={ctx.active ? "/dashboard" : "/select"} aria-label="FleetCore" className="min-w-0"><Wordmark /></Link>
         <div className="flex shrink-0 items-center gap-1.5">
           <ThemeToggle className="h-8 border border-line bg-surface px-2" />
           <LinkButton href="/login?add=1" variant="secondary" size="sm" aria-label="Add another account"><UserPlus /><span className="hidden sm:inline">Add another account</span></LinkButton>

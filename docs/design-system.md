@@ -1,4 +1,4 @@
-# FleetOps design system — "Graphite"
+# FleetCore design system — "Graphite"
 
 A calm, modern control room that works in daylight and at night: white cards floating on a soft graphite
 canvas, one confident **accent** (blue by default) for actions, selection, focus and live state, an amber brand

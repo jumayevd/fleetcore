@@ -69,7 +69,7 @@ export default async function InvitePage({ params }: PageProps<"/invite/[token]"
             <p className="text-[13px] text-fg-muted">
               {accounts.length
                 ? <>You&apos;re signed in as {accounts.map((a) => a.email).join(", ")}. Add the invited account to accept — your other accounts stay signed in.</>
-                : "Sign in with this email, or create your account if you're new to FleetOps."}
+                : "Sign in with this email, or create your account if you're new to FleetCore."}
             </p>
             <div className="flex flex-wrap gap-2">
               <LinkButton href={`/login?add=1&${q}`}>{accounts.length ? `Sign in as ${usable.email}` : "Sign in and join"}</LinkButton>

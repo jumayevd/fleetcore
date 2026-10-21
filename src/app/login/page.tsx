@@ -47,7 +47,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
     <AuthFrame>
       {(adding || usable) && ctx.accounts.length > 0 && (
         <Link href={ctx.active ? HOME : "/select"} className="mb-4 inline-flex items-center gap-1.5 text-[12px] font-medium text-fg-muted hover:text-fg">
-          <ArrowLeft className="h-3.5 w-3.5" />Back to FleetOps
+          <ArrowLeft className="h-3.5 w-3.5" />Back to FleetCore
         </Link>
       )}
       <AuthCard title={title} subtitle={subtitle}>
@@ -61,7 +61,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
           submitLabel={adding ? "Add account" : usable ? "Sign in and join" : "Sign in"}
         />
         <p className="mt-5 border-t border-line pt-4 text-[12px] text-fg-muted">
-          {usable ? "No FleetOps account for this email yet? " : "New to FleetOps? "}
+          {usable ? "No FleetCore account for this email yet? " : "New to FleetCore? "}
           <Link href={signupHref} className="font-medium text-accent-text hover:underline">{usable ? "Create one and join" : "Create an account"}</Link>
         </p>
       </AuthCard>

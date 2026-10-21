@@ -6,7 +6,7 @@ export default async function AppNotFound() {
   const user = await getCurrentUser();
   return (
     <>
-      <title>Not found · FleetOps</title>
+      <title>Not found · FleetCore</title>
       <div className="mx-auto mt-10 max-w-lg">
         <Card bodyClassName="p-6">
           <p className="eyebrow">Error <span className="num">404</span></p>

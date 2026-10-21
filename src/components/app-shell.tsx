@@ -187,10 +187,10 @@ function SideNav({ user, active, accounts, path, data, expanded, pinned, onToggl
         })}
       </div>
       <div className="flex items-center gap-1 p-2">
-        <Link href="/select" onClick={onNavigate} title="FleetOps · all companies"
+        <Link href="/select" onClick={onNavigate} title="FleetCore · all companies"
           className={cn("flex h-8 min-w-0 items-center gap-2 rounded-[9px] text-[12px] text-fg-subtle transition-colors hover:bg-surface/60 hover:text-fg", expanded ? "flex-1 px-2.5" : "w-full justify-center")}>
           <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] bg-mark text-on-mark"><Truck className="h-3 w-3" /></span>
-          {expanded && <span className="truncate font-medium">FleetOps</span>}
+          {expanded && <span className="truncate font-medium">FleetCore</span>}
         </Link>
         {expanded && (
           <button type="button" onClick={onTogglePin} title={pinned ? "Collapse sidebar" : "Keep sidebar open"}
@@ -387,6 +387,6 @@ function breadcrumbs(path: string): { href: string; label: string }[] {
     const label = SEGMENT_LABELS[seg] ?? (seg.length > 16 ? "Details" : seg[0].toUpperCase() + seg.slice(1));
     out.push({ href: acc, label });
   }
-  if (!out.length) out.push({ href: path, label: SEGMENT_LABELS[rest[0]] ?? "FleetOps" });
+  if (!out.length) out.push({ href: path, label: SEGMENT_LABELS[rest[0]] ?? "FleetCore" });
   return out;
 }

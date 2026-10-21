@@ -127,7 +127,7 @@ export default async function MembersPage() {
 
         <Card className="h-fit" title={
           <span className="flex items-center gap-1.5">Invite someone
-            <InfoTip>They get a link to join {me.company.name}. If they already use FleetOps for another company, the same account works here too.</InfoTip>
+            <InfoTip>They get a link to join {me.company.name}. If they already use FleetCore for another company, the same account works here too.</InfoTip>
           </span>
         }>
           <ActionForm action={inviteMember} resetOnSuccess className="space-y-3">
@@ -136,7 +136,7 @@ export default async function MembersPage() {
               <Select name="role" required defaultValue="SPECIALIST" options={grantable.map((r) => ({ value: r, label: ROLE_LABELS[r] }))} />
             </Field>
             <SubmitButton className="w-full" pendingText="Creating link…">Create invitation link</SubmitButton>
-            <p className="text-[11px] text-fg-subtle">FleetOps doesn&apos;t send email: copy the link from Invitations and share it the way your team talks.</p>
+            <p className="text-[11px] text-fg-subtle">FleetCore doesn&apos;t send email: copy the link from Invitations and share it the way your team talks.</p>
           </ActionForm>
         </Card>
       </div>

@@ -17,7 +17,7 @@ export default function RootError({ error, reset, retry }: {
 
   return (
     <main className="flex min-h-dvh items-center justify-center bg-canvas px-5">
-      <title>Something went wrong · FleetOps</title>
+      <title>Something went wrong · FleetCore</title>
       <div className="w-full max-w-md rounded-lg border border-line bg-surface p-8">
         <p className="eyebrow">Unexpected error</p>
         <h1 className="mt-2 text-lg font-semibold tracking-tight text-fg">Something went wrong</h1>

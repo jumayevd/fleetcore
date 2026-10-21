@@ -8,3 +8,5 @@ prisma/*.db
 prisma/*.db-journal
 .next
 node_modules
+.pgdata
+.claude

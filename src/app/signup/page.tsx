@@ -18,7 +18,7 @@ export default async function SignupPage({ searchParams }: PageProps<"/signup">)
       <AuthCard
         title={usable ? `Join ${usable.company.name}` : "Create your account"}
         subtitle={usable
-          ? <>You were invited as {role}. Create your FleetOps account for <span className="font-medium text-fg">{usable.email}</span>.</>
+          ? <>You were invited as {role}. Create your FleetCore account for <span className="font-medium text-fg">{usable.email}</span>.</>
           : "Set up your account and your first company. You can add more companies, or join others, any time."}>
         {token && !usable && (
           <p className="mt-4 rounded-md bg-warn-soft px-3 py-2 text-[12px] text-warn">This invitation link has expired or was already used. You can still create an account with your own company.</p>

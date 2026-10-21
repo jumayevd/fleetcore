@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { CITIES, nearestCity } from "../src/lib/constants";
 
 /*
- * Demo data for FleetOps Fleet: four companies, one fleet specialist (Aziza) who works for three of them with two
+ * Demo data for FleetCore: four companies, one fleet specialist (Aziza) who works for three of them with two
  * different logins, and an open invitation to a fourth. Every row carries its companyId explicitly (this script
  * uses the unscoped client).
  */
