@@ -14,10 +14,8 @@ import { NO_VENDOR, plural } from "../_lib/shared";
 const delta = (cur: number, prev: number) => (prev > 0 ? `${cur >= prev ? "+" : "-"}${Math.round((Math.abs(cur - prev) / prev) * 100)}%` : undefined);
 /** Spending more is a caution, not a win. */
 const costTone = (cur: number, prev: number): Tone => (cur > prev ? "warn" : "ok");
-/** How `maintenanceSummary` buckets work orders without a vendor; shown with the module's wording. */
-const SUMMARY_NO_VENDOR = "Unknown vendor";
-/** Also matches the module's wording, should the shared summary adopt it. */
-const isNoVendor = (name: string) => name === SUMMARY_NO_VENDOR || name === NO_VENDOR;
+/** `maintenanceSummary` groups work orders without a vendor under the same wording as the repair log filter. */
+const isNoVendor = (name: string) => name === NO_VENDOR;
 /** Work orders without a unit are grouped under this name by `maintenanceSummary`. */
 const NO_UNIT = "—";
 
@@ -49,7 +47,8 @@ export async function SummaryTab({ period, trucks, trailers }: { period: PeriodK
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         <Stat label="Spend" value={money(cur.spend)} delta={delta(cur.spend, prev.spend)} deltaTone={costTone(cur.spend, prev.spend)} hint={prev.spend ? compare : `${PERIODS[period].hint.toLowerCase()}, nothing before that`} />
         <Stat label="Records" value={cur.records} delta={delta(cur.records, prev.records)} deltaTone="neutral" hint={`${cur.byVendor.length} vendors · ${cur.byCategory.length} categories`} />
-        <Stat label="Cost per km" value={cur.km ? `${money2(cur.costPerKm)}` : "—"} delta={cur.km && prev.km ? delta(cur.costPerKm, prev.costPerKm) : undefined} deltaTone={costTone(cur.costPerKm, prev.costPerKm)} hint={cur.km ? `${km(cur.km)} run incl. empty` : "No completed loads in this window"} />
+        <Stat label="Cost per km" value={cur.km ? `${money2(cur.costPerKm)}` : "—"} delta={cur.km && prev.km ? delta(cur.costPerKm, prev.costPerKm) : undefined} deltaTone={costTone(cur.costPerKm, prev.costPerKm)}
+          hint={cur.km ? `spend over ${km(cur.km)} driven, from odometer readings` : "no odometer readings in this window"} />
         <Stat label="Units in shop" value={unitsInShop} tone={unitsInShop ? (oldestInShop > 21 ? "danger" : "warn") : "ok"}
           hint={!unitsInShop ? "every unit available" : cur.openCount > unitsInShop ? `${plural(cur.openCount, "job")} · oldest ${oldestInShop}d in` : `oldest ${oldestInShop}d in`} />
         <Stat label="Avg per unit" value={money(avgPerUnit)} delta={delta(avgPerUnit, prevAvg)} deltaTone={costTone(avgPerUnit, prevAvg)} hint={`${plural(unitsServiced, "unit")} serviced`} />

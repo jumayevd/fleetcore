@@ -1,7 +1,12 @@
-// FleetOps data model (v2).
+// FleetOps Fleet data model.
 // Postgres (Neon via the Vercel Marketplace). DATABASE_URL is the pooled
 // connection for the app; DATABASE_URL_UNPOOLED is used for migrations.
 // Status/role fields are strings; allowed values live in src/lib/constants.ts.
+//
+// Accounts and companies: a User is a sign-in identity (email + password). A Company is one fleet's workspace and owns
+// every operational row (companyId). A Membership gives a user a role in a company, so one person can work for several
+// companies, and a browser can hold several signed-in users at once. src/lib/db.ts scopes every query on a company
+// model to the company that is active for the request; rootDb (unscoped) is only for accounts and memberships.
 
 generator client {
   provider = "prisma-client-js"
@@ -13,123 +18,132 @@ datasource db {
   directUrl = env("DATABASE_URL_UNPOOLED")
 }
 
-/// Dispatcher team. Drivers and loads are grouped by team on the boards.
-model Team {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  color     String? // hex, for board headers
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
-  users     User[]
-  drivers   Driver[]
-  loads     Load[]
-}
+/**
+ * ------------------------------------------------------------------
+ */
+/**
+ * Accounts
+ */
+/**
+ * ------------------------------------------------------------------
+ */
 
 model User {
-  id               String     @id @default(cuid())
-  name             String
-  email            String     @unique
-  passwordHash     String
-  role             String // OWNER | ADMIN | DISPATCHER | FLEET_MANAGER | ACCOUNTANT | DRIVER
-  phone            String?
-  active           Boolean    @default(true)
-  lastLoginAt      DateTime?
-  teamId           String?
-  team             Team?      @relation(fields: [teamId], references: [id], onDelete: SetNull)
-  // Telegram alerts: chat linked via /start <telegramLinkCode> to the bot
-  telegramChatId   String?    @unique
-  telegramLinkCode String?    @unique
-  telegramAlerts   Boolean    @default(true)
-  createdAt        DateTime   @default(now())
-  driver           Driver?
-  dispatched       Load[]     @relation("Dispatcher")
-  events           LoadEvent[]
-  audits           AuditLog[]
-  documents        Document[]
-  statusEvents     DriverStatusEvent[]
-  boardCells       BoardCell[]
-  workOrders       WorkOrder[]
-  claimsCreated    Claim[]    @relation("ClaimCreator")
-  claimsAssigned   Claim[]    @relation("ClaimAssignee")
-  claimNotes       ClaimNote[]
-  chatMessages     ChatMessage[]
-  announcements    Announcement[]
+  id           String       @id @default(cuid())
+  name         String
+  email        String       @unique
+  passwordHash String
+  phone        String?
+  active       Boolean      @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime     @default(now())
+  memberships  Membership[]
+  invitesSent  Invite[]
+  workOrders   WorkOrder[]
+  documents    Document[]
+  audits       AuditLog[]
 }
+
+/// One fleet's workspace. Everything a fleet specialist works with belongs to exactly one company.
+model Company {
+  id          String       @id @default(cuid())
+  name        String
+  /// Hex colour of the workspace badge, so it is obvious which company you are working in.
+  color       String?
+  createdAt   DateTime     @default(now())
+  memberships Membership[]
+  invites     Invite[]
+  drivers     Driver[]
+  trucks      Truck[]
+  trailers    Trailer[]
+  workOrders  WorkOrder[]
+  fuelLogs    FuelLog[]
+  documents   Document[]
+  audits      AuditLog[]
+  settings    AppSetting[]
+}
+
+model Membership {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId    String
+  company      Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  /// OWNER | ADMIN | SPECIALIST | VIEWER
+  role         String    @default("SPECIALIST")
+  active       Boolean   @default(true)
+  lastActiveAt DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@unique([userId, companyId])
+  @@index([companyId])
+}
+
+/// A link that lets someone join a company. Accepted by a signed-in account with the same email.
+model Invite {
+  id          String    @id @default(cuid())
+  companyId   String
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  email       String
+  /// OWNER | ADMIN | SPECIALIST | VIEWER
+  role        String    @default("SPECIALIST")
+  token       String    @unique
+  invitedById String?
+  invitedBy   User?     @relation(fields: [invitedById], references: [id], onDelete: SetNull)
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([companyId])
+  @@index([email])
+}
+
+/**
+ * ------------------------------------------------------------------
+ */
+/**
+ * Fleet
+ */
+/**
+ * ------------------------------------------------------------------
+ */
 
 model Driver {
-  id                String    @id @default(cuid())
-  userId            String?   @unique
-  user              User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
-  name              String
-  phone             String?
-  phone2            String?
-  email             String?
-  licenseNumber     String
-  licenseClass      String    @default("CE")
-  licenseExpiry     DateTime
-  medicalExpiry     DateTime?
+  id            String     @id @default(cuid())
+  companyId     String     @default("") // set by the company scope (src/lib/db.ts); "" fails the foreign key
+  company       Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name          String
+  phone         String?
+  phone2        String?
+  email         String?
+  licenseNumber String
+  licenseClass  String     @default("CE")
+  licenseExpiry DateTime
+  medicalExpiry DateTime?
   /// Employment: ACTIVE | ON_LEAVE | INACTIVE
-  status            String    @default("ACTIVE")
+  status        String     @default("ACTIVE")
   /// COMPANY | OWNER_OPERATOR | LEASE
-  type              String    @default("COMPANY")
-  teamId            String?
-  team              Team?     @relation(fields: [teamId], references: [id], onDelete: SetNull)
-  /// Dispatch board state: READY | DISPATCHED | AT_PICKUP | EN_ROUTE | UNLOADING | STOP | REST | HOME | VACATION
-  boardStatus       String    @default("READY")
-  boardStatusSince  DateTime  @default(now())
-  /// True while a dispatcher has overridden the automatically derived board status.
-  boardStatusManual Boolean   @default(false)
-  hold              Boolean   @default(false)
-  holdReason        String?
-  score             Int       @default(100)
-  hireDate          DateTime  @default(now())
-  payPerKm          Float     @default(0.35)
-  rating            Float     @default(5)
-  notes             String?
-  createdAt         DateTime  @default(now())
-  loads             Load[]
-  fuelLogs          FuelLog[]
-  truck             Truck?    @relation("TruckDriver")
-  documents         Document[]
-  statusEvents      DriverStatusEvent[]
-  boardCells        BoardCell[]
-  claims            Claim[]
-}
+  type          String     @default("COMPANY")
+  /// Kept off the road (safety or paperwork) until released.
+  hold          Boolean    @default(false)
+  holdReason    String?
+  /// Safety score, 0–100.
+  score         Int        @default(100)
+  hireDate      DateTime   @default(now())
+  notes         String?
+  createdAt     DateTime   @default(now())
+  truck         Truck?     @relation("TruckDriver")
+  fuelLogs      FuelLog[]
+  documents     Document[]
 
-/// History of board status changes (auto and manual) — powers "active since" and audit.
-model DriverStatusEvent {
-  id        String   @id @default(cuid())
-  driverId  String
-  driver    Driver   @relation(fields: [driverId], references: [id], onDelete: Cascade)
-  status    String
-  source    String // AUTO | MANUAL
-  note      String?
-  userId    String?
-  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  at        DateTime @default(now())
-
-  @@index([driverId, at])
-}
-
-/// Per-day board annotations: highlight colours and free-text notes on a driver row.
-model BoardCell {
-  id          String   @id @default(cuid())
-  date        DateTime @db.Date
-  driverId    String
-  driver      Driver   @relation(fields: [driverId], references: [id], onDelete: Cascade)
-  column      String // e.g. "row", "notes", "eta"
-  color       String?
-  note        String?
-  updatedById String?
-  updatedBy   User?    @relation(fields: [updatedById], references: [id], onDelete: SetNull)
-  updatedAt   DateTime @updatedAt
-
-  @@unique([date, driverId, column])
+  @@index([companyId])
 }
 
 model Truck {
   id                 String      @id @default(cuid())
-  unitNumber         String      @unique
+  companyId          String      @default("") // set by the company scope (src/lib/db.ts); "" fails the foreign key
+  company            Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  unitNumber         String
   make               String
   model              String
   year               Int
@@ -139,7 +153,7 @@ model Truck {
   status             String      @default("ACTIVE")
   /// COMPANY | OWNER_OPERATOR | LEASED
   ownership          String      @default("COMPANY")
-  group              String? // fleet group / company label
+  group              String? // fleet group / terminal label
   lessor             String?
   leaseStartKm       Int?
   leaseAnnualLimitKm Int?
@@ -165,22 +179,25 @@ model Truck {
   fuelEconomy        Float? // L/100km, rolling
   locationName       String?
   lastPingAt         DateTime?
-  pingSource         String? // SIMULATED | DEVICE | SAMSARA
+  pingSource         String? // MANUAL | DEVICE | SAMSARA | …
   driverId           String?     @unique
   driver             Driver?     @relation("TruckDriver", fields: [driverId], references: [id], onDelete: SetNull)
   notes              String?
   createdAt          DateTime    @default(now())
-  loads              Load[]
   workOrders         WorkOrder[]
   fuelLogs           FuelLog[]
   documents          Document[]
   trailers           Trailer[]
-  claims             Claim[]
+
+  @@unique([companyId, unitNumber])
+  @@index([companyId, status])
 }
 
 model Trailer {
   id               String      @id @default(cuid())
-  unitNumber       String      @unique
+  companyId        String      @default("") // set by the company scope (src/lib/db.ts); "" fails the foreign key
+  company          Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  unitNumber       String
   type             String // DRY_VAN | REEFER | FLATBED | TANKER | CONTAINER
   capacityKg       Int
   plate            String?
@@ -199,179 +216,56 @@ model Trailer {
   inspectionExpiry DateTime?
   notes            String?
   createdAt        DateTime    @default(now())
-  loads            Load[]
   documents        Document[]
   workOrders       WorkOrder[]
-  claims           Claim[]
+
+  @@unique([companyId, unitNumber])
+  @@index([companyId, status])
 }
 
-/// Shippers, brokers and consignees.
-model Customer {
-  id           String     @id @default(cuid())
-  name         String
-  /// SHIPPER | BROKER | BOTH
-  kind         String     @default("SHIPPER")
-  contactName  String?
-  email        String?
-  phone        String?
-  address      String?
-  city         String?
-  country      String?    @default("Uzbekistan")
-  taxId        String?
-  paymentTerms Int        @default(30)
-  creditLimit  Float      @default(50000)
-  notes        String?
-  createdAt    DateTime   @default(now())
-  loads        Load[]
-  brokerLoads  Load[]     @relation("BrokerLoads")
-  invoices     Invoice[]
-  documents    Document[]
-  claims       Claim[]
-}
-
-model Load {
-  id           String      @id @default(cuid())
-  reference    String      @unique
-  customerId   String
-  customer     Customer    @relation(fields: [customerId], references: [id])
-  brokerId     String?
-  broker       Customer?   @relation("BrokerLoads", fields: [brokerId], references: [id], onDelete: SetNull)
-  customerRef  String? // customer / broker reference number
-  teamId       String?
-  team         Team?       @relation(fields: [teamId], references: [id], onDelete: SetNull)
-  /// PLANNED | ASSIGNED | IN_TRANSIT | DELIVERED | INVOICED | CANCELLED | TONU
-  status       String      @default("PLANNED")
-  priority     String      @default("NORMAL") // LOW | NORMAL | HIGH | URGENT
-  // Route summary (first pickup → last delivery); detail lives in stops
-  originName   String
-  originCity   String
-  originLat    Float
-  originLng    Float
-  destName     String
-  destCity     String
-  destLat      Float
-  destLng      Float
-  pickupAt     DateTime
-  deliveryAt   DateTime
-  distanceKm   Float
-  emptyKm      Float       @default(0)
-  // Cargo
-  commodity    String
-  weightKg     Float
-  pallets      Int?
-  equipment    String      @default("DRY_VAN")
-  temperatureC Float?
-  hazmat       Boolean     @default(false)
-  // Money
-  rate         Float
-  driverPay    Float       @default(0)
-  fuelCost     Float       @default(0)
-  otherCost    Float       @default(0)
-  /// NONE | MISSING_DOCS | READY_TO_INVOICE | INVOICED | PAID
-  billingStage String      @default("NONE")
-  // Assignment
-  truckId      String?
-  truck        Truck?      @relation(fields: [truckId], references: [id], onDelete: SetNull)
-  trailerId    String?
-  trailer      Trailer?    @relation(fields: [trailerId], references: [id], onDelete: SetNull)
-  driverId     String?
-  driver       Driver?     @relation(fields: [driverId], references: [id], onDelete: SetNull)
-  dispatcherId String?
-  dispatcher   User?       @relation("Dispatcher", fields: [dispatcherId], references: [id], onDelete: SetNull)
-  // Execution
-  departedAt   DateTime?
-  deliveredAt  DateTime?
-  podSignedBy  String?
-  notes        String?
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-  stops        Stop[]
-  events       LoadEvent[]
-  invoice      Invoice?
-  documents    Document[]
-  claims       Claim[]
-
-  @@index([status])
-  @@index([pickupAt])
-  @@index([driverId, status])
-}
-
-/// Multi-stop routing. Loads have at least one PICKUP and one DELIVERY.
-model Stop {
-  id          String    @id @default(cuid())
-  loadId      String
-  load        Load      @relation(fields: [loadId], references: [id], onDelete: Cascade)
-  seq         Int
-  type        String // PICKUP | DELIVERY
-  name        String
-  address     String?
-  city        String
-  lat         Float
-  lng         Float
-  windowStart DateTime?
-  windowEnd   DateTime?
-  arrivedAt   DateTime?
-  departedAt  DateTime?
-  /// PENDING | ARRIVED | DONE
-  status      String    @default("PENDING")
-  notes       String?
-
-  @@index([loadId, seq])
-}
-
-model LoadEvent {
-  id        String   @id @default(cuid())
-  loadId    String
-  load      Load     @relation(fields: [loadId], references: [id], onDelete: Cascade)
-  type      String // CREATED | ASSIGNED | STATUS | NOTE | CHECK_CALL | ISSUE | DOCUMENT | BILLING | EDIT
-  message   String
-  userId    String?
-  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  lat       Float?
-  lng       Float?
-  createdAt DateTime @default(now())
-
-  @@index([loadId])
-}
-
-/// Shop work: PM, repairs, inspections. Replaces the old MaintenanceRecord.
+/// Shop work: PM, repairs, inspections. Numbered per company (#1, #2, …).
 model WorkOrder {
-  id          String    @id @default(cuid())
-  number      Int       @unique @default(autoincrement())
+  id          String     @id @default(cuid())
+  companyId   String     @default("") // set by the company scope (src/lib/db.ts); "" fails the foreign key
+  company     Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  number      Int
   truckId     String?
-  truck       Truck?    @relation(fields: [truckId], references: [id], onDelete: Cascade)
+  truck       Truck?     @relation(fields: [truckId], references: [id], onDelete: Cascade)
   trailerId   String?
-  trailer     Trailer?  @relation(fields: [trailerId], references: [id], onDelete: Cascade)
+  trailer     Trailer?   @relation(fields: [trailerId], references: [id], onDelete: Cascade)
   title       String
   description String?
   /// PM | ENGINE | COOLING | TIRES | BRAKES | ELECTRICAL | BODY | TOWING | INSPECTION | OTHER
-  category    String    @default("OTHER")
+  category    String     @default("OTHER")
   /// LOW | MEDIUM | HIGH | URGENT
-  priority    String    @default("MEDIUM")
+  priority    String     @default("MEDIUM")
   /// DRAFT | OPEN | IN_PROGRESS | DONE | CANCELLED
-  status      String    @default("OPEN")
+  status      String     @default("OPEN")
   vendor      String?
   scheduledAt DateTime
   inAt        DateTime? // unit entered the shop
   outAt       DateTime? // unit left the shop
   completedAt DateTime?
   odometerKm  Int?
-  laborCost   Float     @default(0)
-  partsCost   Float     @default(0)
-  cost        Float     @default(0)
+  laborCost   Float      @default(0)
+  partsCost   Float      @default(0)
+  cost        Float      @default(0)
   notes       String?
   createdById String?
-  createdBy   User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdBy   User?      @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
   documents   Document[]
 
-  @@index([status])
+  @@unique([companyId, number])
+  @@index([companyId, status])
   @@index([truckId])
 }
 
 model FuelLog {
   id         String   @id @default(cuid())
+  companyId  String   @default("") // set by the company scope (src/lib/db.ts); "" fails the foreign key
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   truckId    String
   truck      Truck    @relation(fields: [truckId], references: [id], onDelete: Cascade)
   driverId   String?
@@ -381,79 +275,17 @@ model FuelLog {
   odometerKm Int?
   station    String?
   date       DateTime @default(now())
+
+  @@index([companyId, date])
+  @@index([truckId, date])
 }
 
-model Invoice {
-  id         String    @id @default(cuid())
-  number     String    @unique
-  customerId String
-  customer   Customer  @relation(fields: [customerId], references: [id])
-  loadId     String?   @unique
-  load       Load?     @relation(fields: [loadId], references: [id], onDelete: SetNull)
-  amount     Float
-  taxRate    Float     @default(0.12)
-  status     String    @default("DRAFT") // DRAFT | SENT | PAID | VOID
-  issuedAt   DateTime  @default(now())
-  dueAt      DateTime
-  paidAt     DateTime?
-  notes      String?
-  createdAt  DateTime  @default(now())
-}
-
-/// Cargo / liability / equipment claims.
-model Claim {
-  id            String      @id @default(cuid())
-  number        String      @unique
-  /// CARGO_DAMAGE | CARGO_LOSS | LATE_CARGO | OSD | ACCIDENT | EQUIPMENT_DAMAGE | INJURY | OTHER
-  type          String
-  /// LOW | MEDIUM | HIGH | CRITICAL
-  severity      String      @default("MEDIUM")
-  /// REPORTED | UNDER_REVIEW | DOCS_COLLECTED | SUBMITTED | NEGOTIATION | APPROVED | DENIED | PAID | CLOSED | DISPUTED | LITIGATION
-  status        String      @default("REPORTED")
-  incidentAt    DateTime
-  location      String?
-  description   String
-  /// OURS | THIRD_PARTY | SHARED | UNKNOWN
-  fault         String      @default("UNKNOWN")
-  amountClaimed Float       @default(0)
-  amountSettled Float?
-  driverId      String?
-  driver        Driver?     @relation(fields: [driverId], references: [id], onDelete: SetNull)
-  loadId        String?
-  load          Load?       @relation(fields: [loadId], references: [id], onDelete: SetNull)
-  truckId       String?
-  truck         Truck?      @relation(fields: [truckId], references: [id], onDelete: SetNull)
-  trailerId     String?
-  trailer       Trailer?    @relation(fields: [trailerId], references: [id], onDelete: SetNull)
-  customerId    String?
-  customer      Customer?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  assignedToId  String?
-  assignedTo    User?       @relation("ClaimAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
-  createdById   String?
-  createdBy     User?       @relation("ClaimCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  closedAt      DateTime?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  documents     Document[]
-  notes         ClaimNote[]
-
-  @@index([status])
-}
-
-model ClaimNote {
-  id        String   @id @default(cuid())
-  claimId   String
-  claim     Claim    @relation(fields: [claimId], references: [id], onDelete: Cascade)
-  userId    String?
-  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  body      String
-  createdAt DateTime @default(now())
-}
-
-/// Files attached to loads (RC, BOL, POD…), trucks, trailers, drivers, customers, work orders,
-/// claims, or the company itself. Bytes live in Vercel Blob (prod) or ./storage (local dev).
+/// Files attached to trucks, trailers, drivers, work orders, or the company itself.
+/// Bytes live in Vercel Blob (prod) or ./storage (local dev).
 model Document {
   id           String     @id @default(cuid())
+  companyId    String     @default("") // set by the company scope (src/lib/db.ts); "" fails the foreign key
+  company      Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
   kind         String
   name         String
   storageKey   String     @unique
@@ -462,57 +294,30 @@ model Document {
   expiresAt    DateTime?
   notes        String?
   isCompany    Boolean    @default(false)
-  loadId       String?
-  load         Load?      @relation(fields: [loadId], references: [id], onDelete: Cascade)
   truckId      String?
   truck        Truck?     @relation(fields: [truckId], references: [id], onDelete: Cascade)
   trailerId    String?
   trailer      Trailer?   @relation(fields: [trailerId], references: [id], onDelete: Cascade)
   driverId     String?
   driver       Driver?    @relation(fields: [driverId], references: [id], onDelete: Cascade)
-  customerId   String?
-  customer     Customer?  @relation(fields: [customerId], references: [id], onDelete: Cascade)
   workOrderId  String?
   workOrder    WorkOrder? @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
-  claimId      String?
-  claim        Claim?     @relation(fields: [claimId], references: [id], onDelete: Cascade)
   uploadedById String?
   uploadedBy   User?      @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
   createdAt    DateTime   @default(now())
 
-  @@index([loadId])
+  @@index([companyId])
   @@index([truckId])
   @@index([trailerId])
   @@index([driverId])
-  @@index([customerId])
-  @@index([claimId])
-}
-
-/// Team chat. room = "company" | "load:<loadId>" | "team:<teamId>"
-model ChatMessage {
-  id        String   @id @default(cuid())
-  room      String
-  userId    String?
-  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  body      String
-  createdAt DateTime @default(now())
-
-  @@index([room, createdAt])
-}
-
-model Announcement {
-  id        String    @id @default(cuid())
-  title     String
-  body      String
-  pinned    Boolean   @default(false)
-  authorId  String?
-  author    User?     @relation(fields: [authorId], references: [id], onDelete: SetNull)
-  createdAt DateTime  @default(now())
-  expiresAt DateTime?
+  @@index([workOrderId])
 }
 
 model AuditLog {
   id        String   @id @default(cuid())
+  /// Null for account-level events that belong to no company.
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
   userId    String?
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   action    String
@@ -521,12 +326,17 @@ model AuditLog {
   details   String?
   createdAt DateTime @default(now())
 
-  @@index([createdAt])
+  @@index([companyId, createdAt])
 }
 
-/// Small key/value store for runtime settings (company profile JSON, weekly goals, linked Telegram group).
+/// Small per-company key/value store for runtime settings (company profile JSON).
 model AppSetting {
-  key       String   @id
+  id        String   @id @default(cuid())
+  companyId String   @default("") // set by the company scope (src/lib/db.ts); "" fails the foreign key
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  key       String
   value     String
   updatedAt DateTime @updatedAt
+
+  @@unique([companyId, key])
 }

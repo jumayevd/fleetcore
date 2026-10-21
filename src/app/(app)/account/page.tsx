@@ -1,57 +1,85 @@
 import Link from "next/link";
 import { Keyboard } from "lucide-react";
 import { requireUser } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { rootDb } from "@/lib/db-root";
 import { can } from "@/lib/permissions";
 import { allNavItems } from "@/lib/nav";
-import { ROLE_LABELS, type Role } from "@/lib/constants";
+import { ROLE_LABELS, isRole } from "@/lib/constants";
 import { ago, date, dateTime } from "@/lib/format";
-import { changePassword } from "@/app/actions/auth";
+import { changePassword, updateProfile } from "@/app/actions/auth";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { AppearanceControls } from "@/components/appearance";
-import { Avatar, Badge, Card, DL, Disclosure, Field, InfoTip, Input, Kbd, PageHeader, cardClass, cn } from "@/components/ui";
-import { ROLE_TONE, TeamLabel } from "../admin/shared";
-import { TelegramCard } from "./telegram-card";
+import { CompanyBadge } from "@/components/workspace-switcher";
+import { Avatar, Badge, Card, Chip, DL, Disclosure, Field, InfoTip, Input, Kbd, LinkButton, PageHeader, cardClass, cn } from "@/components/ui";
+import { ROLE_TONE } from "../admin/shared";
+import { LeaveCompanyButton } from "./leave";
 
 export const metadata = { title: "My account" };
 
 export default async function AccountPage() {
   const me = await requireUser();
-  const user = await db.user.findUniqueOrThrow({
+  const user = await rootDb.user.findUniqueOrThrow({
     where: { id: me.id },
-    select: { name: true, email: true, phone: true, role: true, createdAt: true, lastLoginAt: true, team: { select: { id: true, name: true, color: true } }, driver: { select: { id: true } } },
+    select: {
+      name: true, email: true, phone: true, createdAt: true, lastLoginAt: true,
+      memberships: { where: { active: true }, orderBy: { company: { name: "asc" } }, select: { id: true, role: true, createdAt: true, company: { select: { id: true, name: true, color: true } } } },
+    },
   });
   const jumps = allNavItems().filter((i) => i.shortcut && can(me.role, i.perm));
 
   return (
     <>
-      <PageHeader eyebrow="You" title="My account" />
+      <PageHeader title="My account" subtitle={`${user.email} · signed in ${me.lastLoginAt ? ago(me.lastLoginAt) : "now"}`} />
 
       <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
         <div className="space-y-4">
-          <Card title={<span className="flex items-center gap-1.5">Profile<InfoTip>Name, role and team are managed by an administrator under Users &amp; roles.</InfoTip></span>}>
+          <Card title={<span className="flex items-center gap-1.5">Profile<InfoTip>Your name and phone are the same in every company you work for.</InfoTip></span>}>
             <div className="mb-4 flex items-center gap-3">
               <Avatar name={user.name} size={40} />
               <div className="min-w-0">
                 <p className="truncate text-[14px] font-semibold text-fg">{user.name}</p>
                 <p className="truncate text-[12px] text-fg-muted">{user.email}</p>
               </div>
-              <Badge value={user.role} tone={ROLE_TONE[user.role as Role] ?? "neutral"} label={ROLE_LABELS[user.role as Role] ?? user.role} className="ml-auto" />
+              <Badge value={me.role} tone={ROLE_TONE[me.role]} label={`${ROLE_LABELS[me.role]} here`} className="ml-auto" />
             </div>
-            <DL cols={2} items={[
-              ["Team", <TeamLabel key="team" team={user.team} />],
-              ["Phone", user.phone ? <span className="num">{user.phone}</span> : <span className="text-fg-faint">—</span>],
-              ["Member since", date(user.createdAt)],
-              ["Last sign-in", user.lastLoginAt ? <span title={dateTime(user.lastLoginAt)}>{ago(user.lastLoginAt)}</span> : "now"],
-              ...(user.driver ? [["Driver profile", <Link key="d" href={`/drivers/${user.driver.id}`} className="hover:underline">Open</Link>] as [string, React.ReactNode]] : []),
-            ]} />
+            <ActionForm action={updateProfile} className="space-y-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Name" required><Input name="name" required defaultValue={user.name} autoComplete="name" /></Field>
+                <Field label="Phone"><Input name="phone" type="tel" defaultValue={user.phone ?? ""} placeholder="+998 90 000 00 00" className="num" autoComplete="tel" /></Field>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <DL cols={2} items={[
+                  ["Member since", date(user.createdAt)],
+                  ["Last sign-in", user.lastLoginAt ? <span key="l" title={dateTime(user.lastLoginAt)}>{ago(user.lastLoginAt)}</span> : "now"],
+                ]} />
+                <SubmitButton variant="secondary" pendingText="Saving…">Save</SubmitButton>
+              </div>
+            </ActionForm>
           </Card>
 
-          <TelegramCard userId={me.id} />
+          <Card flush title={<span className="flex items-center gap-1.5">Your companies<InfoTip>Companies this account belongs to. Other accounts you are signed in to are in the company menu (top of the sidebar).</InfoTip></span>}
+            actions={<LinkButton href="/select" variant="ghost" size="sm">All companies</LinkButton>}>
+            <ul className="divide-y divide-line">
+              {user.memberships.map((m) => {
+                const current = m.company.id === me.company.id;
+                const role = isRole(m.role) ? m.role : "SPECIALIST";
+                return (
+                  <li key={m.id} className="flex items-center gap-3 px-4 py-2.5">
+                    <CompanyBadge name={m.company.name} color={m.company.color} size={28} />
+                    <div className="min-w-0 flex-1">
+                      <p className="flex items-center gap-1.5 truncate text-[13px] font-medium text-fg">{m.company.name}{current && <Chip tone="accent">Current</Chip>}</p>
+                      <p className="text-[11px] text-fg-subtle">{ROLE_LABELS[role]} · joined {date(m.createdAt)}</p>
+                    </div>
+                    {current && <LeaveCompanyButton company={m.company.name} />}
+                  </li>
+                );
+              })}
+            </ul>
+          </Card>
         </div>
 
         <div className="space-y-4">
-          <Card title="Change password">
+          <Card title={<span className="flex items-center gap-1.5">Change password<InfoTip>One password for this account in every company. Other accounts you are signed in to keep their own.</InfoTip></span>}>
             <ActionForm action={changePassword} resetOnSuccess className="space-y-3">
               <Field label="Current password" required><Input name="current" type="password" required autoComplete="current-password" /></Field>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -73,12 +101,13 @@ export default async function AccountPage() {
             <ul className="divide-y divide-line border-t border-line text-[12px]">
               <Shortcut keys={[["⌘", "K"], ["Ctrl", "K"]]} sep="or">Open search and commands from anywhere</Shortcut>
               <Shortcut keys={[["/"]]}>Open search (when not typing in a field)</Shortcut>
+              <Shortcut keys={[["Alt", "1"], ["Alt", "9"]]} sep="…">Switch to company 1 to 9 in the company menu</Shortcut>
               <Shortcut keys={[["↑"], ["↓"]]} sep="">Move through results</Shortcut>
               <Shortcut keys={[["↵"]]}>Open the highlighted result</Shortcut>
               <Shortcut keys={[["esc"]]}>Close search, menus and drawers</Shortcut>
             </ul>
             <div className="border-t border-line bg-sunken/40 px-4 py-2">
-              <p className="text-[11px] text-fg-subtle">Press <Kbd>g</Kbd> then a letter to jump. Only pages your role can open are listed.</p>
+              <p className="text-[11px] text-fg-subtle">Press <Kbd>g</Kbd> then a letter to jump.</p>
             </div>
             <ul className="grid grid-cols-1 divide-y divide-line text-[12px] sm:grid-cols-2 sm:divide-y-0 sm:[&>li:nth-child(n+3)]:border-t sm:[&>li]:border-line">
               {jumps.map((i) => {
@@ -90,7 +119,6 @@ export default async function AccountPage() {
                   </li>
                 );
               })}
-              {jumps.length === 0 && <li className="px-4 py-3 text-fg-subtle">No jump shortcuts for your role.</li>}
             </ul>
           </Disclosure>
         </section>

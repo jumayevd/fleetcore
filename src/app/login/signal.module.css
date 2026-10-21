@@ -39,7 +39,7 @@
 
 .lane {
   display: grid;
-  grid-template-columns: 64px minmax(0, 1fr) 84px;
+  grid-template-columns: 56px minmax(0, 1fr) 104px;
   align-items: center;
   gap: 14px;
   font-size: 11px;

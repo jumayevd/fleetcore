@@ -75,13 +75,17 @@ Status → tone map lives in one place (`STATUS_TONE`). Add new statuses there, 
 
 ## Shell
 
-- **Sidebar** (240 px) on the canvas, no border. Overview is a plain link; everything else sits in six
-  categories (Dispatch, Fleet, People, Money, Team, Settings) that fold open on click. The category you are in
+- **Sidebar** (240 px) on the canvas, no border. A 3 px strip in the company's colour runs along the top, and the
+  **company menu** sits in the header: the company badge (coloured initials), its name, your role and account. It
+  lists every signed-in account with its companies, plus New company, Add another account and Sign out. Overview,
+  Drivers and Reports are plain links; Fleet, Maintenance and Settings fold open on click. The category you are in
   opens by itself; a folded category shows the sum of its counts. The active page is a white pill with an accent
-  bar on the guide line. Collapses to a 64 px icon rail (one icon per category) that expands on hover (`nav`
-  cookie). Categories with a single item for the role (a driver's My trips) show as a plain link.
-- **Top bar** (56 px): breadcrumb, search `⌘K`, appearance, alerts, user menu. Sticky, `bg-canvas/80` blur.
-- **Command palette**: navigation + entity search + quick actions. `⌘K`, `↑↓`, `↵`, `esc`; `g` + letter jumps.
+  bar on the guide line. Collapses to a 64 px icon rail that expands on hover (`nav` cookie).
+- **Top bar** (56 px): breadcrumb (led by the company name on a phone), search `⌘K`, appearance, alerts, user menu.
+  Sticky, `bg-canvas/80` blur.
+- **Command palette**: navigation + entity search (active company only) + quick actions + "Switch to …". `⌘K`,
+  `↑↓`, `↵`, `esc`; `g` + letter jumps; `Alt+1…9` switches company.
+- **Company colour** is identity, not status: badge and strip only, never on buttons, tables or charts.
 
 ## Theme mechanics
 
@@ -100,11 +104,15 @@ The template for summary pages:
 
 1. Greeting and one summary line, one primary action (plus Customize).
 2. Six number tiles (`KpiStrip`): coloured icon tile, big number, label; a context line only when something
-   needs a look, otherwise it is the hover tip. Revenue carries a change pill.
-3. Two independent columns. Left: "Today" (pickups / activity tabs) over the live fleet map. Right (first on a
-   phone): "Needs attention" grouped by kind as an accordion (worst first, five items each, "All N in …"), over
-   one tabbed card for billing and this week's production.
-4. One performance card: a chart plus a short metric list; the chart's explanation is an `InfoTip`.
+   needs a look, otherwise it is the hover tip (trucks available, in shop, PM due, paperwork due, driver papers,
+   open work orders).
+3. Two independent columns. Left: "Today in the shop" (in progress, overdue, booked today, with Start / Complete)
+   over the live fleet map. Right (first on a phone): "Needs attention" grouped by kind as an accordion (worst
+   first, five items each, "All N in …"), over "Coming up" (the next 30 days of expiries and PM).
+4. One costs card: maintenance and fuel by month plus a short metric list (cost per km from odometer readings);
+   the chart's explanation is an `InfoTip`.
+5. A company with no trucks and no drivers sees a set-up checklist instead (add a truck, a trailer, a driver,
+   company documents, invite a teammate).
 
 ## Personal appearance
 

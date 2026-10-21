@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Banknote, FileBadge, Route, ShieldAlert, Truck, type LucideIcon } from "lucide-react";
+import { FileBadge, Truck, Users, Wrench, type LucideIcon } from "lucide-react";
 import type { Alert } from "@/lib/alerts";
 import { Disclosure, IconTile, StatusDot, cardClass, cn, type Hue } from "@/components/ui";
 import type { AlertGroup, AlertKind } from "./lib";
@@ -7,8 +7,8 @@ import type { AlertGroup, AlertKind } from "./lib";
 /** Items listed inside an open category; the rest are one click away on /dashboard/alerts. */
 const SHOW = 5;
 
-const KIND_ICON: Record<AlertKind, LucideIcon> = { dispatch: Route, compliance: FileBadge, fleet: Truck, money: Banknote, safety: ShieldAlert };
-const KIND_HUE: Record<AlertKind, Hue> = { dispatch: "hue-2", compliance: "hue-1", fleet: "hue-3", money: "hue-6", safety: "hue-5" };
+export const KIND_ICON: Record<AlertKind, LucideIcon> = { compliance: FileBadge, maintenance: Wrench, drivers: Users, fleet: Truck };
+export const KIND_HUE: Record<AlertKind, Hue> = { compliance: "hue-1", maintenance: "hue-4", drivers: "hue-5", fleet: "hue-3" };
 
 /**
  * What needs a decision, sorted into categories (worst first). Each category opens on click and only one is

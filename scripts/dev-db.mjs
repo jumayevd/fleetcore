@@ -1,11 +1,11 @@
 // Local PostgreSQL for development (uses the PostgreSQL binaries on PATH).
-// Data lives in ./.pgdata (git-ignored). Production stays on Neon.
+// Data lives in ./.pgdata (git-ignored). Port 5434 so it can run next to the full platform (5433). Production stays on Neon.
 import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 
 const dir = path.resolve(".pgdata");
-const port = process.env.PGPORT_DEV || "5433";
+const port = process.env.PGPORT_DEV || "5434";
 
 // "detach": the server must not inherit our stdio or callers (and CI) hang waiting for EOF.
 const run = (cmd, args, mode = "inherit") =>
@@ -29,6 +29,6 @@ if (status.status !== 0) {
 } else {
   console.log("Local PostgreSQL already running.");
 }
-const created = run("createdb", ["-h", "localhost", "-p", port, "-U", "postgres", "fleetops"], "quiet");
-if (created.status === 0) console.log("Created database fleetops.");
-console.log(`Local database ready: postgresql://postgres@localhost:${port}/fleetops`);
+const created = run("createdb", ["-h", "localhost", "-p", port, "-U", "postgres", "fleetops_fleet"], "quiet");
+if (created.status === 0) console.log("Created database fleetops_fleet.");
+console.log(`Local database ready: postgresql://postgres@localhost:${port}/fleetops_fleet`);

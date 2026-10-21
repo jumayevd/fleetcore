@@ -1,128 +1,319 @@
 import "server-only";
 import { cache } from "react";
 import { db } from "./db";
-import { estimatedArrival } from "./telemetry";
-import { REQUIRED_UNIT_DOCS } from "./documents";
-import { CLAIM_OPEN_STATUSES } from "./constants";
+import { DOC_KIND_LABELS, REQUIRED_UNIT_DOCS } from "./documents";
+import { date, money, number } from "./format";
+import { NO_SIGNAL_MS, isTrackerSource, pmState, sourceLabel } from "@/components/map/fleet-status";
+
+/* ------------------------------------------------------------------ */
+/* Kinds                                                               */
+/* ------------------------------------------------------------------ */
+
+/** Alert categories, in the order the overview lists them when they tie. */
+export const ALERT_KINDS = ["compliance", "maintenance", "drivers", "fleet"] as const;
+export type AlertKind = (typeof ALERT_KINDS)[number];
+export const ALERT_KIND_LABELS: Record<AlertKind, string> = {
+  compliance: "Compliance", maintenance: "Maintenance", drivers: "Drivers", fleet: "Fleet",
+};
+export const ALERT_KIND_HINTS: Record<AlertKind, string> = {
+  compliance: "Truck, trailer and company paperwork: expiring, expired or missing",
+  maintenance: "PM by odometer, overdue work orders, units in the shop",
+  drivers: "Licences, medicals and driver documents, drivers on hold",
+  fleet: "Trucks without a driver, lease mileage caps, silent trackers",
+};
+export const isAlertKind = (v: unknown): v is AlertKind => typeof v === "string" && (ALERT_KINDS as readonly string[]).includes(v);
 
 export type Alert = {
   level: "critical" | "warning";
-  /** Grouping key for the dashboard / digest: compliance | dispatch | fleet | money | safety */
-  kind: "compliance" | "dispatch" | "fleet" | "money" | "safety";
+  /** Grouping key for the overview and /dashboard/alerts. */
+  kind: AlertKind;
   title: string;
   detail: string;
+  /** An existing page where the item is acted on. */
   href: string;
 };
 
 const DAY = 86_400_000;
+/** Paperwork shows up this many days before it expires (same window as ExpiryBadge and the fleet pages). */
+export const EXPIRY_WINDOW_DAYS = 30;
+/** More silent trackers than this become one summary alert instead of one each. */
+const SILENT_TRACKERS_ONE_BY_ONE = 3;
+
+/* ------------------------------------------------------------------ */
+/* Paperwork                                                           */
+/* ------------------------------------------------------------------ */
+
+export type PaperworkOwner = "truck" | "trailer" | "driver" | "company";
+export type PaperworkItem = {
+  owner: PaperworkOwner;
+  /** Truck / trailer / driver id; null for company documents. */
+  ownerId: string | null;
+  /** Unit number, driver name or "Company". */
+  who: string;
+  /** "Insurance", "Driving licence", or the document's name. */
+  what: string;
+  expiresAt: Date;
+  expired: boolean;
+  href: string;
+};
+
+const RECORD_LABEL: Record<string, string> = {
+  REGISTRATION: "Registration", INSURANCE: "Insurance", INSPECTION: "Technical inspection",
+  LICENSE: "Driving licence", MEDICAL: "Medical certificate",
+};
+
+function earliest(...dates: (Date | null | undefined)[]): Date | null {
+  let min: Date | null = null;
+  for (const d of dates) if (d && (!min || d < min)) min = d;
+  return min;
+}
 
 /**
- * Operational exceptions that need a human: compliance, late loads, overdue money, service due. Sorted critical first.
- * Cached per request, so the shell (alert bell) and the overview share one computation.
+ * Every paper that has expired or expires within EXPIRY_WINDOW_DAYS, soonest first: truck, trailer, driver and
+ * company. Rules, so one paper never shows twice and a replaced certificate stops nagging:
+ *  - only the newest uploaded document of each kind counts per owner (documents of kind "Other" count per name);
+ *  - registration, insurance and inspection (units) and licence and medical (drivers) take the earlier of the date
+ *    on the record and the newest document's expiry, like the fleet pages do;
+ *  - inactive trucks and inactive drivers are left out.
+ * Cached per request: alerts and the overview share it.
  */
-export const getAlerts = cache(async (): Promise<Alert[]> => {
+export const getPaperwork = cache(async (): Promise<PaperworkItem[]> => {
   const now = new Date();
-  const soon = new Date(now.getTime() + 30 * DAY);
-  const [drivers, trucks, transit, overdue, unassigned, dispatchedNoRc, trailersInShop, leased, openClaims, idleDrivers, unitDocs, docs] = await Promise.all([
-    db.driver.findMany({ where: { status: "ACTIVE", OR: [{ licenseExpiry: { lte: soon } }, { medicalExpiry: { lte: soon } }] } }),
-    db.truck.findMany({ where: { status: { not: "INACTIVE" } } }),
-    db.load.findMany({ where: { status: "IN_TRANSIT" } }),
-    db.invoice.findMany({ where: { status: "SENT", dueAt: { lt: now } }, include: { customer: true } }),
-    db.load.findMany({ where: { status: "PLANNED", pickupAt: { lte: new Date(now.getTime() + DAY) } } }),
-    db.load.findMany({ where: { status: { in: ["ASSIGNED", "IN_TRANSIT"] }, documents: { none: { kind: "RC" } } }, select: { id: true, reference: true, customer: { select: { name: true } } } }),
-    db.trailer.findMany({ where: { status: "SHOP", statusSince: { lt: new Date(now.getTime() - 7 * DAY) } } }),
-    db.truck.findMany({ where: { ownership: "LEASED", leaseAnnualLimitKm: { not: null } } }),
-    db.claim.findMany({ where: { status: { in: [...CLAIM_OPEN_STATUSES] }, createdAt: { lt: new Date(now.getTime() - 14 * DAY) } } }),
-    db.driver.findMany({ where: { status: "ACTIVE", boardStatus: "READY", boardStatusSince: { lt: new Date(now.getTime() - 2 * DAY) }, loads: { none: { status: { in: ["ASSIGNED", "IN_TRANSIT"] } } } } }),
-    db.document.findMany({ where: { OR: [{ truckId: { not: null } }, { trailerId: { not: null } }], kind: { in: [...REQUIRED_UNIT_DOCS] } }, select: { truckId: true, trailerId: true, kind: true } }),
+  const soon = new Date(now.getTime() + EXPIRY_WINDOW_DAYS * DAY);
+  const [trucks, trailers, drivers, docs] = await Promise.all([
+    db.truck.findMany({ where: { status: { not: "INACTIVE" } }, select: { id: true, unitNumber: true, insuranceExpiry: true, inspectionExpiry: true, registrationExpiry: true } }),
+    db.trailer.findMany({ select: { id: true, unitNumber: true, insuranceExpiry: true, inspectionExpiry: true } }),
+    db.driver.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true, licenseExpiry: true, medicalExpiry: true } }),
     db.document.findMany({
-      where: { expiresAt: { lte: soon } },
-      include: { truck: { select: { unitNumber: true } }, trailer: { select: { unitNumber: true } }, driver: { select: { name: true } }, customer: { select: { name: true } }, load: { select: { reference: true } } },
+      where: { workOrderId: null, kind: { not: "PHOTO" } },
+      orderBy: { createdAt: "desc" },
+      select: { kind: true, name: true, expiresAt: true, truckId: true, trailerId: true, driverId: true, isCompany: true },
     }),
   ]);
 
-  const alerts: Alert[] = [];
-  const lvl = (d: Date) => (d < now ? "critical" : "warning") as Alert["level"];
-  const when = (d: Date) => (d < now ? "expired" : `expires ${d.toLocaleDateString("en-GB")}`);
-
-  // Compliance — people
-  for (const d of drivers) {
-    if (d.licenseExpiry <= soon) alerts.push({ level: lvl(d.licenseExpiry), kind: "compliance", title: `${d.name}: driving licence`, detail: when(d.licenseExpiry), href: `/drivers/${d.id}` });
-    if (d.medicalExpiry && d.medicalExpiry <= soon) alerts.push({ level: lvl(d.medicalExpiry), kind: "compliance", title: `${d.name}: medical certificate`, detail: when(d.medicalExpiry), href: `/drivers/${d.id}` });
-  }
-  // Compliance — units
-  for (const t of trucks) {
-    if (t.insuranceExpiry && t.insuranceExpiry <= soon) alerts.push({ level: lvl(t.insuranceExpiry), kind: "compliance", title: `${t.unitNumber}: insurance`, detail: when(t.insuranceExpiry), href: `/fleet/${t.id}` });
-    if (t.inspectionExpiry && t.inspectionExpiry <= soon) alerts.push({ level: lvl(t.inspectionExpiry), kind: "compliance", title: `${t.unitNumber}: technical inspection`, detail: when(t.inspectionExpiry), href: `/fleet/${t.id}` });
-    if (t.registrationExpiry && t.registrationExpiry <= soon) alerts.push({ level: lvl(t.registrationExpiry), kind: "compliance", title: `${t.unitNumber}: registration`, detail: when(t.registrationExpiry), href: `/fleet/${t.id}` });
-    // Service by odometer: explicit next service, else PM interval since last PM
-    const nextService = t.nextServiceKm ?? (t.lastPmKm != null ? t.lastPmKm + t.pmIntervalKm : null);
-    if (nextService != null) {
-      const left = nextService - t.odometerKm;
-      if (left < 2000) alerts.push({ level: left < 0 ? "critical" : "warning", kind: "fleet", title: `${t.unitNumber}: service due`, detail: left < 0 ? `${(-left).toLocaleString()} km overdue` : `in ${left.toLocaleString()} km`, href: `/fleet/${t.id}` });
-    }
-  }
-  for (const t of leased) {
-    const allowed = (t.leaseStartKm ?? 0) + (t.leaseAnnualLimitKm ?? 0) * (1 + (t.leaseBufferPct ?? 0) / 100);
-    const over = t.odometerKm - allowed;
-    if (over > -5000) {
-      const exposure = over > 0 && t.leaseOverageRate ? ` · ~$${Math.round(over * t.leaseOverageRate).toLocaleString()} penalty` : "";
-      alerts.push({ level: over > 0 ? "critical" : "warning", kind: "money", title: `${t.unitNumber}: lease mileage cap`, detail: over > 0 ? `${Math.round(over).toLocaleString()} km over cap${exposure}` : `${Math.round(-over).toLocaleString()} km left`, href: `/fleet/${t.id}` });
-    }
-  }
+  // Newest document per owner and kind (rows arrive newest first).
+  type Doc = (typeof docs)[number] & { owner: PaperworkOwner; ownerId: string | null };
+  const newest = new Map<string, Doc>();
   for (const d of docs) {
-    const who = d.truck?.unitNumber ?? d.trailer?.unitNumber ?? d.driver?.name ?? d.customer?.name ?? d.load?.reference ?? "Company";
-    const href = d.truckId ? `/fleet/${d.truckId}` : d.trailerId ? `/fleet/trailers/${d.trailerId}` : d.driverId ? `/drivers/${d.driverId}` : d.customerId ? `/customers/${d.customerId}` : d.loadId ? `/loads/${d.loadId}` : "/admin/company";
-    alerts.push({ level: lvl(d.expiresAt!), kind: "compliance", title: `${who}: ${d.name}`, detail: `document ${when(d.expiresAt!)}`, href });
+    const [owner, ownerId]: [PaperworkOwner, string | null] | [null, null] = d.truckId ? ["truck", d.truckId] : d.trailerId ? ["trailer", d.trailerId]
+      : d.driverId ? ["driver", d.driverId] : d.isCompany ? ["company", null] : [null, null];
+    if (!owner) continue;
+    const key = `${owner}:${ownerId ?? ""}:${d.kind === "OTHER" ? `OTHER:${d.name.trim().toLowerCase()}` : d.kind}`;
+    if (!newest.has(key)) newest.set(key, { ...d, owner, ownerId });
   }
-  // Missing required unit paperwork (one alert per unit, not per document — triage, not noise)
+
+  const items: PaperworkItem[] = [];
+  const add = (owner: PaperworkOwner, ownerId: string | null, who: string, what: string, expiresAt: Date | null, href: string) => {
+    if (expiresAt && expiresAt <= soon) items.push({ owner, ownerId, who, what, expiresAt, expired: expiresAt < now, href });
+  };
+  /** The newest document of `kind` for an owner, marked as used so the generic pass below skips it. */
+  const take = (owner: PaperworkOwner, ownerId: string, kind: string) => {
+    const key = `${owner}:${ownerId}:${kind}`;
+    const d = newest.get(key);
+    newest.delete(key);
+    return d?.expiresAt ?? null;
+  };
+
+  const truckById = new Map(trucks.map((t) => [t.id, t]));
+  const trailerById = new Map(trailers.map((t) => [t.id, t]));
+  const driverById = new Map(drivers.map((d) => [d.id, d]));
+
+  for (const t of trucks) {
+    const href = `/fleet/${t.id}`;
+    add("truck", t.id, t.unitNumber, RECORD_LABEL.REGISTRATION, earliest(t.registrationExpiry, take("truck", t.id, "REGISTRATION")), href);
+    add("truck", t.id, t.unitNumber, RECORD_LABEL.INSURANCE, earliest(t.insuranceExpiry, take("truck", t.id, "INSURANCE")), href);
+    add("truck", t.id, t.unitNumber, RECORD_LABEL.INSPECTION, earliest(t.inspectionExpiry, take("truck", t.id, "INSPECTION")), href);
+  }
+  for (const t of trailers) {
+    const href = `/fleet/trailers/${t.id}`;
+    add("trailer", t.id, t.unitNumber, RECORD_LABEL.INSURANCE, earliest(t.insuranceExpiry, take("trailer", t.id, "INSURANCE")), href);
+    add("trailer", t.id, t.unitNumber, RECORD_LABEL.INSPECTION, earliest(t.inspectionExpiry, take("trailer", t.id, "INSPECTION")), href);
+  }
+  for (const d of drivers) {
+    const href = `/drivers/${d.id}`;
+    add("driver", d.id, d.name, RECORD_LABEL.LICENSE, earliest(d.licenseExpiry, take("driver", d.id, "LICENSE")), href);
+    add("driver", d.id, d.name, RECORD_LABEL.MEDICAL, earliest(d.medicalExpiry, take("driver", d.id, "MEDICAL")), href);
+  }
+  // Everything else that carries an expiry date: permits, leases, contracts, passports, company papers…
+  for (const d of newest.values()) {
+    if (!d.expiresAt) continue;
+    const what = d.kind === "OTHER" ? d.name : (DOC_KIND_LABELS[d.kind] ?? d.name);
+    if (d.owner === "truck") { const t = truckById.get(d.ownerId!); if (t) add("truck", t.id, t.unitNumber, what, d.expiresAt, `/fleet/${t.id}`); }
+    else if (d.owner === "trailer") { const t = trailerById.get(d.ownerId!); if (t) add("trailer", t.id, t.unitNumber, what, d.expiresAt, `/fleet/trailers/${t.id}`); }
+    else if (d.owner === "driver") { const p = driverById.get(d.ownerId!); if (p) add("driver", p.id, p.name, what, d.expiresAt, `/drivers/${p.id}`); }
+    else {
+      // "Company: Insurance", not "Company: Company insurance".
+      const short = what.replace(/^company\s+/i, "");
+      add("company", null, "Company", short.charAt(0).toUpperCase() + short.slice(1), d.expiresAt, "/admin/company");
+    }
+  }
+  return items.sort((a, b) => a.expiresAt.getTime() - b.expiresAt.getTime());
+});
+
+/* ------------------------------------------------------------------ */
+/* Alerts                                                              */
+/* ------------------------------------------------------------------ */
+
+const daysBetween = (from: Date, to: Date) => Math.max(0, Math.floor((to.getTime() - from.getTime()) / DAY));
+
+/**
+ * What needs a fleet specialist: paperwork, PM and the shop, drivers, and trucks that can't run. Critical first.
+ * Cached per request, so the shell's alert bell and the overview share one computation.
+ */
+export const getAlerts = cache(async (): Promise<Alert[]> => {
+  const now = new Date();
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+  const [paperwork, trucks, trailers, unitDocs, trailersInShop, openWork, lateWork, held] = await Promise.all([
+    getPaperwork(),
+    db.truck.findMany({
+      where: { status: { not: "INACTIVE" } },
+      orderBy: { unitNumber: "asc" },
+      select: {
+        id: true, unitNumber: true, status: true, driverId: true, odometerKm: true, pmIntervalKm: true, lastPmKm: true, nextServiceKm: true,
+        ownership: true, leaseStartKm: true, leaseAnnualLimitKm: true, leaseBufferPct: true, leaseOverageRate: true, lastPingAt: true, pingSource: true,
+      },
+    }),
+    db.trailer.findMany({ orderBy: { unitNumber: "asc" }, select: { id: true, unitNumber: true } }),
+    db.document.findMany({
+      where: { OR: [{ truckId: { not: null } }, { trailerId: { not: null } }], kind: { in: [...REQUIRED_UNIT_DOCS] } },
+      select: { truckId: true, trailerId: true, kind: true },
+    }),
+    db.trailer.findMany({ where: { status: "SHOP", statusSince: { lt: new Date(now.getTime() - 7 * DAY) } }, select: { id: true, unitNumber: true, statusSince: true } }),
+    db.workOrder.findMany({
+      where: { status: { in: ["DRAFT", "OPEN", "IN_PROGRESS"] }, truckId: { not: null } },
+      orderBy: { scheduledAt: "asc" },
+      select: { id: true, number: true, truckId: true, category: true, status: true, scheduledAt: true },
+    }),
+    // Booked for an earlier day and still not started.
+    db.workOrder.findMany({
+      where: { status: { in: ["DRAFT", "OPEN"] }, scheduledAt: { lt: startOfToday } },
+      orderBy: { scheduledAt: "asc" },
+      select: { id: true, number: true, title: true, status: true, priority: true, scheduledAt: true, truck: { select: { unitNumber: true } }, trailer: { select: { unitNumber: true } } },
+    }),
+    db.driver.findMany({ where: { status: "ACTIVE", hold: true }, orderBy: { name: "asc" }, select: { id: true, name: true, holdReason: true, truck: { select: { unitNumber: true } } } }),
+  ]);
+
+  const alerts: Alert[] = [];
+
+  /* Paperwork: units, company, drivers */
+  for (const p of paperwork) {
+    alerts.push({
+      level: p.expired ? "critical" : "warning",
+      kind: p.owner === "driver" ? "drivers" : "compliance",
+      title: `${p.who}: ${p.what}`,
+      detail: `${p.expired ? "expired" : "expires"} ${date(p.expiresAt)}`,
+      href: p.href,
+    });
+  }
+
+  // Missing required unit paperwork: one alert per unit, not per document (triage, not noise). A unit with nothing on
+  // file at all is a setup gap, shown on the maintenance compliance tab rather than as an alert.
   const have = new Map<string, Set<string>>();
   for (const d of unitDocs) {
     const key = d.truckId ? `t:${d.truckId}` : `r:${d.trailerId}`;
     if (!have.has(key)) have.set(key, new Set());
     have.get(key)!.add(d.kind);
   }
-  for (const t of trucks) {
-    const missing = REQUIRED_UNIT_DOCS.filter((k) => !have.get(`t:${t.id}`)?.has(k));
-    if (missing.length === REQUIRED_UNIT_DOCS.length) continue; // never uploaded anything: shown on the fleet compliance tab, not as an alert
-    if (missing.length) alerts.push({ level: "warning", kind: "compliance", title: `${t.unitNumber}: paperwork incomplete`, detail: `missing ${missing.map((m) => m.toLowerCase()).join(", ")}`, href: `/fleet/${t.id}` });
+  const missingAlert = (key: string, unit: string, href: string) => {
+    const missing = REQUIRED_UNIT_DOCS.filter((k) => !have.get(key)?.has(k));
+    if (missing.length && missing.length < REQUIRED_UNIT_DOCS.length) {
+      alerts.push({ level: "warning", kind: "compliance", title: `${unit}: paperwork incomplete`, detail: `no ${missing.map((m) => RECORD_LABEL[m].toLowerCase()).join(", ")} on file`, href });
+    }
+  };
+  for (const t of trucks) missingAlert(`t:${t.id}`, t.unitNumber, `/fleet/${t.id}`);
+  for (const t of trailers) missingAlert(`r:${t.id}`, t.unitNumber, `/fleet/trailers/${t.id}`);
+
+  /* Drivers */
+  for (const d of held) {
+    alerts.push({
+      level: "warning", kind: "drivers", title: `${d.name} on hold`,
+      detail: [d.holdReason?.trim() || "no reason recorded", d.truck ? `assigned to ${d.truck.unitNumber}` : null].filter(Boolean).join(" · "),
+      href: `/drivers/${d.id}`,
+    });
   }
 
-  // Dispatch
-  for (const l of transit) {
-    // Still on the road after the delivery time counts as late even when the estimate has already passed.
-    const eta = estimatedArrival(l);
-    const arrival = Math.max(eta?.getTime() ?? 0, now.getTime());
-    if (arrival > l.deliveryAt.getTime()) {
-      const hrs = Math.max(1, Math.round((arrival - l.deliveryAt.getTime()) / 3_600_000));
-      const detail = eta && eta.getTime() >= now.getTime() ? `ETA ~${hrs}h after delivery window` : `${hrs}h past the delivery window, not delivered yet`;
-      alerts.push({ level: hrs > 6 ? "critical" : "warning", kind: "dispatch", title: `${l.reference} running late`, detail, href: `/loads/${l.id}` });
+  /* Maintenance */
+  const workByTruck = new Map<string, typeof openWork>();
+  for (const w of openWork) workByTruck.set(w.truckId!, [...(workByTruck.get(w.truckId!) ?? []), w]);
+  for (const t of trucks) {
+    const work = workByTruck.get(t.id) ?? [];
+    // PM by odometer. A PM already booked takes care of "due soon"; an overdue one stays, pointing at the booking.
+    const pm = pmState(t);
+    if (pm.state === "overdue" || pm.state === "due") {
+      const booked = work.find((w) => w.category === "PM");
+      if (pm.state === "overdue" || !booked) {
+        const left = pm.leftKm!;
+        alerts.push({
+          level: pm.state === "overdue" ? "critical" : "warning", kind: "maintenance",
+          title: `${t.unitNumber}: PM ${pm.state === "overdue" ? "overdue" : "due"}`,
+          detail: (left < 0 ? `${number(-left)} km past service` : `in ${number(left)} km`)
+            + (booked ? ` · #${booked.number} ${booked.status === "IN_PROGRESS" ? "in progress" : `booked ${date(booked.scheduledAt)}`}` : ""),
+          href: booked ? `/maintenance/work-orders/${booked.id}` : `/fleet/${t.id}`,
+        });
+      }
+    }
+    // In the shop (or parked out of service) with nothing recorded about why.
+    if ((t.status === "MAINTENANCE" || t.status === "OUT_OF_SERVICE") && work.length === 0) {
+      alerts.push({
+        level: "warning", kind: "maintenance",
+        title: `${t.unitNumber}: ${t.status === "MAINTENANCE" ? "in shop" : "out of service"}, no work order`,
+        detail: "open a work order so the repair is tracked", href: `/fleet/${t.id}`,
+      });
     }
   }
-  for (const l of unassigned) alerts.push({ level: "warning", kind: "dispatch", title: `${l.reference} not assigned`, detail: `pickup ${l.pickupAt.toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}`, href: `/loads/${l.id}` });
-  for (const l of dispatchedNoRc) alerts.push({ level: "warning", kind: "money", title: `${l.reference}: no rate confirmation`, detail: `${l.customer.name} · upload the RC before delivery`, href: `/loads/${l.id}` });
-  for (const d of idleDrivers) {
-    const days = Math.floor((now.getTime() - d.boardStatusSince.getTime()) / DAY);
-    alerts.push({ level: "warning", kind: "dispatch", title: `${d.name} idle ${days}d`, detail: "ready, no load assigned", href: `/dispatch?driver=${d.id}` });
+  for (const w of lateWork) {
+    const late = daysBetween(w.scheduledAt, now);
+    const unit = w.truck?.unitNumber ?? w.trailer?.unitNumber;
+    alerts.push({
+      level: w.priority === "URGENT" || late >= 7 ? "critical" : "warning", kind: "maintenance",
+      title: `${unit ? `${unit}: ` : ""}#${w.number} ${w.title}`,
+      detail: `booked ${date(w.scheduledAt)}, ${w.status === "DRAFT" ? "still a draft" : "not started"}`,
+      href: `/maintenance/work-orders/${w.id}`,
+    });
   }
-
-  // Fleet
   for (const t of trailersInShop) {
-    const days = Math.floor((now.getTime() - t.statusSince.getTime()) / DAY);
-    alerts.push({ level: days > 21 ? "critical" : "warning", kind: "fleet", title: `${t.unitNumber} in shop ${days}d`, detail: "trailer unavailable", href: `/fleet/trailers?status=SHOP` });
+    const days = daysBetween(t.statusSince, now);
+    alerts.push({ level: days > 21 ? "critical" : "warning", kind: "maintenance", title: `${t.unitNumber} in shop ${days} d`, detail: "trailer unavailable", href: `/fleet/trailers/${t.id}` });
   }
 
-  // Money
-  for (const i of overdue) {
-    const days = Math.floor((now.getTime() - i.dueAt.getTime()) / DAY);
-    alerts.push({ level: days > 15 ? "critical" : "warning", kind: "money", title: `${i.number} overdue`, detail: `${i.customer.name} · ${days}d late`, href: `/finance/invoices/${i.id}` });
+  /* Fleet */
+  const inProgress = new Set(openWork.filter((w) => w.status === "IN_PROGRESS").map((w) => w.truckId));
+  for (const t of trucks) {
+    if (t.status === "ACTIVE" && !t.driverId && !inProgress.has(t.id)) {
+      alerts.push({ level: "warning", kind: "fleet", title: `${t.unitNumber}: no driver`, detail: "active, but nobody is assigned", href: `/fleet/${t.id}` });
+    }
+    if (t.ownership === "LEASED" && t.leaseAnnualLimitKm) {
+      const cap = (t.leaseStartKm ?? 0) + t.leaseAnnualLimitKm * (1 + (t.leaseBufferPct ?? 0) / 100);
+      const over = t.odometerKm - cap;
+      if (over > -5000) {
+        const exposure = over > 0 && t.leaseOverageRate ? ` · about ${money(over * t.leaseOverageRate)} to pay` : "";
+        alerts.push({
+          level: over > 0 ? "critical" : "warning", kind: "fleet", title: `${t.unitNumber}: lease mileage cap`,
+          detail: over > 0 ? `${number(over)} km over the cap${exposure}` : `${number(-over)} km left before the cap`, href: `/fleet/${t.id}`,
+        });
+      }
+    }
+  }
+  // Trackers gone quiet. Only trucks that report by themselves: a manual position is never "late".
+  const silent = trucks.filter((t) => t.status === "ACTIVE" && isTrackerSource(t.pingSource) && (!t.lastPingAt || now.getTime() - t.lastPingAt.getTime() >= NO_SIGNAL_MS));
+  if (silent.length > SILENT_TRACKERS_ONE_BY_ONE) {
+    const units = silent.map((t) => t.unitNumber);
+    alerts.push({
+      level: "warning", kind: "fleet", title: `${silent.length} trackers silent for 3+ days`,
+      detail: units.slice(0, 4).join(", ") + (units.length > 4 ? ` and ${units.length - 4} more` : ""), href: "/tracking?status=nosignal",
+    });
+  } else {
+    for (const t of silent) {
+      alerts.push({
+        level: "warning", kind: "fleet",
+        title: `${t.unitNumber}: no position${t.lastPingAt ? ` for ${daysBetween(t.lastPingAt, now)} d` : " yet"}`,
+        detail: `${sourceLabel(t.pingSource)} ${t.lastPingAt ? `silent since ${date(t.lastPingAt)}` : "has never reported"}`,
+        href: `/tracking?truck=${t.id}`,
+      });
+    }
   }
 
-  // Safety
-  for (const c of openClaims) {
-    const days = Math.floor((now.getTime() - c.createdAt.getTime()) / DAY);
-    alerts.push({ level: c.severity === "CRITICAL" || days > 45 ? "critical" : "warning", kind: "safety", title: `${c.number} open ${days}d`, detail: `${c.type.toLowerCase().replace(/_/g, " ")} · ${c.status.toLowerCase().replace(/_/g, " ")}`, href: `/claims/${c.id}` });
-  }
-
+  // Stable: inside each level, items keep the order above (and paperwork stays soonest first).
   return alerts.sort((a, b) => (a.level === b.level ? 0 : a.level === "critical" ? -1 : 1));
 });

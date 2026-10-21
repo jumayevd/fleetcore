@@ -1,24 +1,28 @@
 import { notFound } from "next/navigation";
-import { requireUser } from "@/lib/auth";
+import { getCurrentUser, requireUser } from "@/lib/auth";
+import { can } from "@/lib/permissions";
 import { db } from "@/lib/db";
-import { saveDriver } from "@/app/actions/people";
+import { saveDriver } from "@/app/actions/drivers";
 import { PageHeader } from "@/components/ui";
 import { DriverForm } from "../../driver-form";
+import { truckOptions } from "../../data";
 
-export const metadata = { title: "Edit driver" };
+export async function generateMetadata({ params }: PageProps<"/drivers/[id]/edit">) {
+  if (!(await getCurrentUser())) return {};
+  const d = await db.driver.findUnique({ where: { id: (await params).id }, select: { name: true } });
+  return { title: d ? `Edit ${d.name}` : "Not found" };
+}
 
 export default async function EditDriver({ params }: PageProps<"/drivers/[id]/edit">) {
-  await requireUser("drivers.edit");
+  const user = await requireUser("drivers.edit");
   const { id } = await params;
-  const [driver, teams] = await Promise.all([
-    db.driver.findUnique({ where: { id } }),
-    db.team.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true, color: true } }),
-  ]);
+  const driver = await db.driver.findUnique({ where: { id }, include: { truck: { select: { id: true } } } });
   if (!driver) notFound();
+  const trucks = can(user.role, "fleet.edit") ? await truckOptions(id) : null;
   return (
     <>
-      <PageHeader eyebrow="Drivers" title={`Edit ${driver.name}`} />
-      <DriverForm action={saveDriver.bind(null, id)} driver={driver} teams={teams} cancelHref={`/drivers/${id}`} />
+      <PageHeader title={`Edit ${driver.name}`} />
+      <DriverForm action={saveDriver.bind(null, id)} driver={driver} trucks={trucks} truckId={driver.truck?.id ?? null} cancelHref={`/drivers/${id}`} />
     </>
   );
 }

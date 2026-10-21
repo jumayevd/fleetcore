@@ -22,7 +22,7 @@ export default async function EditTrailer({ params }: PageProps<"/fleet/trailers
   });
   return (
     <>
-      <PageHeader eyebrow="Fleet · Trailers" title={<>Edit <span className="num">{trailer.unitNumber}</span></>} subtitle={`${EQUIPMENT_LABELS[trailer.type] ?? trailer.type}${trailer.year ? ` · ${trailer.year}` : ""}${trailer.plate ? ` · ${trailer.plate}` : ""}`} />
+      <PageHeader title={<>Edit <span className="num">{trailer.unitNumber}</span></>} subtitle={`${EQUIPMENT_LABELS[trailer.type] ?? trailer.type}${trailer.year ? ` · ${trailer.year}` : ""}${trailer.plate ? ` · ${trailer.plate}` : ""}`} />
       <TrailerForm action={saveTrailer.bind(null, id)} trailer={trailer} trucks={trucks.map((t) => ({ id: t.id, label: `${t.unitNumber} · ${t.make} ${t.model}` }))} cancelHref={`/fleet/trailers/${id}`} />
     </>
   );

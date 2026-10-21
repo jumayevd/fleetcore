@@ -1,37 +1,63 @@
-# FleetOps — Logistics Platform
+# FleetOps Fleet — for fleet specialists
 
-A control tower for a trucking company: dispatch board, loads with multi-stop routing, live tracking,
-fleet and trailer lifecycle, maintenance and work orders, drivers and dispatcher teams, customers and
-brokers, billing driven by paperwork, claims, team chat, announcements, Telegram alerts, reports and an AI
-fleet assistant — with role-based access for every team and a Day/Night "Graphite" design.
+A workspace for the person who keeps trucks on the road: trucks and trailers, PM by odometer, work orders and shop
+time, expiring paperwork, drivers' licences and medicals, fuel and maintenance costs, and a live map. It is a copy of
+the full FleetOps platform with dispatch, loads, customers, billing, claims and chat taken out, and with **accounts and
+companies** added so one specialist can work for several fleets.
 
-## Live
+## Accounts and companies
 
-- Production: **https://fleetops-ochre.vercel.app** (Vercel project `fleetops`, region `fra1`). Every push to `main` deploys.
-- Demo-company logins and their shared password are in `DEMO-CREDENTIALS.local.txt` (git-ignored, never deployed).
-  Change passwords under **My account** after signing in.
+- An **account** is a sign-in (email + password). A **company** is one fleet's workspace; it owns every truck, trailer,
+  driver, work order, fuel log, document and audit entry. A **membership** gives an account a role in a company.
+- One account can belong to many companies (Slack-style), and one browser can be signed in to **several accounts at
+  once** (Gmail-style) — useful when a company gives you its own login. The company menu at the top of the sidebar lists
+  every signed-in account with its companies; `Alt+1…9` and the command palette (`⌘K`) switch too.
+- Switching keeps the same page (Trucks stays Trucks) with the other company's data. A browser works in one company at
+  a time: if another tab switches, the stale tab stops and asks before anything can be saved to the wrong company.
+- Roles are per company: **Owner** (everything, incl. owners and deleting the company), **Admin** (everything except
+  owners), **Fleet specialist** (all fleet work), **View only**.
+- People join by **invitation link** (Settings → Members → Invite). The link works once, for the invited email; an
+  existing account just signs in and accepts. Nobody in a company can see or reset another person's password
+  (`npm run user:reset-password -- <email> <password>` for operators).
+- New here? `/signup` creates the account and its first company; the overview then shows a set-up checklist.
 
-| Role          | Email                   | What they see |
-|---------------|-------------------------|---------------|
-| Owner         | owner@demo.local        | Everything, including managing other owners |
-| Admin         | admin@demo.local        | Everything except owner accounts |
-| Dispatcher    | dispatch@demo.local     | Board, loads, tracking, drivers, customers, chat, claims |
-| Fleet manager | fleet@demo.local        | Trucks, trailers, maintenance, work orders, drivers, reports |
-| Accountant    | accounting@demo.local   | Finance, billing queue, invoices, customers, claims, reports |
-| Driver        | driver@demo.local       | Mobile driver portal (their own trips), chat, announcements |
+### How data is kept apart
+
+`src/lib/db.ts` exports a Prisma client that scopes **every** query on a company model to the active company: it adds
+`companyId` to every `where` (including `findUnique`) and every create, and refuses foreign keys that point at another
+company's row. The active company comes from the session (`src/lib/session.ts`): the signed `fo_session` cookie lists
+the signed-in accounts; `fo_active` says which account × company this browser works in and is re-checked against the
+membership on every request. `rootDb` (`src/lib/db-root.ts`) is unscoped and used only for accounts, memberships,
+invites and companies. Raw SQL is not scoped — don't use it for company data.
+
+## Modules
+
+| Module | Highlights |
+|---|---|
+| **Overview** | Six numbers, what needs you today, the shop today, coming-up expiries and PM, live fleet, costs; set-up checklist for a new company |
+| **Trucks & trailers** | Status, ownership and lease caps, PM by odometer, readings (odometer / fuel / location), paperwork with expiry, notes, costs per truck (fuel + maintenance per km, L/100 km), documents |
+| **Maintenance** | Spend summary, repair log, PM schedule, lease mileage, in shop, compliance; work orders numbered per company |
+| **Drivers** | Cleared to drive, assigned truck, licence and medical expiry, hold, safety score, documents, fuel by driver |
+| **Live map** | Rolling / idle / stopped / in shop / no signal, filters, truck details |
+| **Reports** | Maintenance and fuel spend, km driven, cost per km, downtime, by truck, category and vendor; CSV export |
+| **Settings** | Company profile and badge colour, company documents, members and invitations, audit log |
+| **Fleet assistant** | Ask about the active company's fleet in plain language (Vercel AI Gateway) |
+
+Distances come from odometer readings (fuel fills, work orders, manual readings) — `src/lib/mileage.ts` — since there are
+no loads in this product.
 
 ## Local development
 
 ```bash
 npm install
-npm run setup      # starts a local PostgreSQL in ./.pgdata, runs migrations, seeds demo data
+npm run setup      # local PostgreSQL in ./.pgdata on port 5434, migrations, demo data
 npm run dev        # http://localhost:3000 — one-click demo logins, password demo1234
 ```
 
-Development uses a **local PostgreSQL 17** cluster (`scripts/dev-db.mjs`, started automatically by `npm run dev`).
-Production stays on Neon; its credentials are pulled into `.env.vercel` with `npm run env:pull` and are only used
-for deliberate production operations. The seed wipes the database it points at, so it refuses any non-local
-database unless `CONFIRM_SEED=yes` is set.
+Demo data (`prisma/seed.ts`): four companies. **aziza@demo.local** owns Silk Road Freight, is a fleet specialist at
+Caspian Carriers and has an open invitation to Turon Logistics; **aziza@nomadtrucking.demo** is the same person's second
+login for Nomad Trucking. Sign in with one, then *Add another account* from the company menu to try switching. Also:
+owner@demo.local, timur@nomadtrucking.demo, bekzod@demo.local, viewer@demo.local.
 
 | Command | What it does |
 |---|---|
@@ -39,84 +65,38 @@ database unless `CONFIRM_SEED=yes` is set.
 | `npm run db:seed` | Wipe the local database and reload demo data (`DEMO_PASSWORD` to choose the password) |
 | `npm run db:stop` | Stop the local PostgreSQL |
 | `npx dotenv -e .env.local -- prisma migrate dev --name <change>` | Create a migration after editing the schema |
-| `node scripts/dev-cookie.mjs owner@demo.local` | Print a session cookie for smoke-testing pages with curl |
+| `node scripts/dev-cookie.mjs aziza@demo.local "Caspian Carriers"` | Print a Cookie header for smoke-testing pages with curl |
 
-## Modules
+The local cluster uses port **5434** so it can run next to the full platform's (5433).
 
-| Module | Highlights |
-|---|---|
-| **Overview** | Customizable (show or hide each section); six key numbers; "Needs attention" (top items, critical first, filter by compliance / dispatch / fleet / money / safety, full list one click away); today's pickups and recent activity in one tabbed card; live fleet map; billing queue; this week's production; monthly performance with chart |
-| **Dispatch board** | Daily board grouped by dispatcher team: load, driver (hold / type tags), truck, trailer, phones, status, time in status, ETA, next stop, notes. Statuses derive from the load and stop progress (Dispatched → At pickup → En route → Unloading) with manual override (Stop / Rest / Home / Vacation) and history. Row colours and notes per day, flat and prebook (> 24 h) views, date navigation, keyboard navigation, column copy, live refresh |
-| **Weekly production** | Revenue / km / $-per-km / load per driver per weekday, totals, goals per driver type, efficiency, CSV export |
-| **Loads** | Table and kanban board, filters, multi-stop booking form (pickups, intermediate deliveries, windows), broker vs customer, customer reference, empty km, suggested rate; detail with stepper, stops (arrive / complete), documents checklist (RC / BOL / POD → billing stage), recover to another unit, TONU / cancel with reason, activity with filters |
-| **Live tracking** | Control tower: rolling / idle / stopped, on a load / unassigned, team; speed, location, fuel, GPS fix age; routes through stops, ETA and late flags |
-| **Trucks & trailers** | Ownership (company / owner-operator / leased) with lease mileage caps and exposure; PM schedule by odometer; telematics; tabs (overview, maintenance, specs, financial, compliance, loads). Trailers: in use / empty / dropped / yard / shop / out of service with "since", paired truck, location, GPS provider, paperwork |
-| **Maintenance** | Spend summary (cost per km, vendors, categories, flagged units), repair log, PM schedule, lease mileage control, in shop, compliance; work orders with priorities, costs and documents |
-| **Drivers** | Teams, driver types, hold with reason, score, board status with history, performance, licence / medical expiry, documents |
-| **Customers & brokers** | Shippers and brokers, terms, credit exposure, loads as customer or broker, invoices, contracts |
-| **Finance** | Billing queue (missing documents → ready to invoice), invoices (draft / sent / paid / void), aging, DSO, printable invoices with company letterhead |
-| **Reports** | Revenue vs cost, margin, on-time, empty km, lane profitability, broker vs direct, drivers, trucks, claims; CSV export |
-| **Claims** | Cargo, late, OS&D, accident, equipment, injury; full lifecycle with notes, documents, assignee, analytics |
-| **Chat & announcements** | Company room, team rooms, per-load threads; pinned announcements |
-| **Company & admin** | Company profile and documents, teams, users and roles, Telegram alerts, audit log |
-| **Driver portal** | Mobile-first: current trip with stops, POD from the camera, status, GPS sharing, next trips, earnings, fuel |
-| **Fleet assistant** | Ask about the fleet in plain language; answers come from read-only tools over your own data (Vercel AI Gateway) |
+## Deploying as its own Vercel project
 
-### Load lifecycle
+This copy has its own database and must not share the full platform's:
 
-```
-PLANNED (booked) ──assign──▶ ASSIGNED (dispatched) ──pickup──▶ IN_TRANSIT ──POD──▶ DELIVERED ──bill──▶ INVOICED
-       ▲                        │          │
-       └────────unassign────────┘          └── TONU (truck ordered, not used) ──▶ INVOICED
-```
-
-Billing stage follows the paperwork: delivered loads are **Missing docs** until RC and POD are on file, then
-**Ready to invoice**, then **Invoiced** / **Paid**. The rules live in `src/lib/workflow.ts`.
-
-**Prebooking.** A truck, driver or trailer can hold several dispatched loads as long as their pickup → delivery
-windows don't overlap, with a 6-hour turnaround kept free around each one (`assertAvailable`). A unit already on
-the road is busy until its load is delivered.
-
-**Company time.** Every date and time is shown and entered in the company timezone (`TIMEZONE` in
-`src/lib/constants.ts`, Asia/Tashkent). The server clock is pinned to it in `src/instrumentation.ts`, because Vercel
-runs in UTC.
-
-## Design system
-
-"Graphite": graphite surfaces, one amber signal accent, semantic status colours, tabular numerals, compact density,
-Day (default) and Night themes, plus Auto, seven accent colours, three densities and three fonts per person (cookies resolved before first paint). Tokens in `src/app/globals.css`, kit in
-`src/components/ui.tsx`, rules in `docs/design-system.md`. The competitor benchmark and how we exceed it:
-`docs/competitive-analysis.md`.
-
-## Telegram alerts
-
-1. Message **@BotFather**, send `/newbot`, copy the token.
-2. `vercel env add TELEGRAM_BOT_TOKEN production --sensitive`, then `vercel deploy --prod` (or push).
-3. **Company → Telegram alerts → Connect webhook** on the live site; each person links under **My account**.
-4. Optional: add the bot to a group and send `/connect <code>` from the admin page.
-
-## Fleet assistant
-
-Needs an AI Gateway credential: on Vercel, OIDC works automatically; locally set `AI_GATEWAY_API_KEY` in `.env.local`.
-`ASSISTANT_MODEL` overrides the default `anthropic/claude-sonnet-5.5`. Without a credential the panel says so.
+1. Push this folder to its own repository and import it as a **new** Vercel project (region `fra1` is set in `vercel.json`).
+2. Add a **new** Neon database from the Vercel Marketplace (sets `DATABASE_URL`, `DATABASE_URL_UNPOOLED`) and a private
+   Blob store (`BLOB_READ_WRITE_TOKEN`).
+3. Set `AUTH_SECRET` (random 32-byte hex) and `DEMO_MODE=false`; optionally `APP_URL` for invitation links.
+4. Deploy. The build runs `prisma migrate deploy`, which creates the schema from `prisma/migrations/0_init`.
+5. Open `/signup` to create the first account and company. Seed demo data into production only on purpose:
+   `CONFIRM_SEED=yes` (it wipes the database).
 
 ## Architecture
 
 - **Next.js 16 (App Router)**: Server Components, Server Actions, route handlers under `src/app/api`
-- **Prisma 6 + PostgreSQL**: schema in `prisma/schema.prisma`; migrations applied on every Vercel build
-- **Vercel Blob (private)** for documents; local `./storage` fallback; seeded documents render a placeholder PDF
-- **Telegram Bot API** (`src/lib/telegram.ts`, routing in `src/lib/notify.ts`), **Vercel Cron** daily brief
-- **AI SDK 7** (`ToolLoopAgent`) for the assistant, gateway string models
-- **Leaflet + OpenStreetMap** (inverted tiles in Night), **Recharts** with theme-aware tokens
+- **Prisma 6 + PostgreSQL**: `prisma/schema.prisma`; company scope in `src/lib/db.ts`; migrations applied on every Vercel build
+- **Vercel Blob (private)** for documents (keys prefixed by company); local `./storage` fallback; seeded documents render a placeholder PDF
+- **AI SDK 7** for the assistant; **Leaflet + OpenStreetMap**; **Recharts**
+- "Graphite" design system with Day/Night themes: `docs/design-system.md`, kit in `src/components/ui.tsx`
 
 ## Environment variables
 
 | Name | Source |
 |---|---|
-| `DATABASE_URL`, `DATABASE_URL_UNPOOLED` | Neon integration (production); local cluster (`.env.local`) |
-| `BLOB_READ_WRITE_TOKEN` | Blob store `fleetops-docs` (production) |
-| `AUTH_SECRET`, `CRON_SECRET` | Random 32-byte hex |
+| `DATABASE_URL`, `DATABASE_URL_UNPOOLED` | Neon integration of this project; local cluster (`.env.local`) |
+| `BLOB_READ_WRITE_TOKEN` | Blob store of this project |
+| `AUTH_SECRET` | Random 32-byte hex |
 | `DEMO_MODE` | `true` locally, `false` in production |
-| `TELEGRAM_BOT_TOKEN` | Optional, from @BotFather |
+| `APP_URL` | Optional, base URL for invitation links |
 | `AI_GATEWAY_API_KEY`, `ASSISTANT_MODEL` | Optional locally; OIDC on Vercel |
-| `APP_URL`, `NEXT_PUBLIC_MAP_TILE_URL` | Optional |
+| `NEXT_PUBLIC_MAP_TILE_URL` | Optional |

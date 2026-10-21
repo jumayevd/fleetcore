@@ -36,18 +36,18 @@ export function TrailerForm({ action, trailer, trucks, cancelHref }: {
 
           <Card title={
             <span className="flex items-center gap-1.5">Status &amp; pairing
-              <InfoTip>{trailer ? "Changing the status resets its timer; a trailer on an active load stays In use. " : ""}Leave GPS provider empty if the trailer has no tracker.</InfoTip>
+              <InfoTip>{trailer ? "Changing the status restarts its time-in-status counter. " : ""}Dropped, Yard, Shop and Out of service unpair the truck. Leave GPS provider empty if the trailer has no tracker.</InfoTip>
             </span>
           }>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <Field label="Status">
                 <Select name="status" value={status} onChange={(e) => setStatus(e.target.value)} options={TRAILER_STATUSES.map((s) => ({ value: s, label: TRAILER_STATUS_LABELS[s] }))} />
               </Field>
-              <Field label="Paired truck" hint={unhooked ? `${TRAILER_STATUS_LABELS[status]} trailers aren't paired. Set In use or Empty to pair a tractor.` : undefined}>
+              <Field label="Paired truck" hint={unhooked ? `${TRAILER_STATUS_LABELS[status]} trailers aren't paired. Set In use or Empty to pair a truck.` : trucks.length ? undefined : "No trucks yet. Add one under Trucks to pair it."}>
                 <Select name="truckId" value={unhooked ? "" : truckId} onChange={(e) => setTruckId(e.target.value)} disabled={unhooked}
                   placeholder="Not paired" options={trucks.map((t) => ({ value: t.id, label: t.label }))} />
               </Field>
-              <Field label="Location"><Input name="locationName" defaultValue={trailer?.locationName ?? ""} placeholder="Yard, customer site or city" /></Field>
+              <Field label="Location"><Input name="locationName" defaultValue={trailer?.locationName ?? ""} placeholder="Yard, site or city" /></Field>
               <Field label="GPS provider">
                 <Input name="gpsProvider" list="gps-providers" defaultValue={trailer?.gpsProvider ?? ""} placeholder="Teltonika" />
                 <datalist id="gps-providers">{GPS_PROVIDERS.map((p) => <option key={p} value={p} />)}</datalist>

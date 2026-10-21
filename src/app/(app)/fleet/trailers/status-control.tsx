@@ -85,7 +85,7 @@ function StatusList({ status, pending, error, onPick }: { status: string; pendin
         ))}
       </ul>
       {error && <p role="alert" className="mt-1 rounded bg-danger-soft px-2 py-1 text-[11px] text-danger">{error}</p>}
-      <p className="mt-1 border-t border-line px-2 pt-1.5 text-[10px] leading-4 text-fg-subtle">Dropped, Yard, Shop and Out of service unpair the truck. Units on an active load stay In use.</p>
+      <p className="mt-1 border-t border-line px-2 pt-1.5 text-[10px] leading-4 text-fg-subtle">Dropped, Yard, Shop and Out of service unpair the truck.</p>
     </div>
   );
 }
@@ -99,7 +99,7 @@ function LocationStep({ status, initial, pending, error, onBack, onConfirm }: {
     <form className="p-1" onSubmit={(e) => { e.preventDefault(); onConfirm(place); }}>
       <button type="button" onClick={onBack} className="mb-1 inline-flex items-center gap-1 text-[11px] text-fg-subtle hover:text-fg"><ArrowLeft className="h-3 w-3" />Back</button>
       <label htmlFor={inputId} className="mb-1.5 block text-[12px] font-medium text-fg">{TRAILER_STATUS_LABELS[status]} — where?</label>
-      <input id={inputId} autoFocus value={place} onChange={(e) => setPlace(e.target.value)} placeholder={status === "YARD" ? "Tashkent yard" : "Customer yard, city"} className={cn(inputClass, "h-7 text-[12px]")} />
+      <input id={inputId} autoFocus value={place} onChange={(e) => setPlace(e.target.value)} placeholder={status === "YARD" ? "Tashkent yard" : "Site or city"} className={cn(inputClass, "h-7 text-[12px]")} />
       <div className="mt-2 flex items-center justify-between gap-2">
         {error ? <span role="alert" className="line-clamp-2 text-[11px] text-danger" title={error}>{error}</span> : <span className="text-[11px] text-fg-subtle">Leave empty to keep the current place</span>}
         <button type="submit" disabled={pending} className={buttonClass("primary", "sm")}>{pending ? "Saving…" : "Confirm"}</button>

@@ -2,47 +2,90 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
-import { useChat, type UseChatHelpers } from "@ai-sdk/react";
+import { Chat, useChat, type UseChatHelpers } from "@ai-sdk/react";
 import { DefaultChatTransport, getToolName, isToolUIPart } from "ai";
 import { ArrowUp, Check, CircleAlert, CircleMinus, CornerDownLeft, LoaderCircle, RotateCcw, Sparkles, Square, X } from "lucide-react";
 import { cn, IconButton, Kbd } from "@/components/ui";
 import type { FleetAgentUIMessage } from "@/lib/assistant/agent";
 import {
-  ASSISTANT_API, ASSISTANT_CHAT_ID, MAX_TEXT_CHARS, NOT_CONFIGURED_MESSAGE, describeAssistantError, dropUnsettledToolCalls,
-  parseAssistantInfo, safeInternalHref, toolLabel, type AssistantErrorKind, type AssistantInfo, type ToolActivityState,
+  ASSISTANT_API, MAX_TEXT_CHARS, NOT_CONFIGURED_MESSAGE, assistantChatId, describeAssistantError, dropUnsettledToolCalls,
+  parseAssistantInfo, safeInternalHref, toolLabel, type AssistantErrorKind, type AssistantInfo, type AssistantRequestScope, type ToolActivityState,
 } from "@/lib/assistant/shared";
+import { ACTIVE_COOKIE, parseWorkspaceKey } from "@/lib/workspace-shared";
 
 import { readOpen, subscribeOpen, writeOpen } from "./open-store";
 
-type Chat = UseChatHelpers<FleetAgentUIMessage>;
+type ChatHelpers = UseChatHelpers<FleetAgentUIMessage>;
 
+/** The account and company a conversation belongs to. */
+type Workspace = { companyId: string | null; userId: string | null };
 
-/** Fetch GET /api/assistant the first time the panel opens; null until it answers. */
-function useAssistantInfo(open: boolean) {
-  const [info, setInfo] = useState<AssistantInfo | null>(null);
+/** The workspace this browser works in, from the fo_active cookie: the fallback when the layout passes no ids. */
+function workspaceFromCookie(): Workspace {
+  try {
+    const raw = document.cookie.split("; ").find((c) => c.startsWith(`${ACTIVE_COOKIE}=`))?.slice(ACTIVE_COOKIE.length + 1);
+    const ref = parseWorkspaceKey(raw);
+    return { companyId: ref?.companyId ?? null, userId: ref?.userId ?? null };
+  } catch {
+    return { companyId: null, userId: null };
+  }
+}
+
+/**
+ * Conversations live in memory for the life of the tab, one per account and company, and are never persisted.
+ * Switching company shows that company's conversation (empty the first time); switching back restores the old one.
+ * Each conversation tells the API which company it belongs to, so a stale one is refused instead of mixing companies.
+ */
+const chats = new Map<string, Chat<FleetAgentUIMessage>>();
+function chatFor(ws: Workspace) {
+  const id = assistantChatId(ws.companyId, ws.userId);
+  let chat = chats.get(id);
+  if (!chat) {
+    const scope: AssistantRequestScope = { ...(ws.companyId ? { companyId: ws.companyId } : {}), ...(ws.userId ? { userId: ws.userId } : {}) };
+    chat = new Chat<FleetAgentUIMessage>({ id, transport: new DefaultChatTransport({ api: ASSISTANT_API, body: scope }) });
+    chats.set(id, chat);
+  }
+  return chat;
+}
+
+/** Fetch GET /api/assistant when the panel opens, once per workspace; null until it answers. */
+function useAssistantInfo(open: boolean, key: string) {
+  const [state, setState] = useState<{ key: string; info: AssistantInfo } | null>(null);
+  const info = state?.key === key ? state.info : null;
   useEffect(() => {
     if (!open || info) return;
     let live = true;
     fetch(ASSISTANT_API, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
-      .then((body: unknown) => { if (live) setInfo(parseAssistantInfo(body)); })
-      .catch(() => { if (live) setInfo(parseAssistantInfo(null)); });
+      .then((body: unknown) => { if (live) setState({ key, info: parseAssistantInfo(body) }); })
+      .catch(() => { if (live) setState({ key, info: parseAssistantInfo(null) }); });
     return () => { live = false; };
-  }, [open, info]);
+  }, [open, info, key]);
   return info;
 }
 
 /**
  * The chat itself (AI SDK, markdown, tools). Loaded by launcher.tsx only once the panel has been opened, then kept
- * mounted so closing the panel keeps the conversation. Whether the AI Gateway is configured, and the intro and
- * prompts this role can use, come from GET /api/assistant when the panel first opens.
+ * mounted so closing the panel keeps the conversation. Whether the AI Gateway is configured, the active company, and
+ * the intro and prompts this role can use, come from GET /api/assistant when the panel opens.
  */
-export function AssistantChat() {
+export function AssistantChat({ companyId, userId }: { companyId?: string | null; userId?: string | null }) {
   const open = useSyncExternalStore(subscribeOpen, readOpen, () => false);
-  // The chat lives here, not in the panel, so closing the panel keeps the conversation.
-  const transport = useMemo(() => new DefaultChatTransport({ api: ASSISTANT_API }), []);
-  const chat = useChat<FleetAgentUIMessage>({ id: ASSISTANT_CHAT_ID, transport });
-  const info = useAssistantInfo(open);
+  const [fromCookie] = useState(workspaceFromCookie);
+  // The layout's ids win (they change when the company does); the cookie, read once, is the fallback.
+  const sameAsCookie = companyId != null && fromCookie.companyId === companyId;
+  const wsCompany = companyId ?? fromCookie.companyId;
+  const wsUser = userId ?? (companyId == null || sameAsCookie ? fromCookie.userId : null);
+  const ws = useMemo<Workspace>(() => ({ companyId: wsCompany, userId: wsUser }), [wsCompany, wsUser]);
+  const key = assistantChatId(ws.companyId, ws.userId);
+  // The conversation lives outside the panel, so closing the panel (or switching company and back) keeps it.
+  const instance = useMemo(() => chatFor(ws), [ws]);
+  const chat = useChat<FleetAgentUIMessage>({ chat: instance });
+  const info = useAssistantInfo(open, key);
+  // GET answers for the company this browser works in now; another tab may have switched it since this page loaded.
+  const switched = info?.companyId && ws.companyId && info.companyId !== ws.companyId
+    ? `This browser now works in ${info.company ?? "another company"}. Reload the page to ask about ${info.company ?? "it"}.`
+    : null;
   const launcherRef = useRef<HTMLButtonElement>(null);
   const refocus = useRef(false);
 
@@ -59,7 +102,8 @@ export function AssistantChat() {
     // command palette (z-90+) sit above it. From lg up the open panel sits above toasts, still under menus and dialogs.
     <div className={cn("fixed bottom-4 right-4 print:hidden", open ? "z-[45] lg:z-[85]" : "z-[45]")}>
       {open ? (
-        <AssistantPanel chat={chat} info={info} onClose={close} />
+        // Keyed by workspace: a company switch starts from that company's own draft, scroll and stop state.
+        <AssistantPanel key={key} chat={chat} info={info} switched={switched} onClose={close} />
       ) : (
         <button ref={launcherRef} type="button" onClick={() => writeOpen(true)} aria-label="Open fleet assistant" title="Fleet assistant"
           className="flex h-11 w-11 items-center justify-center rounded-full bg-primary text-on-primary shadow-float transition-colors hover:bg-primary-hover">
@@ -78,7 +122,7 @@ const MAX_COMPOSER_PX = 120;
 /** Follow new output only while the reader is within this distance of the bottom. */
 const STICK_PX = 40;
 
-function AssistantPanel({ chat, info, onClose }: { chat: Chat; info: AssistantInfo | null; onClose: () => void }) {
+function AssistantPanel({ chat, info, switched, onClose }: { chat: ChatHelpers; info: AssistantInfo | null; switched: string | null; onClose: () => void }) {
   const { messages, sendMessage, status, error, stop, regenerate, setMessages, clearError } = chat;
   const [input, setInput] = useState("");
   const [stopped, setStopped] = useState(false);
@@ -89,8 +133,11 @@ function AssistantPanel({ chat, info, onClose }: { chat: Chat; info: AssistantIn
   const busy = status === "submitted" || status === "streaming";
   const problem: { kind: AssistantErrorKind; message: string } | null = error
     ? describeAssistantError(error)
-    : info?.configured === false ? { kind: "not-configured", message: NOT_CONFIGURED_MESSAGE } : null;
-  const blocked = problem?.kind === "not-configured" || problem?.kind === "unauthorised";
+    : switched ? { kind: "company-changed", message: switched }
+      : info?.configured === false ? { kind: "not-configured", message: NOT_CONFIGURED_MESSAGE } : null;
+  const blocked = problem?.kind === "not-configured" || problem?.kind === "unauthorised" || problem?.kind === "company-changed";
+  // The company this conversation is about; unknown once the browser has moved to another one.
+  const company = switched ? null : (info?.company ?? null);
   const last = messages[messages.length - 1];
   // "Thinking…" fills the gap before the first token or tool call of the reply.
   const thinking = busy && !(last?.role === "assistant" && last.parts.some((p) => (p.type === "text" && p.text.trim()) || (isToolUIPart(p) && p.state !== "output-available")));
@@ -148,14 +195,16 @@ function AssistantPanel({ chat, info, onClose }: { chat: Chat; info: AssistantIn
         <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent-text"><Sparkles className="h-3.5 w-3.5" /></span>
         <div className="min-w-0 flex-1 leading-tight">
           <h2 className="truncate text-[13px] font-semibold text-fg">Fleet assistant</h2>
-          <p className="truncate text-[11px] text-fg-subtle">{busy ? "Working…" : info?.configured === false ? "Not configured" : "Live answers from FleetOps data"}</p>
+          <p className="truncate text-[11px] text-fg-subtle" title={company ?? undefined}>
+            {busy ? "Working…" : info?.configured === false ? "Not configured" : company ? `${company} · live fleet data` : "Live fleet data"}
+          </p>
         </div>
         {messages.length > 0 && <IconButton label="New conversation" onClick={reset}><RotateCcw /></IconButton>}
         <IconButton label="Close" onClick={onClose}><X /></IconButton>
       </header>
 
       <div ref={listRef} onScroll={onScroll} className="flex-1 space-y-3 overflow-y-auto px-3 py-3">
-        {messages.length === 0 && <Welcome info={info} disabled={blocked} onPick={send} />}
+        {messages.length === 0 && <Welcome info={info} company={company} disabled={blocked} onPick={send} />}
         {messages.map((m, i) => <MessageView key={m.id} message={m} streaming={busy && i === messages.length - 1 && m.role === "assistant"} />)}
         {thinking && <ActivityLine state="doing" text="Thinking…" />}
         {stopped && !busy && <ActivityLine state="stopped" text="Stopped" />}
@@ -169,6 +218,9 @@ function AssistantPanel({ chat, info, onClose }: { chat: Chat; info: AssistantIn
             </div>
             {problem.kind === "generic" && (
               <button type="button" onClick={retry} className="shrink-0 font-medium underline-offset-2 hover:underline">Retry</button>
+            )}
+            {problem.kind === "company-changed" && (
+              <button type="button" onClick={() => window.location.reload()} className="shrink-0 font-medium underline-offset-2 hover:underline">Reload</button>
             )}
           </div>
         )}
@@ -201,11 +253,11 @@ function AssistantPanel({ chat, info, onClose }: { chat: Chat; info: AssistantIn
   );
 }
 
-function Welcome({ info, disabled, onPick }: { info: AssistantInfo | null; disabled: boolean; onPick: (text: string) => void }) {
+function Welcome({ info, company, disabled, onPick }: { info: AssistantInfo | null; company: string | null; disabled: boolean; onPick: (text: string) => void }) {
   return (
     <div className="px-0.5 pt-1">
-      <p className="text-[13px] font-medium text-fg">Ask about the fleet</p>
-      <p className="mt-0.5 text-[12px] leading-snug text-fg-muted">{info?.intro ?? "Answers from the live FleetOps database, with read-only lookups."}</p>
+      <p className="text-[13px] font-medium text-fg">{company ? `Ask about ${company}` : "Ask about the fleet"}</p>
+      <p className="mt-0.5 text-[12px] leading-snug text-fg-muted">{info?.intro ?? "Answers from live fleet data, with read-only lookups."}</p>
       {info ? (
         info.prompts.length > 0 && (
           <ul className="mt-3 space-y-1">

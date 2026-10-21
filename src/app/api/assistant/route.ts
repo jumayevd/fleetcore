@@ -4,7 +4,10 @@ import { getCurrentUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { assistantModelId, createFleetAgent, isAssistantConfigured } from "@/lib/assistant/agent";
 import { prepareHistory } from "@/lib/assistant/history";
-import { NOT_CONFIGURED_CODE, NOT_CONFIGURED_MESSAGE, introFor, promptsFor, type AssistantErrorBody, type AssistantInfo } from "@/lib/assistant/shared";
+import {
+  COMPANY_CHANGED_CODE, NOT_CONFIGURED_CODE, NOT_CONFIGURED_MESSAGE, introFor, promptsFor,
+  type AssistantErrorBody, type AssistantInfo,
+} from "@/lib/assistant/shared";
 
 export const dynamic = "force-dynamic";
 /** Tool round trips plus a long answer can take a while on a cold model. */
@@ -31,23 +34,28 @@ function describe(error: unknown): string {
 
 /**
  * GET /api/assistant — what the panel shows before the first question: whether the gateway is
- * configured, plus the intro and suggested prompts this role can actually get answers to.
- * 401 signed out · 403 role lacks assistant.use.
+ * configured, the active company, and the intro and suggested prompts this role can actually get answers to.
+ * 401 signed out (or no company chosen) · 403 role lacks assistant.use.
  */
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return fail(401, "Sign in required", "UNAUTHENTICATED");
   if (!can(user.role, "assistant.use")) return fail(403, "Your role can't use the fleet assistant", "FORBIDDEN");
   return NextResponse.json<AssistantInfo>(
-    { configured: isAssistantConfigured(), intro: introFor(user.role), prompts: promptsFor(user.role) },
+    {
+      configured: isAssistantConfigured(), companyId: user.company.id, company: user.company.name,
+      intro: introFor(user.role, user.company.name), prompts: promptsFor(user.role),
+    },
     { headers: NO_STORE },
   );
 }
 
 /**
- * POST /api/assistant — body `{ messages: UIMessage[] }` from `useChat`.
- * Streams a UI message stream (text, tool activity, finish) for the Fleet Assistant.
- * 401 signed out · 403 role lacks assistant.use · 503 no gateway credentials · 400 bad body.
+ * POST /api/assistant — body `{ messages: UIMessage[], companyId?, userId? }` from `useChat`.
+ * Streams a UI message stream (text, tool activity, finish) for the Fleet Assistant, about the active company only.
+ * `companyId` / `userId` say which workspace the panel's conversation belongs to; when this browser has switched
+ * since (another tab), the answer would mix two companies, so it is refused with 409 instead.
+ * 401 signed out · 403 role lacks assistant.use · 409 company changed · 503 no gateway credentials · 400 bad body.
  */
 export async function POST(req: Request) {
   const user = await getCurrentUser();
@@ -55,11 +63,16 @@ export async function POST(req: Request) {
   if (!can(user.role, "assistant.use")) return fail(403, "Your role can't use the fleet assistant", "FORBIDDEN");
   if (!isAssistantConfigured()) return fail(503, NOT_CONFIGURED_MESSAGE, NOT_CONFIGURED_CODE);
 
-  let body: { messages?: unknown };
+  let body: { messages?: unknown; companyId?: unknown; userId?: unknown };
   try {
-    body = (await req.json()) as { messages?: unknown };
+    body = (await req.json()) as typeof body;
   } catch {
     return fail(400, "Send JSON with a messages array", "BAD_REQUEST");
+  }
+  const otherCompany = typeof body?.companyId === "string" && body.companyId !== user.company.id;
+  const otherAccount = typeof body?.userId === "string" && body.userId !== user.id;
+  if (otherCompany || otherAccount) {
+    return fail(409, `This browser now works in ${user.company.name}. Reload the page to ask about ${user.company.name}.`, COMPANY_CHANGED_CODE);
   }
   const messages = Array.isArray(body?.messages) ? body.messages : null;
   if (!messages || messages.length === 0) return fail(400, "Send at least one message", "BAD_REQUEST");
@@ -68,7 +81,9 @@ export async function POST(req: Request) {
   if (!uiMessages) return fail(400, "The conversation payload isn't valid. Clear the chat and try again.", "BAD_REQUEST");
   if (uiMessages.length === 0) return fail(400, "Send a message from the user", "BAD_REQUEST");
 
-  const agent = createFleetAgent({ role: user.role, name: user.name });
+  // Tools run pinned to this company (see tools.ts), whatever the browser does while the answer streams.
+  const agent = createFleetAgent({ role: user.role, name: user.name, company: { id: user.company.id, name: user.company.name } });
+  const who = `${user.email} @ ${user.company.id}`;
   try {
     return await createAgentUIStreamResponse({
       agent,
@@ -78,13 +93,13 @@ export async function POST(req: Request) {
       sendReasoning: false,
       headers: NO_STORE,
       onError: (error) => {
-        console.error("[assistant]", user.email, error instanceof Error ? error.message : error);
+        console.error("[assistant]", who, error instanceof Error ? error.message : error);
         return describe(error);
       },
     });
   } catch (error) {
     // Thrown before the stream starts: malformed UI messages, model resolution, provider setup.
-    console.error("[assistant] failed to start", user.email, error);
+    console.error("[assistant] failed to start", who, error);
     const msg = error instanceof Error ? error.message : "";
     if (/invalid|validation|parts|role/i.test(msg) && !/api key/i.test(msg)) return fail(400, "The conversation payload isn't valid. Clear the chat and try again.", "BAD_REQUEST");
     return fail(500, describe(error), "ASSISTANT_ERROR");

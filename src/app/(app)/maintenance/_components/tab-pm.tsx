@@ -18,7 +18,7 @@ export function PmTab({ rows, editable }: { rows: PmRow[]; editable: boolean }) 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Overdue" value={overdue.length} tone={overdue.length ? "danger" : "ok"} hint={overdue.length ? `${km(totalOverdueKm)} past due in total` : "no truck past its interval"} />
         <Stat label="Due within 2,000 km" value={dueSoon.length} tone={dueSoon.length ? "warn" : "neutral"} hint="book the shop this week" />
-        <Stat label="Due within 5,000 km" value={upcoming.length} tone="info" hint="plan around upcoming loads" />
+        <Stat label="Due within 5,000 km" value={upcoming.length} tone="info" hint="plan the shop visit and parts ahead" />
         <Stat label="Tracked trucks" value={rows.length} hint={unknown.length ? `${unknown.length} without a last PM reading` : "every truck has a PM baseline"} />
       </div>
 

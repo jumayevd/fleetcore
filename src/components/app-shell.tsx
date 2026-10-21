@@ -5,9 +5,9 @@ import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import { Suspense, use, useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  LayoutDashboard, Rows3, Package, Map, CalendarRange, Navigation, Truck, Container, Wrench, ClipboardList, Users, Building2,
-  Receipt, BarChart3, ShieldAlert, MessageSquare, Megaphone, Landmark, ShieldCheck, Send, ScrollText, Wallet, Settings,
-  Bell, Search, Menu, X, LogOut, UserCircle, PanelLeftClose, PanelLeftOpen, ChevronRight, Palette, type LucideIcon,
+  LayoutDashboard, Map, Truck, Container, Wrench, ClipboardList, Users, BarChart3, Landmark, ShieldCheck, ScrollText, Settings,
+  Bell, Search, Menu, X, LogOut, UserCircle, PanelLeftClose, PanelLeftOpen, ChevronRight, Palette, Package, UserPlus, LayoutGrid,
+  type LucideIcon,
 } from "lucide-react";
 import { cn, Avatar, Kbd, StatusDot } from "./ui";
 // Opened on demand, so they download on first use instead of with every page.
@@ -17,24 +17,29 @@ const AppearanceControls = dynamic(() => import("./appearance").then((m) => m.Ap
   loading: () => <div className="h-72" aria-busy="true" />,
 });
 import { NavProgress } from "./nav-progress";
+import { WorkspaceGuard, WorkspaceSwitcher, flatCompanies, useSwitchCompany } from "./workspace-switcher";
 import { NAV, NAV_COOKIE, SEGMENT_LABELS, allNavItems, findNavItem, findNavSection } from "@/lib/nav";
 import { can } from "@/lib/permissions";
-import { ROLE_LABELS, type Role } from "@/lib/constants";
-import { logout } from "@/app/actions/auth";
+import { ROLE_LABELS } from "@/lib/constants";
+import { signOut, signOutAll } from "@/app/actions/auth";
+import type { ActiveWorkspace, WorkspaceAccount } from "@/lib/workspace-shared";
 import type { Alert } from "@/lib/alerts";
 
 const ICONS: Record<string, LucideIcon> = {
-  LayoutDashboard, Rows3, Package, Map, CalendarRange, Navigation, Truck, Container, Wrench, ClipboardList, Users, Building2,
-  Receipt, BarChart3, ShieldAlert, MessageSquare, Megaphone, Landmark, ShieldCheck, Send, ScrollText, Wallet, Settings,
+  LayoutDashboard, Map, Truck, Container, Wrench, ClipboardList, Users, BarChart3, Landmark, ShieldCheck, ScrollText, Settings,
 };
 
-type ShellUser = { name: string; email: string; role: string };
+type ShellUser = { name: string; email: string; role: ActiveWorkspace["role"] };
 
 /** Alerts for the bell and counts for the nav. Streamed: the shell renders first, these fill in when ready. */
 export type ShellData = { alerts: Alert[]; badges: Record<string, number> };
 
-export function AppShell({ user, data, navOpen, children }: {
+export function AppShell({ user, active, accounts, data, navOpen, children }: {
   user: ShellUser;
+  /** The company this browser is working in, and as which signed-in account. */
+  active: ActiveWorkspace;
+  /** Every signed-in account with its companies (the switcher). */
+  accounts: WorkspaceAccount[];
   data: Promise<ShellData>;
   /** Sidebar state from the cookie, so the first paint already has the right width. */
   navOpen: boolean;
@@ -45,19 +50,29 @@ export function AppShell({ user, data, navOpen, children }: {
   const [pinned, setPinned] = useState(navOpen);
   const [cmd, setCmd] = useState(false);
   const chord = useRef<string | null>(null);
+  const switchTo = useSwitchCompany();
   const setSidebar = (open: boolean) => {
     setPinned(open);
     document.cookie = `${NAV_COOKIE}=${open ? "open" : "rail"}; path=/; max-age=31536000; samesite=lax`;
   };
   const togglePinned = () => setSidebar(!pinned);
 
-  // Global keys: ⌘K / Ctrl+K or "/" opens search; "g" then a letter jumps (g l → loads).
+  // Global keys: ⌘K / Ctrl+K or "/" opens search; "g" then a letter jumps (g t → trucks); Alt+1…9 switches company.
   useEffect(() => {
     const shortcuts = Object.fromEntries(allNavItems().filter((i) => i.shortcut && can(user.role, i.perm)).map((i) => [i.shortcut!.split(" ")[1], i.href]));
+    const companies = flatCompanies(accounts);
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       const typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setCmd((c) => !c); return; }
+      if (e.altKey && !e.ctrlKey && !e.metaKey && /^Digit[1-9]$/.test(e.code)) {
+        const c = companies[Number(e.code.slice(5)) - 1];
+        if (c) {
+          e.preventDefault();
+          if (c.userId !== active.userId || c.id !== active.companyId) switchTo(c.userId, c.id);
+        }
+        return;
+      }
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "/") { e.preventDefault(); setCmd(true); return; }
       if (chord.current === "g") {
@@ -70,36 +85,38 @@ export function AppShell({ user, data, navOpen, children }: {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [router, user.role]);
+  }, [router, user.role, accounts, active.userId, active.companyId, switchTo]);
 
   return (
     <div className="min-h-screen">
       <Suspense fallback={null}><NavProgress /></Suspense>
-      {/* Desktop sidebar: labelled by default; collapses to a 56px rail that expands on hover. */}
+      {/* Desktop sidebar: labelled by default; collapses to a 64px rail that expands on hover. */}
       <aside className={cn("group/rail fixed inset-y-0 left-0 z-40 hidden bg-canvas transition-[width,box-shadow] duration-200 ease-out lg:block print:hidden",
         pinned ? "w-60" : "w-16 border-r border-line hover:w-60 hover:shadow-float")}>
         <div className={cn(pinned ? "block" : "hidden group-hover/rail:block", "h-full")}>
-          <SideNav user={user} path={path} data={data} expanded pinned={pinned} onTogglePin={togglePinned} />
+          <SideNav user={user} active={active} accounts={accounts} path={path} data={data} expanded pinned={pinned} onTogglePin={togglePinned} />
         </div>
         {!pinned && (
           <div className="h-full group-hover/rail:hidden">
-            <SideNav user={user} path={path} data={data} expanded={false} pinned={pinned} onTogglePin={togglePinned} />
+            <SideNav user={user} active={active} accounts={accounts} path={path} data={data} expanded={false} pinned={pinned} onTogglePin={togglePinned} />
           </div>
         )}
       </aside>
 
       <div className={cn("transition-[padding] duration-200 ease-out", pinned ? "lg:pl-60" : "lg:pl-16", "print:pl-0")}>
         {/* Keyed by path so popovers and the mobile drawer close on navigation without effects. */}
-        <TopBar key={path} user={user} path={path} data={data} pinned={pinned} onSidebar={setSidebar} openSearch={() => setCmd(true)} />
+        <TopBar key={path} user={user} active={active} accounts={accounts} path={path} data={data} pinned={pinned} onSidebar={setSidebar} openSearch={() => setCmd(true)} />
         <main className="mx-auto w-full max-w-[1680px] px-4 pb-8 pt-2 lg:px-6">{children}</main>
       </div>
-      {cmd && <CommandPalette onClose={() => setCmd(false)} role={user.role} />}
+      {cmd && <CommandPalette onClose={() => setCmd(false)} role={user.role} active={active} accounts={accounts} onSwitch={switchTo} />}
+      <WorkspaceGuard active={active} accounts={accounts} />
     </div>
   );
 }
 
-function SideNav({ user, path, data, expanded, pinned, onTogglePin, onNavigate }: {
-  user: ShellUser; path: string; data: Promise<ShellData>; expanded: boolean; pinned: boolean; onTogglePin: () => void; onNavigate?: () => void;
+function SideNav({ user, active, accounts, path, data, expanded, pinned, onTogglePin, onNavigate }: {
+  user: ShellUser; active: ActiveWorkspace; accounts: WorkspaceAccount[]; path: string; data: Promise<ShellData>;
+  expanded: boolean; pinned: boolean; onTogglePin: () => void; onNavigate?: () => void;
 }) {
   const activeHref = findNavItem(path)?.href;
   const activeSection = findNavSection(path)?.section;
@@ -108,17 +125,16 @@ function SideNav({ user, path, data, expanded, pinned, onTogglePin, onNavigate }
   const groups = NAV.map((g) => ({ ...g, items: g.items.filter((i) => can(user.role, i.perm)) })).filter((g) => g.items.length);
   return (
     <nav className="flex h-full flex-col" aria-label="Main">
-      <div className={cn("flex h-14 shrink-0 items-center", expanded ? "px-4" : "justify-center")}>
-        <Link href="/" className="flex items-center gap-2.5 text-fg" aria-label="FleetOps home">
-          <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-mark bg-linear-to-br from-white/25 to-white/0 text-on-mark shadow-card"><Truck className="h-4 w-4" /></span>
-          {expanded && <span className="text-[15px] font-semibold tracking-[-0.01em]">FleetOps</span>}
-        </Link>
+      {/* The company's colour along the top edge: you always see which company you are working in. */}
+      <div aria-hidden className="h-[3px] shrink-0" style={{ background: active.color ?? "var(--mark)" }} />
+      <div className={cn("flex h-14 shrink-0 items-center", expanded ? "px-2" : "justify-center px-1.5")}>
+        <WorkspaceSwitcher active={active} accounts={accounts} expanded={expanded} />
       </div>
       <div className="flex-1 space-y-0.5 overflow-y-auto overflow-x-hidden px-2 pb-3 pt-1">
         {groups.map((g) => {
           const here = g.section === activeSection;
           const single = g.items.length === 1;
-          // One item for this role (Overview, a driver's My trips), or the icon rail: a plain link, no fold.
+          // One item in the category, or the icon rail: a plain link, no fold.
           if (single || !expanded) {
             const item = single ? g.items[0] : (g.items.find((i) => i.href === activeHref) ?? g.items[0]);
             const Icon = ICONS[single ? item.icon : g.icon] ?? Package;
@@ -150,13 +166,13 @@ function SideNav({ user, path, data, expanded, pinned, onTogglePin, onNavigate }
                 <div className="min-h-0 overflow-hidden" inert={!open}>
                   <ul className="ml-[19px] space-y-0.5 border-l border-line py-1 pl-2">
                     {g.items.map((i) => {
-                      const active = activeHref === i.href;
+                      const on = activeHref === i.href;
                       return (
                         <li key={i.href} className="relative">
-                          {active && <span aria-hidden className="absolute -left-[9px] bottom-2 top-2 w-[2px] rounded-full bg-accent" />}
-                          <Link href={i.href} onClick={onNavigate} aria-current={active ? "page" : undefined}
+                          {on && <span aria-hidden className="absolute -left-[9px] bottom-2 top-2 w-[2px] rounded-full bg-accent" />}
+                          <Link href={i.href} onClick={onNavigate} aria-current={on ? "page" : undefined}
                             className={cn("group flex h-8 items-center gap-2 rounded-[8px] px-2.5 text-[13px] transition-[color,background-color,box-shadow] duration-150",
-                              active ? "bg-surface font-medium text-fg shadow-card" : "text-fg-muted hover:bg-surface/60 hover:text-fg")}>
+                              on ? "bg-surface font-medium text-fg shadow-card" : "text-fg-muted hover:bg-surface/60 hover:text-fg")}>
                             <span className="truncate">{i.label}</span>
                             <Suspense fallback={null}><NavBadge data={data} hrefs={[i.href]} expanded /></Suspense>
                           </Link>
@@ -170,18 +186,24 @@ function SideNav({ user, path, data, expanded, pinned, onTogglePin, onNavigate }
           );
         })}
       </div>
-      <div className="p-2">
-        <button type="button" onClick={onTogglePin} title={pinned ? "Collapse sidebar" : "Keep sidebar open"}
-          className={cn("hidden h-8 w-full items-center gap-2.5 rounded-[9px] text-[12px] text-fg-subtle transition-colors hover:bg-surface/60 hover:text-fg lg:flex", expanded ? "px-2.5" : "justify-center")}>
-          {pinned ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
-          {expanded && <span>{pinned ? "Collapse" : "Keep open"}</span>}
-        </button>
+      <div className="flex items-center gap-1 p-2">
+        <Link href="/select" onClick={onNavigate} title="FleetOps · all companies"
+          className={cn("flex h-8 min-w-0 items-center gap-2 rounded-[9px] text-[12px] text-fg-subtle transition-colors hover:bg-surface/60 hover:text-fg", expanded ? "flex-1 px-2.5" : "w-full justify-center")}>
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] bg-mark text-on-mark"><Truck className="h-3 w-3" /></span>
+          {expanded && <span className="truncate font-medium">FleetOps</span>}
+        </Link>
+        {expanded && (
+          <button type="button" onClick={onTogglePin} title={pinned ? "Collapse sidebar" : "Keep sidebar open"}
+            className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-[9px] text-fg-subtle transition-colors hover:bg-surface/60 hover:text-fg lg:flex">
+            {pinned ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
+          </button>
+        )}
       </div>
     </nav>
   );
 }
 
-/** Count chip on a nav item or a folded category (open claims, unassigned loads, pinned announcements). */
+/** Count chip on a nav item or a folded category (overdue work orders). */
 function NavBadge({ data, hrefs, expanded }: { data: Promise<ShellData>; hrefs: string[]; expanded: boolean }) {
   const { badges } = use(data);
   const n = hrefs.reduce((a, h) => a + (badges[h] ?? 0), 0);
@@ -191,8 +213,9 @@ function NavBadge({ data, hrefs, expanded }: { data: Promise<ShellData>; hrefs: 
     : <span className="fade-in absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent" />;
 }
 
-function TopBar({ user, path, data, pinned, onSidebar, openSearch }: {
-  user: ShellUser; path: string; data: Promise<ShellData>; pinned: boolean; onSidebar: (open: boolean) => void; openSearch: () => void;
+function TopBar({ user, active, accounts, path, data, pinned, onSidebar, openSearch }: {
+  user: ShellUser; active: ActiveWorkspace; accounts: WorkspaceAccount[]; path: string; data: Promise<ShellData>;
+  pinned: boolean; onSidebar: (open: boolean) => void; openSearch: () => void;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [bell, setBell] = useState(false);
@@ -200,6 +223,7 @@ function TopBar({ user, path, data, pinned, onSidebar, openSearch }: {
   const [look, setLook] = useState(false);
   const only = (which: "bell" | "user" | "look") => { setBell(which === "bell" ? (b) => !b : false); setUserMenu(which === "user" ? (u) => !u : false); setLook(which === "look" ? (l) => !l : false); };
   const crumbs = breadcrumbs(path);
+  const many = accounts.length > 1;
 
   return (
     <>
@@ -207,7 +231,7 @@ function TopBar({ user, path, data, pinned, onSidebar, openSearch }: {
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="fade-in absolute inset-0 bg-scrim" onClick={() => setMobileOpen(false)} />
           <aside className="drawer-in absolute inset-y-0 left-0 w-64 border-r border-line bg-canvas shadow-float">
-            <SideNav user={user} path={path} data={data} expanded pinned={pinned} onTogglePin={() => {}} onNavigate={() => setMobileOpen(false)} />
+            <SideNav user={user} active={active} accounts={accounts} path={path} data={data} expanded pinned={pinned} onTogglePin={() => {}} onNavigate={() => setMobileOpen(false)} />
           </aside>
         </div>
       )}
@@ -216,6 +240,12 @@ function TopBar({ user, path, data, pinned, onSidebar, openSearch }: {
           {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
         </button>
         <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1 text-[13px]">
+          {/* On a phone the sidebar is hidden, so the company leads the breadcrumb. */}
+          <span className="flex min-w-0 items-center gap-1 lg:hidden">
+            <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: active.color ?? "var(--mark)" }} aria-hidden />
+            <span className="max-w-28 truncate font-medium text-fg-muted">{active.companyName}</span>
+            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-fg-faint" />
+          </span>
           {crumbs.map((c, i) => (
             <span key={c.href} className="flex min-w-0 items-center gap-1">
               {i > 0 && <ChevronRight className="h-3.5 w-3.5 shrink-0 text-fg-faint" />}
@@ -227,7 +257,7 @@ function TopBar({ user, path, data, pinned, onSidebar, openSearch }: {
         </nav>
         <div className="ml-auto flex items-center gap-1">
           <button onClick={openSearch} className="hidden h-9 w-64 items-center gap-2 rounded-[10px] border border-line bg-surface px-3 text-[13px] text-fg-subtle shadow-card transition-colors hover:border-line-strong hover:text-fg-muted sm:flex" aria-label="Search">
-            <Search className="h-3.5 w-3.5" /><span className="flex-1 text-left">Search…</span><Kbd>⌘K</Kbd>
+            <Search className="h-3.5 w-3.5" /><span className="flex-1 truncate text-left">Search {active.companyName}…</span><Kbd>⌘K</Kbd>
           </button>
           <button onClick={openSearch} className="rounded-md p-1.5 text-fg-muted transition-colors hover:bg-raised sm:hidden" aria-label="Search"><Search className="h-4 w-4" /></button>
           <div className="relative">
@@ -256,14 +286,24 @@ function TopBar({ user, path, data, pinned, onSidebar, openSearch }: {
               <span className="hidden text-[13px] font-medium text-fg-muted md:block">{user.name.split(" ")[0]}</span>
             </button>
             {userMenu && (
-              <Popover onClose={() => setUserMenu(false)} className="w-60">
+              <Popover onClose={() => setUserMenu(false)} className="w-64">
                 <div className="px-3 py-2.5">
                   <p className="truncate text-[13px] font-medium text-fg">{user.name}</p>
-                  <p className="truncate text-[12px] text-fg-subtle">{ROLE_LABELS[user.role as Role]} · {user.email}</p>
+                  <p className="truncate text-[12px] text-fg-subtle">{user.email}</p>
+                  <p className="mt-1 truncate text-[12px] text-fg-muted">{ROLE_LABELS[user.role]} in {active.companyName}</p>
                 </div>
                 <div className="border-t border-line p-1">
-                  <Link href="/account" className="flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-fg-muted transition-colors hover:bg-raised hover:text-fg"><UserCircle className="h-4 w-4" />My account</Link>
-                  <form action={logout}><button className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-fg-muted transition-colors hover:bg-raised hover:text-fg"><LogOut className="h-4 w-4" />Sign out</button></form>
+                  <MenuLink href="/account" icon={<UserCircle />}>My account</MenuLink>
+                  <MenuLink href="/select" icon={<LayoutGrid />}>All companies</MenuLink>
+                  <MenuLink href="/login?add=1" icon={<UserPlus />}>Add another account</MenuLink>
+                </div>
+                <div className="border-t border-line p-1">
+                  <form action={signOut}>
+                    <input type="hidden" name="userId" value={active.userId} />
+                    <input type="hidden" name="path" value={path} />
+                    <button className={menuItem}><LogOut />{many ? `Sign out of ${user.email}` : "Sign out"}</button>
+                  </form>
+                  {many && <form action={signOutAll}><button className={menuItem}><LogOut />Sign out of all accounts</button></form>}
                 </div>
               </Popover>
             )}
@@ -272,6 +312,12 @@ function TopBar({ user, path, data, pinned, onSidebar, openSearch }: {
       </header>
     </>
   );
+}
+
+const menuItem = "flex w-full min-w-0 items-center gap-2 truncate rounded-md px-2 py-1.5 text-left text-[13px] text-fg-muted transition-colors hover:bg-raised hover:text-fg [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0";
+
+function MenuLink({ href, icon, children }: { href: string; icon: ReactNode; children: ReactNode }) {
+  return <Link href={href} className={menuItem}>{icon}{children}</Link>;
 }
 
 function BellButton({ count, critical, onClick }: { count: number; critical: number; onClick: () => void }) {
@@ -297,7 +343,7 @@ function BellMenu({ data, open, onToggle, onClose }: { data: Promise<ShellData>;
           </div>
           <ul className="max-h-[60vh] overflow-y-auto border-t border-line py-1">
             {alerts.length === 0 && <li className="px-3 py-6 text-center text-[12px] text-fg-subtle">All clear</li>}
-            {alerts.map((a, i) => (
+            {alerts.slice(0, 30).map((a, i) => (
               <li key={i}>
                 <Link href={a.href} className="flex gap-2.5 px-3 py-2 transition-colors hover:bg-raised">
                   <StatusDot tone={a.level === "critical" ? "danger" : "warn"} className="mt-1.5" />

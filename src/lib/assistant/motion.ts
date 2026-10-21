@@ -1,54 +1,48 @@
-import "server-only";
-import { nearestCity } from "@/lib/constants";
-import { pointAlongPolyline } from "@/lib/geo";
-import { loadProgress, loadRoute } from "@/lib/telemetry";
-
-/** Same freshness rule as lib/telemetry.ts (not exported there): a real device ping wins for 5 minutes. */
-const DEVICE_FRESH_MS = 5 * 60_000;
-
-export type MotionTruck = {
-  unitNumber: string; speedKmh: number | null; engineOn: boolean | null; fuelPct: number | null;
-  locationName: string | null; lastPingAt: Date | null; pingSource: string | null;
-};
-/** The truck's in-transit load with what the route simulation needs. */
-export type MotionLoad = {
-  departedAt: Date | null; distanceKm: number; originLat: number; originLng: number; destLat: number; destLng: number;
-  stops: { lat: number; lng: number; seq: number; status: string; city: string }[];
-};
-export type Motion = {
-  speedKmh: number; engineOn: boolean; fuelPct: number | null; location: string | null;
-  /** device ping = fresh telematics; route estimate = simulated along the in-transit load's route; last ping = stored position. */
-  source: "device ping" | "route estimate" | "last ping";
-  at: Date | null;
-};
+import { TIMEZONE, nearestCity } from "@/lib/constants";
 
 /**
- * Where a truck is and how fast it is going right now, without writing anything. Read-only twin of
- * syncSimulatedPositions() in lib/telemetry.ts: a truck on an in-transit load gets the same route
- * simulation the live map stores (parked while arrived at a stop); a fresh device ping wins; every
- * other truck reports its last stored ping.
+ * Where a unit was last seen, and how much that position still says. Nothing simulates movement any more: positions
+ * come from the record (manual updates, seed data) or a telematics device, so the assistant reports the last known
+ * place and its age instead of pretending to track the unit live.
  */
-export function currentMotion(t: MotionTruck, transit: MotionLoad | null | undefined, now = Date.now()): Motion {
-  const stored = { speedKmh: t.speedKmh ?? 0, engineOn: t.engineOn ?? false, fuelPct: t.fuelPct, location: t.locationName, at: t.lastPingAt };
-  const fresh = t.pingSource != null && t.pingSource !== "SIMULATED" && t.lastPingAt != null && now - t.lastPingAt.getTime() < DEVICE_FRESH_MS;
-  if (fresh) return { ...stored, source: "device ping" };
-  if (!transit) return { ...stored, source: "last ping" };
 
-  const at = new Date(now);
-  const current = [...transit.stops].sort((a, b) => a.seq - b.seq).find((s) => s.status !== "DONE");
-  if (current?.status === "ARRIVED") {
-    return { speedKmh: 0, engineOn: false, fuelPct: t.fuelPct, location: nearestCity(current.lat, current.lng).label, source: "route estimate", at };
-  }
-  const p = loadProgress(transit, now);
-  const pos = pointAlongPolyline(loadRoute(transit), p);
-  // Same speed wobble as the simulation, so the assistant and the map agree.
-  const wobble = Math.sin(now / 60_000 + t.unitNumber.charCodeAt(t.unitNumber.length - 1)) * 12;
+const HOUR = 3_600_000;
+/** Past this age a position is "last known", and speed / engine state no longer describe the unit right now. */
+const FRESH_MS = HOUR;
+/** Above this speed a truck is moving. */
+const MOVING_KMH = 5;
+
+/** Prisma select for the truck fields lastSeen() reads. */
+export const TRUCK_POSITION_FIELDS = {
+  lat: true, lng: true, locationName: true, lastPingAt: true, pingSource: true, speedKmh: true, engineOn: true, fuelPct: true,
+} as const;
+/** Prisma select for the trailer fields lastSeen() reads. */
+export const TRAILER_POSITION_FIELDS = { lat: true, lng: true, locationName: true, lastPingAt: true, gpsProvider: true } as const;
+
+export type PositionInput = {
+  lat: number | null; lng: number | null; locationName: string | null; lastPingAt: Date | null;
+  pingSource?: string | null; gpsProvider?: string | null; speedKmh?: number | null; engineOn?: boolean | null; fuelPct?: number | null;
+};
+
+const SOURCE_LABELS: Record<string, string> = { MANUAL: "manual update", DEVICE: "GPS device", SIMULATED: "old estimate" };
+
+const at = new Intl.DateTimeFormat("en-GB", { timeZone: TIMEZONE, day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+
+export function lastSeen(p: PositionInput, now = Date.now()) {
+  const location = p.locationName ?? (p.lat != null && p.lng != null ? nearestCity(p.lat, p.lng).label : null);
+  if (!location && !p.lastPingAt) return { location: null, note: "no position recorded" };
+  const ageMs = p.lastPingAt ? Math.max(0, now - p.lastPingAt.getTime()) : null;
+  const fresh = ageMs != null && ageMs < FRESH_MS;
+  const source = p.pingSource ?? p.gpsProvider ?? null;
   return {
-    speedKmh: p < 1 ? Math.round(72 + wobble) : 0,
-    engineOn: p < 1,
-    fuelPct: Math.max(6, Math.round(92 - p * (transit.distanceKm / 9))),
-    location: nearestCity(pos.lat, pos.lng).label,
-    source: "route estimate",
-    at,
+    location,
+    asOf: p.lastPingAt ? at.format(p.lastPingAt) : null,
+    hoursAgo: ageMs == null ? null : Math.round((ageMs / HOUR) * 10) / 10,
+    source: source ? (SOURCE_LABELS[source] ?? source) : "unknown",
+    fresh,
+    // Speed and engine state only describe the unit while the position is fresh.
+    ...(fresh && p.speedKmh != null ? { speedKmh: Math.round(p.speedKmh), moving: p.speedKmh > MOVING_KMH } : {}),
+    ...(fresh && p.engineOn != null ? { engineOn: p.engineOn } : {}),
+    ...(p.fuelPct != null ? { fuelPct: Math.round(p.fuelPct) } : {}),
   };
 }

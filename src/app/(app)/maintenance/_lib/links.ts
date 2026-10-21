@@ -6,7 +6,6 @@ export const trailerHref = (id: string) => `/fleet/trailers/${id}`;
 export const unitComplianceHref = (type: "truck" | "trailer", id: string) =>
   type === "truck" ? `/fleet/${id}?tab=compliance` : `/fleet/trailers/${id}#documents`;
 export const workOrderHref = (id: string) => `/maintenance/work-orders/${id}`;
-export const loadHref = (id: string) => `/loads/${id}`;
 
 type Query = Record<string, string | number | null | undefined>;
 

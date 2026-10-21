@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { rootDb } from "@/lib/db-root";
 import { TIMEZONE } from "@/lib/constants";
 
 /**
@@ -30,7 +30,7 @@ export async function GET() {
   let dbOk: boolean | null = null;
   if (workingHours) {
     try {
-      await db.$queryRaw`SELECT 1`;
+      await rootDb.$queryRaw`SELECT 1`;
       dbOk = true;
     } catch {
       dbOk = false;

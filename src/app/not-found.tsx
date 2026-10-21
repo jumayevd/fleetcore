@@ -1,10 +1,9 @@
 import { LinkButton } from "@/components/ui";
-import { getCurrentUser } from "@/lib/auth";
-import { homeFor } from "@/lib/permissions";
+import { getSessionContext } from "@/lib/session";
 
 /** Root 404: unmatched URLs for the whole app (no shell — the visitor may be signed out). */
 export default async function NotFound() {
-  const user = await getCurrentUser();
+  const { accounts, active } = await getSessionContext();
   return (
     <main className="flex min-h-dvh items-center justify-center bg-canvas px-5">
       <title>Page not found · FleetOps</title>
@@ -13,14 +12,12 @@ export default async function NotFound() {
         <h1 className="mt-2 text-lg font-semibold tracking-tight text-fg">Page not found</h1>
         <p className="mt-2 text-[13px] leading-5 text-fg-muted">
           The address may be mistyped, or the page may have moved. Check the link, or start again from
-          {user ? " your home page." : " the sign-in page."}
+          {accounts.length ? " your overview." : " the sign-in page."}
         </p>
         <div className="mt-6 flex flex-wrap gap-2">
-          {user ? (
-            <LinkButton href={homeFor(user.role)} variant="primary">{user.role === "DRIVER" ? "Go to my trips" : "Go to dashboard"}</LinkButton>
-          ) : (
-            <LinkButton href="/login" variant="primary">Sign in</LinkButton>
-          )}
+          {active ? <LinkButton href="/dashboard" variant="primary">Go to overview</LinkButton>
+            : accounts.length ? <LinkButton href="/select" variant="primary">Choose a company</LinkButton>
+            : <LinkButton href="/login" variant="primary">Sign in</LinkButton>}
         </div>
       </div>
     </main>

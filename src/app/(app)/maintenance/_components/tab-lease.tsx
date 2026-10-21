@@ -17,7 +17,7 @@ export function LeaseTab({ trucks }: { trucks: Truck[] }) {
         <Stat label="Leased trucks" value={rows.length}
           hint={!rows.length ? "none on lease" : lessors ? plural(lessors, "lessor") : "no lessor recorded"} />
         <Stat label="Over cap" value={totals.overCount} tone={totals.overCount ? "danger" : "ok"} hint={totals.overCount ? `${km(totals.over)} over in total` : "all within the hard cap"} />
-        <Stat label="Within 5,000 km of cap" value={nearCap} tone={nearCap ? "warn" : "neutral"} hint="route shorter lanes or rotate units" />
+        <Stat label="Within 5,000 km of cap" value={nearCap} tone={nearCap ? "warn" : "neutral"} hint="rotate units or plan the lease return" />
         <Stat label="Penalty exposure" value={money(totals.exposure)} tone={totals.exposure ? "danger" : "neutral"} hint="over km × overage rate, today" />
       </div>
 

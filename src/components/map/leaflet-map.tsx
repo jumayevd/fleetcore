@@ -3,12 +3,15 @@
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { MapContainer, TileLayer, Marker, Polyline, Popup, CircleMarker, useMap } from "react-leaflet";
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 
 // Default: OpenStreetMap (fine for dev/low volume). For production traffic set a
 // commercial tile provider via NEXT_PUBLIC_MAP_TILE_URL (e.g. MapTiler, Mapbox, Stadia).
 const TILE_URL = process.env.NEXT_PUBLIC_MAP_TILE_URL || "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const TILE_ATTRIBUTION = process.env.NEXT_PUBLIC_MAP_TILE_ATTRIBUTION || '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
+/** Marker fill. Without it the marker follows `status` / `moving` (in service = warn, moving = progress, else info). */
+export type MapTone = "progress" | "info" | "warn" | "danger" | "ok" | "neutral";
 
 export type MapTruck = {
   id: string;
@@ -20,10 +23,12 @@ export type MapTruck = {
   status: string;
   driverName?: string | null;
   label?: string;
+  /** Optional path drawn as a dashed line under the marker. */
   route?: [number, number][];
   moving?: boolean;
   /** GPS fix is old — marker is faded with a dashed ring. */
   stale?: boolean;
+  tone?: MapTone;
 };
 
 export type MapPointKind = "origin" | "dest" | "stop";
@@ -42,7 +47,7 @@ export type MapPoint = {
 /* Theme tokens, read from CSS variables at render                      */
 /* ------------------------------------------------------------------ */
 
-const VARS = ["--accent", "--on-accent", "--info", "--progress", "--warn", "--fg", "--fg-muted", "--fg-subtle", "--surface", "--primary", "--on-primary"] as const;
+const VARS = ["--accent", "--on-accent", "--info", "--progress", "--warn", "--danger", "--ok", "--fg", "--fg-muted", "--fg-subtle", "--surface", "--primary", "--on-primary"] as const;
 type Vars = Record<(typeof VARS)[number], string>;
 
 const FALLBACK = Object.fromEntries(VARS.map((v) => [v, `var(${v})`])) as Vars;
@@ -77,10 +82,14 @@ const useThemeVars = () => useSyncExternalStore(subscribe, getSnapshot, () => FA
 /* Markers                                                             */
 /* ------------------------------------------------------------------ */
 
-/** moving = progress, idle = info, in service = warn, selected = accent. */
+const TONE_VAR: Record<MapTone, (typeof VARS)[number]> = {
+  progress: "--progress", info: "--info", warn: "--warn", danger: "--danger", ok: "--ok", neutral: "--fg-muted",
+};
+
+/** An explicit tone wins; otherwise moving = progress, idle = info, in service = warn. Selected = accent. */
 function truckColor(t: MapTruck, selected: boolean, v: Vars) {
   if (selected) return { fill: v["--accent"], ink: v["--on-accent"] };
-  const fill = t.status !== "ACTIVE" ? v["--warn"] : t.moving ? v["--progress"] : v["--info"];
+  const fill = t.tone ? v[TONE_VAR[t.tone]] : t.status !== "ACTIVE" ? v["--warn"] : t.moving ? v["--progress"] : v["--info"];
   // Surface colour as the glyph ink: white on the deep day fills, graphite on the light night fills.
   return { fill, ink: v["--surface"] };
 }
@@ -188,11 +197,14 @@ function FlyTo({ target }: { target: [number, number] | null }) {
   return null;
 }
 
-export default function LeafletMap({ trucks = [], points = [], selectedId, onSelect, height = 520, fitKey = "all", flyTo = null, className }: {
+export default function LeafletMap({ trucks = [], points = [], selectedId, onSelect, renderPopup, height = 520, fitKey = "all", flyTo = null, className }: {
   trucks?: MapTruck[];
   points?: MapPoint[];
   selectedId?: string | null;
+  /** Marker click selects instead of opening a popup. */
   onSelect?: (id: string) => void;
+  /** Popup body for a truck marker (when there is no `onSelect`); defaults to unit, driver, label and speed. */
+  renderPopup?: (id: string) => ReactNode;
   height?: number | string;
   /** Refit bounds when this changes (not on every position tick). */
   fitKey?: string;
@@ -236,7 +248,9 @@ export default function LeafletMap({ trucks = [], points = [], selectedId, onSel
         {positioned.map((t) => (
           <Marker key={t.id} position={[t.lat!, t.lng!]} icon={truckIcon(t, t.id === selectedId, v)}
             eventHandlers={{ click: () => onSelect?.(t.id) }} zIndexOffset={t.id === selectedId ? 1000 : 0}>
-            {!onSelect && (
+            {!onSelect && (renderPopup ? (
+              <Popup minWidth={232} maxWidth={300}>{renderPopup(t.id)}</Popup>
+            ) : (
               <Popup>
                 <div className="text-[12px] leading-4">
                   <b className="num">{t.unitNumber}</b>
@@ -245,7 +259,7 @@ export default function LeafletMap({ trucks = [], points = [], selectedId, onSel
                   <div className="num text-fg-muted">{Math.round(t.speedKmh)} km/h</div>
                 </div>
               </Popup>
-            )}
+            ))}
           </Marker>
         ))}
       </MapContainer>

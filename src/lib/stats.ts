@@ -1,147 +1,37 @@
 import "server-only";
-import { addDays, format, startOfMonth, startOfWeek, subMonths } from "date-fns";
+import { addMonths, format, startOfMonth, subMonths } from "date-fns";
 import { db } from "./db";
+import { kmDriven } from "./mileage";
 
-const COMPLETED = ["DELIVERED", "INVOICED"];
+/*
+ * Fleet analytics shared by Maintenance, Reports and the overview. Distances come from odometer readings (kmDriven);
+ * maintenance spend is completed work orders by completion date; fuel spend is logged fills by fill date.
+ */
 
-export async function monthlyFinancials(months = 6) {
-  const from = startOfMonth(subMonths(new Date(), months - 1));
-  const loads = await db.load.findMany({
-    where: { status: { in: COMPLETED }, deliveredAt: { gte: from } },
-    select: { deliveredAt: true, rate: true, driverPay: true, fuelCost: true, otherCost: true, distanceKm: true, emptyKm: true, deliveryAt: true },
-  });
-  const buckets = new Map<string, { month: string; revenue: number; cost: number; loads: number; km: number; emptyKm: number; onTime: number }>();
-  for (let i = 0; i < months; i++) {
-    const m = format(subMonths(new Date(), months - 1 - i), "MMM yy");
-    buckets.set(m, { month: m, revenue: 0, cost: 0, loads: 0, km: 0, emptyKm: 0, onTime: 0 });
-  }
-  for (const l of loads) {
-    const b = buckets.get(format(l.deliveredAt!, "MMM yy"));
-    if (!b) continue;
-    b.revenue += l.rate;
-    b.cost += l.driverPay + l.fuelCost + l.otherCost;
-    b.loads += 1;
-    b.km += l.distanceKm;
-    b.emptyKm += l.emptyKm;
-    if (l.deliveredAt! <= l.deliveryAt) b.onTime += 1;
-  }
-  return [...buckets.values()].map((b) => ({
-    ...b,
-    revenue: Math.round(b.revenue),
-    cost: Math.round(b.cost),
-    margin: Math.round(b.revenue - b.cost),
-    onTimePct: b.loads ? Math.round((b.onTime / b.loads) * 100) : 0,
-    revPerKm: b.km ? Math.round((b.revenue / b.km) * 100) / 100 : 0,
-    emptyPct: b.km + b.emptyKm ? Math.round((b.emptyKm / (b.km + b.emptyKm)) * 100) : 0,
-  }));
-}
+const DAY = 86_400_000;
+/** Same wording as the maintenance pages use for a work order without a vendor. */
+const NO_VENDOR = "No vendor recorded";
 
-export async function receivables() {
-  const open = await db.invoice.findMany({ where: { status: "SENT" } });
-  const now = Date.now();
-  const aging = { current: 0, "1-30": 0, "31-60": 0, "60+": 0 };
-  for (const i of open) {
-    const late = Math.floor((now - i.dueAt.getTime()) / 86_400_000);
-    const amt = i.amount * (1 + i.taxRate);
-    if (late <= 0) aging.current += amt;
-    else if (late <= 30) aging["1-30"] += amt;
-    else if (late <= 60) aging["31-60"] += amt;
-    else aging["60+"] += amt;
-  }
-  const total = Object.values(aging).reduce((a, b) => a + b, 0);
-  const overdue = total - aging.current;
-  return { aging, total, overdue, count: open.length };
-}
+/** What `kmDriven` returns; pass it in when a page already computed it for the same window. */
+export type Driven = Awaited<ReturnType<typeof kmDriven>>;
 
-/** Month-to-date revenue vs. the same number of days into last month (fair early-month comparison). */
-export async function revenueMtdComparison() {
-  const now = new Date();
-  const thisStart = startOfMonth(now);
-  const lastStart = startOfMonth(subMonths(now, 1));
-  const lastSameDay = new Date(lastStart.getTime() + (now.getTime() - thisStart.getTime()));
-  const sum = (gte: Date, lt: Date) =>
-    db.load.aggregate({ where: { status: { in: COMPLETED }, deliveredAt: { gte, lt } }, _sum: { rate: true } }).then((r) => r._sum.rate ?? 0);
-  const [mtd, prior] = await Promise.all([sum(thisStart, now), sum(lastStart, lastSameDay)]);
-  return { mtd, prior };
-}
-
-/* ------------------------------------------------------------------ */
-/* Weekly production board                                             */
-/* ------------------------------------------------------------------ */
-
-export const WEEKLY_GOAL_KEYS = { solo: "weekly.goalSolo", team: "weekly.goalTeam" } as const;
-const DEFAULT_GOALS = { solo: 5000, team: 7500 };
-
-export async function weeklyGoals() {
-  const rows = await db.appSetting.findMany({ where: { key: { in: Object.values(WEEKLY_GOAL_KEYS) } } });
-  const v = (k: string, d: number) => Number(rows.find((r) => r.key === k)?.value ?? d) || d;
-  return { solo: v(WEEKLY_GOAL_KEYS.solo, DEFAULT_GOALS.solo), team: v(WEEKLY_GOAL_KEYS.team, DEFAULT_GOALS.team) };
-}
-
-export type WeeklyCell = { amount: number; km: number; loads: { id: string; reference: string; status: string }[] };
-export type WeeklyDriverRow = {
-  driver: { id: string; name: string; type: string; truck: string | null; hold: boolean };
-  days: WeeklyCell[]; total: number; km: number; rpk: number; goal: number; planDelta: number; daysWorked: number; efficiency: number;
-};
-export type WeeklyTeamRow = { team: { id: string | null; name: string; color: string | null }; rows: WeeklyDriverRow[]; total: number; km: number; avgPerTruck: number; efficiency: number };
-
-/** Revenue per driver per day for the week starting `weekStart` (Monday). Loads count on their pickup day. */
-export async function weeklyProduction(weekStart: Date) {
-  const start = startOfWeek(weekStart, { weekStartsOn: 1 });
-  const end = addDays(start, 7);
-  const goals = await weeklyGoals();
-  const [drivers, loads, teams] = await Promise.all([
-    db.driver.findMany({ where: { status: { not: "INACTIVE" } }, include: { truck: { select: { unitNumber: true } } }, orderBy: { name: "asc" } }),
-    db.load.findMany({
-      where: { pickupAt: { gte: start, lt: end }, status: { notIn: ["CANCELLED"] }, driverId: { not: null } },
-      select: { id: true, reference: true, status: true, driverId: true, pickupAt: true, rate: true, distanceKm: true },
-    }),
-    db.team.findMany({ orderBy: { sortOrder: "asc" } }),
-  ]);
-  const byDriver = new Map<string, WeeklyCell[]>();
-  const blank = () => Array.from({ length: 7 }, () => ({ amount: 0, km: 0, loads: [] as WeeklyCell["loads"] }));
-  for (const l of loads) {
-    const day = Math.min(6, Math.max(0, Math.floor((l.pickupAt.getTime() - start.getTime()) / 86_400_000)));
-    if (!byDriver.has(l.driverId!)) byDriver.set(l.driverId!, blank());
-    const cell = byDriver.get(l.driverId!)![day];
-    cell.amount += l.rate; cell.km += l.distanceKm; cell.loads.push({ id: l.id, reference: l.reference, status: l.status });
-  }
-  const rowFor = (d: (typeof drivers)[number]): WeeklyDriverRow => {
-    const days = byDriver.get(d.id) ?? blank();
-    const total = days.reduce((a, c) => a + c.amount, 0);
-    const km = days.reduce((a, c) => a + c.km, 0);
-    const goal = d.type === "COMPANY" ? goals.solo : goals.team;
-    return {
-      driver: { id: d.id, name: d.name, type: d.type, truck: d.truck?.unitNumber ?? null, hold: d.hold },
-      days, total, km, rpk: km ? Math.round((total / km) * 100) / 100 : 0, goal, planDelta: total - goal,
-      daysWorked: days.filter((c) => c.loads.length).length, efficiency: goal ? Math.round((total / goal) * 100) : 0,
-    };
-  };
-  const groups: WeeklyTeamRow[] = [...teams.map((t) => ({ id: t.id as string | null, name: t.name, color: t.color })), { id: null, name: "No team", color: null }]
-    .map((team) => {
-      const rows = drivers.filter((d) => (d.teamId ?? null) === team.id).map(rowFor).sort((a, b) => b.total - a.total);
-      const total = rows.reduce((a, r) => a + r.total, 0);
-      const km = rows.reduce((a, r) => a + r.km, 0);
-      const goal = rows.reduce((a, r) => a + r.goal, 0);
-      return { team, rows, total, km, avgPerTruck: rows.length ? Math.round(total / rows.length) : 0, efficiency: goal ? Math.round((total / goal) * 100) : 0 };
-    })
-    .filter((g) => g.rows.length);
-  const grand = { total: groups.reduce((a, g) => a + g.total, 0), km: groups.reduce((a, g) => a + g.km, 0), drivers: groups.reduce((a, g) => a + g.rows.length, 0) };
-  return { start, end, goals, groups, grand: { ...grand, avgPerTruck: grand.drivers ? Math.round(grand.total / grand.drivers) : 0, rpk: grand.km ? Math.round((grand.total / grand.km) * 100) / 100 : 0 } };
-}
+const round2 = (v: number) => Math.round(v * 100) / 100;
 
 /* ------------------------------------------------------------------ */
 /* Maintenance analytics                                               */
 /* ------------------------------------------------------------------ */
 
-export async function maintenanceSummary(from: Date, to: Date) {
-  const [done, open, kmRun] = await Promise.all([
+/**
+ * Completed work in [from, to): spend, cost per km driven (odometer based), spend by vendor / category / unit, and the
+ * units that cost far more than the median. `open` is what is in the shop right now.
+ */
+export async function maintenanceSummary(from: Date, to: Date, driven?: Driven) {
+  const [done, open, km] = await Promise.all([
     db.workOrder.findMany({ where: { status: "DONE", completedAt: { gte: from, lt: to } }, include: { truck: { select: { id: true, unitNumber: true } }, trailer: { select: { unitNumber: true } } } }),
     db.workOrder.findMany({ where: { status: "IN_PROGRESS" }, include: { truck: { select: { id: true, unitNumber: true } }, trailer: { select: { unitNumber: true } } } }),
-    db.load.aggregate({ where: { status: { in: COMPLETED }, deliveredAt: { gte: from, lt: to } }, _sum: { distanceKm: true, emptyKm: true } }),
+    driven ? driven.total : kmDriven(from, to).then((d) => d.total),
   ]);
   const spend = done.reduce((a, w) => a + w.cost, 0);
-  const km = (kmRun._sum.distanceKm ?? 0) + (kmRun._sum.emptyKm ?? 0);
   const group = <K extends string>(key: (w: (typeof done)[number]) => K) => {
     const m = new Map<K, { count: number; cost: number }>();
     for (const w of done) { const k = key(w); const e = m.get(k) ?? { count: 0, cost: 0 }; e.count++; e.cost += w.cost; m.set(k, e); }
@@ -152,9 +42,208 @@ export async function maintenanceSummary(from: Date, to: Date) {
   return {
     spend, records: done.length, km, costPerKm: km ? spend / km : 0,
     openCount: open.length, open,
-    byVendor: group((w) => w.vendor ?? "No vendor recorded").slice(0, 8),
+    byVendor: group((w) => w.vendor ?? NO_VENDOR).slice(0, 8),
     byCategory: group((w) => w.category),
     perUnit, median,
     flagged: perUnit.filter((u) => u.cost > median * 1.8 && u.cost > 500),
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Running costs per month                                             */
+/* ------------------------------------------------------------------ */
+
+export type MonthSpend = {
+  /** yyyy-MM */
+  key: string;
+  /** "Oct 26" */
+  label: string;
+  from: Date;
+  to: Date;
+  /** The current month, which runs to now. */
+  partial: boolean;
+  maintenance: number;
+  jobs: number;
+  fuel: number;
+  liters: number;
+  fills: number;
+};
+
+/**
+ * Maintenance (completed work orders) and fuel (logged fills) per calendar month, oldest first, for the last `months`
+ * months including the current one (which runs to `now`).
+ */
+export async function monthlyFleetSpend(months = 6, now = new Date()): Promise<MonthSpend[]> {
+  const start = startOfMonth(subMonths(now, months - 1));
+  const [work, fuel] = await Promise.all([
+    db.workOrder.findMany({ where: { status: "DONE", completedAt: { gte: start, lt: now } }, select: { completedAt: true, cost: true } }),
+    db.fuelLog.findMany({ where: { date: { gte: start, lt: now } }, select: { date: true, cost: true, liters: true } }),
+  ]);
+  const buckets: MonthSpend[] = Array.from({ length: months }, (_, i) => {
+    const from = addMonths(start, i);
+    const last = i === months - 1;
+    return { key: format(from, "yyyy-MM"), label: format(from, "MMM yy"), from, to: last ? now : addMonths(start, i + 1), partial: last, maintenance: 0, jobs: 0, fuel: 0, liters: 0, fills: 0 };
+  });
+  const byKey = new Map(buckets.map((b) => [b.key, b]));
+  for (const w of work) {
+    const b = w.completedAt ? byKey.get(format(w.completedAt, "yyyy-MM")) : undefined;
+    if (b) { b.maintenance += w.cost; b.jobs++; }
+  }
+  for (const f of fuel) {
+    const b = byKey.get(format(f.date, "yyyy-MM"));
+    if (b) { b.fuel += f.cost; b.liters += f.liters; b.fills++; }
+  }
+  return buckets.map((b) => ({ ...b, maintenance: round2(b.maintenance), fuel: round2(b.fuel), liters: Math.round(b.liters) }));
+}
+
+/* ------------------------------------------------------------------ */
+/* Cost per truck                                                      */
+/* ------------------------------------------------------------------ */
+
+export type TruckCostRow = {
+  id: string;
+  unitNumber: string;
+  model: string;
+  status: string;
+  group: string | null;
+  km: number;
+  fuel: number;
+  liters: number;
+  fills: number;
+  maintenance: number;
+  jobs: number;
+  /** fuel + maintenance */
+  total: number;
+  /** total ÷ km; null without km. */
+  costPerKm: number | null;
+  /** litres ÷ km × 100; null without both. */
+  l100: number | null;
+};
+
+/**
+ * Fuel, maintenance and km driven per truck in [from, to). Every truck in service is listed (retired ones only when
+ * they cost something in the window), most expensive first. Trailer work is returned separately: trailers burn no fuel
+ * and log no km, but their work is part of the fleet's maintenance spend.
+ */
+export async function truckCosts(from: Date, to: Date, driven?: Driven) {
+  const [trucks, work, trailerWork, fuel, km] = await Promise.all([
+    db.truck.findMany({ select: { id: true, unitNumber: true, make: true, model: true, status: true, group: true }, orderBy: { unitNumber: "asc" } }),
+    db.workOrder.groupBy({ by: ["truckId"], where: { status: "DONE", completedAt: { gte: from, lt: to }, truckId: { not: null } }, _sum: { cost: true }, _count: { _all: true } }),
+    db.workOrder.aggregate({ where: { status: "DONE", completedAt: { gte: from, lt: to }, truckId: null, trailerId: { not: null } }, _sum: { cost: true }, _count: { _all: true } }),
+    db.fuelLog.groupBy({ by: ["truckId"], where: { date: { gte: from, lt: to } }, _sum: { cost: true, liters: true }, _count: { _all: true } }),
+    driven ?? kmDriven(from, to),
+  ]);
+  const workBy = new Map(work.map((w) => [w.truckId, w]));
+  const fuelBy = new Map(fuel.map((f) => [f.truckId, f]));
+  const rows: TruckCostRow[] = trucks
+    .map((t) => {
+      const w = workBy.get(t.id);
+      const f = fuelBy.get(t.id);
+      const run = km.byTruck.get(t.id) ?? 0;
+      const maintenance = w?._sum.cost ?? 0;
+      const fuelCost = f?._sum.cost ?? 0;
+      const liters = f?._sum.liters ?? 0;
+      const total = maintenance + fuelCost;
+      return {
+        id: t.id, unitNumber: t.unitNumber, model: `${t.make} ${t.model}`, status: t.status, group: t.group,
+        km: run, fuel: fuelCost, liters, fills: f?._count._all ?? 0, maintenance, jobs: w?._count._all ?? 0, total,
+        costPerKm: run > 0 ? total / run : null,
+        l100: run > 0 && liters > 0 ? (liters / run) * 100 : null,
+      };
+    })
+    .filter((r) => r.status !== "INACTIVE" || r.total > 0 || r.km > 0)
+    .sort((a, b) => b.total - a.total || b.km - a.km || a.unitNumber.localeCompare(b.unitNumber));
+
+  const sum = (f: (r: TruckCostRow) => number, xs = rows) => xs.reduce((a, r) => a + f(r), 0);
+  // Fleet fuel economy only over trucks with both litres and km, so a truck without readings does not skew it.
+  const measured = rows.filter((r) => r.l100 != null);
+  const measuredKm = sum((r) => r.km, measured);
+  const totals = {
+    km: sum((r) => r.km), fuel: sum((r) => r.fuel), liters: sum((r) => r.liters), fills: sum((r) => r.fills),
+    maintenance: sum((r) => r.maintenance), jobs: sum((r) => r.jobs), total: sum((r) => r.total),
+    l100: measuredKm > 0 ? (sum((r) => r.liters, measured) / measuredKm) * 100 : null,
+    /** Active trucks with no km recorded in the window (fewer than two odometer readings to compare). */
+    withoutKm: rows.filter((r) => r.status === "ACTIVE" && r.km === 0).length,
+  };
+  const trailers = { maintenance: trailerWork._sum.cost ?? 0, jobs: trailerWork._count._all };
+  return { rows, totals, trailers };
+}
+
+/* ------------------------------------------------------------------ */
+/* Shop downtime                                                       */
+/* ------------------------------------------------------------------ */
+
+export type DowntimeRow = {
+  unitId: string;
+  type: "truck" | "trailer";
+  unitNumber: string;
+  /** Days in the shop inside the window (overlapping jobs on the unit count once), one decimal. */
+  days: number;
+  jobs: number;
+  /** A job is in progress right now. */
+  inShopNow: boolean;
+  /** The job with the most shop time inside the window. */
+  longest: { id: string; number: number; title: string; days: number };
+};
+
+/**
+ * Time units spent in the shop in [from, to), from work orders' in / out times (a job still in progress counts to
+ * now). Busiest units first.
+ */
+export async function shopDowntime(from: Date, to: Date) {
+  const now = Date.now();
+  const start = from.getTime();
+  const end = Math.min(to.getTime(), now);
+  const jobs = await db.workOrder.findMany({
+    where: { inAt: { not: null, lt: to }, status: { in: ["IN_PROGRESS", "DONE", "CANCELLED"] }, OR: [{ outAt: null }, { outAt: { gt: from } }] },
+    select: {
+      id: true, number: true, title: true, status: true, inAt: true, outAt: true, truckId: true, trailerId: true,
+      truck: { select: { unitNumber: true } }, trailer: { select: { unitNumber: true } },
+    },
+  });
+  type Acc = Omit<DowntimeRow, "days"> & { spans: [number, number][] };
+  const units = new Map<string, Acc>();
+  for (const j of jobs) {
+    const unitId = j.truckId ?? j.trailerId;
+    const unitNumber = j.truck?.unitNumber ?? j.trailer?.unitNumber;
+    // Completing or cancelling a started job stamps outAt; only a job still in progress runs to now.
+    const out = j.outAt?.getTime() ?? (j.status === "IN_PROGRESS" ? now : null);
+    if (!unitId || !unitNumber || !j.inAt || out == null) continue;
+    const a = Math.max(j.inAt.getTime(), start);
+    const b = Math.min(out, end);
+    if (b <= a) continue;
+    const days = Math.round(((b - a) / DAY) * 10) / 10;
+    const u = units.get(unitId) ?? {
+      unitId, type: j.truckId ? "truck" : "trailer", unitNumber, jobs: 0, inShopNow: false,
+      longest: { id: j.id, number: j.number, title: j.title, days }, spans: [],
+    };
+    u.jobs++;
+    u.spans.push([a, b]);
+    if (j.status === "IN_PROGRESS") u.inShopNow = true;
+    if (days > u.longest.days) u.longest = { id: j.id, number: j.number, title: j.title, days };
+    units.set(unitId, u);
+  }
+  const rows: DowntimeRow[] = [...units.values()]
+    .map(({ spans, ...u }) => {
+      // Merge overlapping jobs so two jobs on one truck at once are one stretch off the road.
+      const sorted = spans.sort((x, y) => x[0] - y[0]);
+      let ms = 0;
+      let [cs, ce] = sorted[0];
+      for (const [s, e] of sorted.slice(1)) {
+        if (s <= ce) ce = Math.max(ce, e);
+        else { ms += ce - cs; [cs, ce] = [s, e]; }
+      }
+      ms += ce - cs;
+      return { ...u, days: Math.round((ms / DAY) * 10) / 10 };
+    })
+    .sort((a, b) => b.days - a.days || a.unitNumber.localeCompare(b.unitNumber));
+  const truckDays = rows.filter((r) => r.type === "truck").reduce((a, r) => a + r.days, 0);
+  return {
+    rows,
+    days: Math.round(rows.reduce((a, r) => a + r.days, 0) * 10) / 10,
+    truckDays: Math.round(truckDays * 10) / 10,
+    inShopNow: rows.filter((r) => r.inShopNow).length,
+    /** Length of the window in days (up to now), for availability. */
+    windowDays: Math.max(0, (end - start) / DAY),
   };
 }

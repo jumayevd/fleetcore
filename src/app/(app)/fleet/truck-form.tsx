@@ -1,10 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useState, type ChangeEvent } from "react";
 import type { Truck } from "@prisma/client";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Card, Field, Input, LinkButton, Progress, Select, Textarea } from "@/components/ui";
-import { OWNERSHIP, OWNERSHIP_LABELS, TRUCK_STATUSES } from "@/lib/constants";
+import { CITIES, OWNERSHIP, OWNERSHIP_LABELS, TRUCK_STATUSES } from "@/lib/constants";
 import { number, toDateInput } from "@/lib/format";
 import type { ActionState } from "@/lib/action";
 import { FUEL_TYPES, leaseStatus, pmStatus, TRUCK_STATUS_LABELS } from "./lib";
@@ -53,22 +54,32 @@ export function TruckForm({ action, truck, drivers, groups, cancelHref }: {
               <Field label="Make" required><Input name="make" required defaultValue={truck?.make} placeholder="Volvo" /></Field>
               <Field label="Model" required><Input name="model" required defaultValue={truck?.model} placeholder="FH 500" /></Field>
               <Field label="Year"><Input name="year" type="number" min={1990} max={2100} defaultValue={truck?.year ?? new Date().getFullYear()} className="num" /></Field>
-              <Field label="Status" hint={truck ? "A truck on an active load stays Active until the load is recovered." : undefined}>
+              <Field label="Status" hint="Starting a work order moves the truck to In shop; finishing it brings it back.">
                 <Select name="status" defaultValue={truck?.status ?? "ACTIVE"} options={TRUCK_STATUSES.map((s) => ({ value: s, label: TRUCK_STATUS_LABELS[s] }))} />
               </Field>
-              <Field label="Group" hint="Depot, company or fleet label used for filtering.">
-                <Input name="group" list="truck-groups" defaultValue={truck?.group ?? ""} placeholder="Tashkent" />
+              <Field label="Group" hint="Depot, terminal or fleet label used for filtering.">
+                <Input name="group" list="truck-groups" defaultValue={truck?.group ?? ""} placeholder="Tashkent depot" />
                 <datalist id="truck-groups">{groups.map((g) => <option key={g} value={g} />)}</datalist>
               </Field>
-              <Field label="Assigned driver" hint="Only drivers without a truck are listed.">
-                <Select name="driverId" defaultValue={truck?.driverId ?? ""} placeholder="Unassigned" options={drivers.map((d) => ({ value: d.id, label: d.name }))} />
+              <Field label="Assigned driver" hint={drivers.length || truck?.driverId
+                ? "Active drivers without a truck."
+                : <>No active driver without a truck. <Link href="/drivers/new" className="font-medium text-fg hover:underline">Add a driver</Link></>}>
+                <Select name="driverId" defaultValue={truck?.driverId ?? ""} placeholder="No driver" options={drivers.map((d) => ({ value: d.id, label: d.name }))} />
               </Field>
+              {!truck && (
+                <Field label="Current location" hint="Optional. A known city puts the truck on the map.">
+                  <Input name="locationName" list="truck-cities" placeholder="Tashkent" />
+                  <datalist id="truck-cities">{CITIES.map((c) => <option key={c.name} value={c.name} />)}</datalist>
+                </Field>
+              )}
             </div>
           </Card>
 
-          <Card title="Maintenance">
+          <Card title="Odometer & service">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <Field label="Odometer (km)"><Input name="odometerKm" type="number" min={0} value={v.odometerKm} onChange={set("odometerKm")} className="num" /></Field>
+              <Field label="Odometer (km)" hint={truck ? "Corrects the record. Day-to-day readings go in Update readings on the truck page." : undefined}>
+                <Input name="odometerKm" type="number" min={0} value={v.odometerKm} onChange={set("odometerKm")} className="num" />
+              </Field>
               <Field label="PM interval (km)"><Input name="pmIntervalKm" type="number" min={1000} step={1000} value={v.pmIntervalKm} onChange={set("pmIntervalKm")} className="num" /></Field>
               <Field label="Last PM at (km)"><Input name="lastPmKm" type="number" min={0} value={v.lastPmKm} onChange={set("lastPmKm")} className="num" /></Field>
               <Field label="Last PM date"><Input name="lastPmAt" type="date" defaultValue={toDateInput(truck?.lastPmAt)} /></Field>

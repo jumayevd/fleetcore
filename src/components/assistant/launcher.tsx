@@ -23,15 +23,19 @@ const AssistantChat = dynamic(() => import("./chat").then((m) => m.AssistantChat
 /**
  * Fleet Assistant launcher (bottom-right), mounted once in the app layout; `enabled` is the role's assistant.use
  * permission. Hidden on print and on /login. Once opened, the chat stays mounted so closing keeps the conversation.
+ *
+ * `companyId` (the active company, `user.company.id`) and `userId` key the conversation: each company keeps its own,
+ * and switching company never shows another company's chat. Without them the panel falls back to the workspace cookie
+ * read when it first opens, and the API refuses a question whose conversation belongs to another company.
  */
-export function AssistantLauncher({ enabled }: { enabled: boolean }) {
+export function AssistantLauncher({ enabled, companyId, userId }: { enabled: boolean; companyId?: string; userId?: string }) {
   const path = usePathname();
   const open = useSyncExternalStore(subscribeOpen, readOpen, () => false);
   const [loaded, setLoaded] = useState(false);
   // Derived state: the first time the panel is open (click or restored from the session), keep the chat loaded.
   if (open && !loaded) setLoaded(true);
   if (!enabled || path === "/login" || path.startsWith("/login/")) return null;
-  if (loaded || open) return <AssistantChat />;
+  if (loaded || open) return <AssistantChat companyId={companyId} userId={userId} />;
   return (
     <div className="fixed bottom-4 right-4 z-[45] print:hidden">
       <button type="button" onClick={() => writeOpen(true)} aria-label="Open fleet assistant" title="Fleet assistant" className={BUTTON}>

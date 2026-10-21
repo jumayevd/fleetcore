@@ -3,8 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { can, canOpen } from "@/lib/permissions";
 import { getAlerts } from "@/lib/alerts";
 import { db } from "@/lib/db";
-import { CLAIM_OPEN_STATUSES } from "@/lib/constants";
-import { daysAgo } from "@/lib/format";
+import { getSessionContext, listWorkspaces } from "@/lib/session";
 import { NAV_COOKIE } from "@/lib/nav";
 import { AppShell, type ShellData } from "@/components/app-shell";
 import { AssistantLauncher } from "@/components/assistant/launcher";
@@ -15,18 +14,14 @@ import { AssistantLauncher } from "@/components/assistant/launcher";
  */
 async function loadShellData(role: string): Promise<ShellData> {
   try {
-    const [allAlerts, openClaims, unassigned, pinned] = await Promise.all([
+    const [allAlerts, overdueWork] = await Promise.all([
       can(role, "dashboard.view") ? getAlerts() : Promise.resolve([]),
-      can(role, "claims.view") ? db.claim.count({ where: { status: { in: [...CLAIM_OPEN_STATUSES] } } }) : Promise.resolve(0),
-      can(role, "loads.view") ? db.load.count({ where: { status: "PLANNED", pickupAt: { lte: daysAgo(-1) } } }) : Promise.resolve(0),
-      can(role, "chat.view") ? db.announcement.count({ where: { pinned: true, OR: [{ expiresAt: null }, { expiresAt: { gt: daysAgo(0) } }] } }) : Promise.resolve(0),
+      can(role, "fleet.view") ? db.workOrder.count({ where: { status: { in: ["DRAFT", "OPEN"] }, scheduledAt: { lt: new Date() } } }) : Promise.resolve(0),
     ]);
-    // The bell only lists alerts this role can act on (same rule as the dashboard's "Needs attention").
+    // The bell only lists alerts this role can act on (same rule as the overview's "Needs attention").
     const alerts = allAlerts.filter((a) => canOpen(role, a.href));
     const badges: Record<string, number> = {};
-    if (openClaims) badges["/claims"] = openClaims;
-    if (unassigned) badges["/dispatch"] = unassigned;
-    if (pinned) badges["/announcements"] = pinned;
+    if (overdueWork) badges["/maintenance/work-orders"] = overdueWork;
     return { alerts, badges };
   } catch (e) {
     console.error("shell data failed", e);
@@ -36,14 +31,18 @@ async function loadShellData(role: string): Promise<ShellData> {
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
-  const navOpen = (await cookies()).get(NAV_COOKIE)?.value !== "rail";
-  // Gate by permission only; the panel/API report "not configured" when the AI Gateway key (or Vercel OIDC) is missing.
-  const assistant = can(user.role, "assistant.use");
+  const [{ accounts }, jar] = await Promise.all([getSessionContext(), cookies()]);
+  const workspaces = await listWorkspaces(accounts);
+  const navOpen = jar.get(NAV_COOKIE)?.value !== "rail";
+  const active = { userId: user.id, companyId: user.company.id, companyName: user.company.name, color: user.company.color, role: user.role, email: user.email };
 
   return (
-    <AppShell user={{ name: user.name, email: user.email, role: user.role }} data={loadShellData(user.role)} navOpen={navOpen}>
+    // Keyed by company: switching company remounts the shell, so no state (open menus, drafts) crosses over.
+    <AppShell key={active.companyId + active.userId} user={{ name: user.name, email: user.email, role: user.role }} active={active} accounts={workspaces}
+      data={loadShellData(user.role)} navOpen={navOpen}>
       {children}
-      <AssistantLauncher enabled={assistant} />
+      {/* One conversation per account × company: switching company never shows another company's chat. */}
+      <AssistantLauncher enabled={can(user.role, "assistant.use")} companyId={user.company.id} userId={user.id} />
     </AppShell>
   );
 }

@@ -3,50 +3,69 @@ import { format } from "date-fns";
 import { getCurrentUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { reportData } from "@/app/(app)/reports/data";
-import { isExportType, parsePeriod } from "@/app/(app)/reports/shared";
+import { EXPORT_TYPES, isExportType, parsePeriod } from "@/app/(app)/reports/shared";
 
 export const dynamic = "force-dynamic";
 
-const cell = (v: string | number | null | undefined) => {
-  const s = v == null ? "" : String(v);
-  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-};
-const money = (v: number) => Math.round(v);
-const perKm = (v: number | null) => (v == null ? "" : v.toFixed(2));
+type Value = string | number | null | undefined;
 
-/** GET /api/export/report?type=lanes|drivers|trucks&period=30d|90d|6m|12m → CSV of that report table (every row, not just the top of the page). */
+const cell = (v: Value) => {
+  const s = v == null ? "" : String(v);
+  // Quote separators and line breaks; a leading = + - @ would run as a formula in a spreadsheet, so it is prefixed.
+  const safe = /^[=+\-@]/.test(s) && !/^-?\d/.test(s) ? `'${s}` : s;
+  return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+};
+const money = (v: number) => Math.round(v * 100) / 100;
+const fixed = (v: number | null, digits = 2) => (v == null ? "" : v.toFixed(digits));
+const iso = (d: Date) => format(d, "yyyy-MM-dd");
+
+/**
+ * GET /api/export/report?type=trucks|monthly|categories|vendors|downtime&period=month|quarter|year → CSV of that
+ * reports table with every row (the page shows the top of the ranked ones). Same data and company scope as the page.
+ */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Sign in required" }, { status: 401 });
   if (!can(user.role, "reports.view")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const type = req.nextUrl.searchParams.get("type");
-  if (!isExportType(type)) return NextResponse.json({ error: "type must be lanes, drivers or trucks" }, { status: 400 });
+  if (!isExportType(type)) return NextResponse.json({ error: `type must be one of ${EXPORT_TYPES.join(", ")}` }, { status: 400 });
   const period = parsePeriod(req.nextUrl.searchParams.get("period"));
   const r = await reportData(period);
+  const from = iso(r.range.from);
+  const to = iso(r.range.to);
 
   let head: string[];
-  let rows: (string | number | null | undefined)[][];
+  let rows: Value[][];
   switch (type) {
-    case "lanes":
-      head = ["Origin", "Destination", "Loads", "Loaded km", "Empty km", "Total km", "Revenue", "Direct cost", "Margin", "Margin %", "Revenue per km", "Empty %"];
-      rows = r.lanes.map((l) => [l.origin, l.dest, l.loads, Math.round(l.km - l.emptyKm), Math.round(l.emptyKm), Math.round(l.km), money(l.revenue), money(l.cost), money(l.margin), l.marginPct, perKm(l.perKm), l.emptyPct]);
-      break;
-    case "drivers":
-      head = ["Driver", "Type", "Loads", "Total km", "Empty km", "On time %", "Revenue", "Earnings", "Score"];
-      rows = r.drivers.map((d) => [d.name, d.type, d.loads, Math.round(d.km), Math.round(d.emptyKm), d.onTimePct, money(d.revenue), money(d.earnings), d.score]);
-      break;
     case "trucks":
-      head = ["Truck", "Model", "Ownership", "Loads", "Total km", "Revenue", "Work orders", "Work order cost", "Cost per km", "Revenue per km"];
-      rows = r.trucks.map((t) => [t.unit, t.model, t.ownership, t.loads, Math.round(t.km), money(t.revenue), t.workOrders, money(t.workOrderCost), perKm(t.costPerKm), perKm(t.perKm)]);
+      head = ["Truck", "Model", "Group", "Status", "Km driven", "Fuel fills", "Litres", "Fuel cost", "L/100 km", "Work orders", "Maintenance cost", "Total cost", "Cost per km"];
+      rows = r.trucks.map((t) => [t.unitNumber, t.model, t.group, t.status, Math.round(t.km), t.fills, Math.round(t.liters), money(t.fuel), fixed(t.l100, 1), t.jobs, money(t.maintenance), money(t.total), fixed(t.costPerKm, 3)]);
+      if (r.trailerWork.jobs) rows.push(["Trailers", "", "", "", "", "", "", "", "", r.trailerWork.jobs, money(r.trailerWork.maintenance), money(r.trailerWork.maintenance), ""]);
+      break;
+    case "monthly":
+      head = ["Month", "Start", "End", "To date", "Maintenance cost", "Work orders", "Fuel cost", "Fuel fills", "Litres", "Total cost"];
+      rows = r.monthly.map((m) => [m.label, iso(m.from), iso(m.to), m.partial ? "yes" : "no", money(m.maintenance), m.jobs, money(m.fuel), m.fills, m.liters, money(m.maintenance + m.fuel)]);
+      break;
+    case "categories":
+      head = ["Category", "Work orders", "Cost", "Share %", "Average per job"];
+      rows = r.categories.map((c) => [c.label, c.jobs, money(c.cost), c.share, money(c.avg)]);
+      break;
+    case "vendors":
+      head = ["Vendor", "Work orders", "Cost", "Share %", "Average per job"];
+      rows = r.vendors.map((v) => [v.label, v.jobs, money(v.cost), v.share, money(v.avg)]);
+      break;
+    case "downtime":
+      head = ["Unit", "Type", "Work orders", "Days in shop", "In shop now", "Longest job", "Longest job days"];
+      rows = r.downtime.map((d) => [d.unitNumber, d.type, d.jobs, d.days, d.inShopNow ? "yes" : "no", `#${d.longest.number} ${d.longest.title}`, d.longest.days]);
       break;
   }
 
   // The header is the first line so spreadsheets and pivots read it as the header row; the file name carries the
-  // report type, period and date.
+  // report and its window.
   const csv = [head.map(cell).join(","), ...rows.map((row) => row.map(cell).join(","))].join("\r\n");
-  const name = `report-${type}-${period}-${format(r.range.to, "yyyy-MM-dd")}.csv`;
-  return new NextResponse(`\uFEFF${csv}\r\n`, {
+  const name = `fleet-${type}-${from}-to-${to}.csv`;
+  return new NextResponse(`﻿${csv}\r\n`, {
     headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="${name}"`, "cache-control": "no-store" },
   });
 }

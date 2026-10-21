@@ -5,7 +5,7 @@ import type { Permission } from "./permissions";
  * Keep routes here even before their page exists so the shell stays the single source of truth.
  */
 export type NavItem = { href: string; label: string; icon: string; perm: Permission; shortcut?: string; description?: string };
-/** A sidebar category. It folds open on click; a category with one item for this role shows as a plain link. */
+/** A sidebar category. It folds open on click; a category with one item shows as a plain link. */
 export type NavSection = { section: string; icon: string; items: NavItem[] };
 
 export const NAV: NavSection[] = [
@@ -13,62 +13,46 @@ export const NAV: NavSection[] = [
     section: "Overview",
     icon: "LayoutDashboard",
     items: [
-      { href: "/dashboard", label: "Overview", icon: "LayoutDashboard", perm: "dashboard.view", shortcut: "g o", description: "KPIs, exceptions, live fleet" },
-    ],
-  },
-  {
-    section: "Dispatch",
-    icon: "Rows3",
-    items: [
-      { href: "/dispatch", label: "Board", icon: "Rows3", perm: "loads.view", shortcut: "g b", description: "Daily dispatch board by team" },
-      { href: "/loads", label: "Loads", icon: "Package", perm: "loads.view", shortcut: "g l", description: "All shipments" },
-      { href: "/tracking", label: "Live map", icon: "Map", perm: "tracking.view", shortcut: "g m", description: "Every truck, route and ETA" },
-      { href: "/dispatch/weekly", label: "Weekly", icon: "CalendarRange", perm: "loads.view", shortcut: "g w", description: "Production per driver per day" },
-      { href: "/driver", label: "My trips", icon: "Navigation", perm: "driver.portal", description: "Driver portal" },
+      { href: "/dashboard", label: "Overview", icon: "LayoutDashboard", perm: "dashboard.view", shortcut: "g o", description: "What needs you today, fleet at a glance" },
     ],
   },
   {
     section: "Fleet",
     icon: "Truck",
     items: [
-      { href: "/fleet", label: "Trucks", icon: "Truck", perm: "fleet.view", shortcut: "g t" },
-      { href: "/fleet/trailers", label: "Trailers", icon: "Container", perm: "fleet.view" },
-      { href: "/maintenance", label: "Maintenance", icon: "Wrench", perm: "fleet.view", description: "Spend, PM schedule, in shop" },
-      { href: "/maintenance/work-orders", label: "Work orders", icon: "ClipboardList", perm: "fleet.view" },
+      { href: "/fleet", label: "Trucks", icon: "Truck", perm: "fleet.view", shortcut: "g t", description: "Every tractor, PM and paperwork" },
+      { href: "/fleet/trailers", label: "Trailers", icon: "Container", perm: "fleet.view", shortcut: "g r", description: "Status, pairing, location" },
+      { href: "/tracking", label: "Live map", icon: "Map", perm: "tracking.view", shortcut: "g m", description: "Where every unit is right now" },
     ],
   },
   {
-    section: "People",
+    section: "Maintenance",
+    icon: "Wrench",
+    items: [
+      { href: "/maintenance", label: "Maintenance", icon: "Wrench", perm: "fleet.view", shortcut: "g s", description: "Spend, PM schedule, in shop, compliance" },
+      { href: "/maintenance/work-orders", label: "Work orders", icon: "ClipboardList", perm: "fleet.view", shortcut: "g w", description: "Repairs, PM and inspections" },
+    ],
+  },
+  {
+    section: "Drivers",
     icon: "Users",
     items: [
-      { href: "/drivers", label: "Drivers", icon: "Users", perm: "drivers.view", shortcut: "g d" },
-      { href: "/customers", label: "Customers & brokers", icon: "Building2", perm: "customers.view", shortcut: "g c" },
+      { href: "/drivers", label: "Drivers", icon: "Users", perm: "drivers.view", shortcut: "g d", description: "Licences, medicals, assignments" },
     ],
   },
   {
-    section: "Money",
-    icon: "Wallet",
+    section: "Reports",
+    icon: "BarChart3",
     items: [
-      { href: "/finance", label: "Finance", icon: "Receipt", perm: "finance.view", shortcut: "g f", description: "Invoices, receivables, billing queue" },
-      { href: "/reports", label: "Reports", icon: "BarChart3", perm: "reports.view", shortcut: "g r" },
-      { href: "/claims", label: "Claims", icon: "ShieldAlert", perm: "claims.view" },
-    ],
-  },
-  {
-    section: "Team",
-    icon: "MessageSquare",
-    items: [
-      { href: "/chat", label: "Chat", icon: "MessageSquare", perm: "chat.view", description: "Company room and load threads" },
-      { href: "/announcements", label: "Announcements", icon: "Megaphone", perm: "chat.view" },
+      { href: "/reports", label: "Reports", icon: "BarChart3", perm: "reports.view", shortcut: "g p", description: "Maintenance, fuel and fleet costs" },
     ],
   },
   {
     section: "Settings",
     icon: "Settings",
     items: [
-      { href: "/admin/company", label: "Company profile", icon: "Landmark", perm: "company.manage" },
-      { href: "/admin/users", label: "Users & roles", icon: "ShieldCheck", perm: "users.manage" },
-      { href: "/admin/telegram", label: "Telegram alerts", icon: "Send", perm: "users.manage" },
+      { href: "/admin/company", label: "Company profile", icon: "Landmark", perm: "company.manage", shortcut: "g c" },
+      { href: "/admin/members", label: "Members", icon: "ShieldCheck", perm: "members.manage", description: "Who works in this company and their role" },
       { href: "/admin/audit", label: "Audit log", icon: "ScrollText", perm: "audit.view" },
     ],
   },
@@ -76,9 +60,8 @@ export const NAV: NavSection[] = [
 
 /** Breadcrumb titles for route segments that aren't nav items. */
 export const SEGMENT_LABELS: Record<string, string> = {
-  new: "New", edit: "Edit", invoices: "Invoices", "work-orders": "Work orders", trailers: "Trailers",
-  weekly: "Weekly", prebook: "Prebook", account: "My account", admin: "Company", company: "Company profile",
-  users: "Users & roles", telegram: "Telegram alerts", audit: "Audit log", dispatch: "Dispatch",
+  new: "New", edit: "Edit", "work-orders": "Work orders", trailers: "Trailers", account: "My account", admin: "Company",
+  company: "Company profile", members: "Members", audit: "Audit log", alerts: "Needs attention",
 };
 
 export function allNavItems() {
@@ -91,10 +74,20 @@ export function findNavSection(path: string) {
 }
 
 export function findNavItem(path: string) {
-  // Longest matching href wins (so /dispatch/weekly beats /dispatch).
+  // Longest matching href wins (so /fleet/trailers beats /fleet).
   return allNavItems()
     .filter((i) => path === i.href || path.startsWith(i.href + "/"))
     .sort((a, b) => b.href.length - a.href.length)[0];
+}
+
+/**
+ * Where to land after switching company from `path`: the same list page (Trucks stays Trucks), never a record of the
+ * company you just left. Personal pages stay put.
+ */
+export function landingAfterSwitch(path: string | null | undefined) {
+  if (!path) return "/dashboard";
+  if (path === "/account") return path;
+  return findNavItem(path)?.href ?? "/dashboard";
 }
 
 /** Sidebar state cookie: "open" (labelled sidebar, the default) or "rail" (icons only, expands on hover). */

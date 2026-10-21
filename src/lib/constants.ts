@@ -1,55 +1,36 @@
-export const ROLES = ["OWNER", "ADMIN", "DISPATCHER", "FLEET_MANAGER", "ACCOUNTANT", "DRIVER"] as const;
+/* ------------------------------------------------------------------ */
+/* Company roles                                                       */
+/* ------------------------------------------------------------------ */
+
+/** A person's role inside one company (Membership.role). The same person can hold a different role elsewhere. */
+export const ROLES = ["OWNER", "ADMIN", "SPECIALIST", "VIEWER"] as const;
 export type Role = (typeof ROLES)[number];
 
 export const ROLE_LABELS: Record<Role, string> = {
   OWNER: "Owner",
-  ADMIN: "Administrator",
-  DISPATCHER: "Dispatcher",
-  FLEET_MANAGER: "Fleet manager",
-  ACCOUNTANT: "Accountant",
-  DRIVER: "Driver",
+  ADMIN: "Admin",
+  SPECIALIST: "Fleet specialist",
+  VIEWER: "View only",
 };
+
+export const ROLE_HINTS: Record<Role, string> = {
+  OWNER: "Everything, including members, owners and deleting the company",
+  ADMIN: "Everything except owner accounts and deleting the company",
+  SPECIALIST: "Trucks, trailers, maintenance, drivers and documents",
+  VIEWER: "Sees everything, changes nothing",
+};
+
+export const isRole = (v: unknown): v is Role => typeof v === "string" && (ROLES as readonly string[]).includes(v);
+
+/** Workspace badge colours (stored as data on Company.color). */
+export const COMPANY_COLORS = ["#2563EB", "#059669", "#D97706", "#DC2626", "#7C3AED", "#DB2777", "#0D9488", "#475569"] as const;
 
 /* ------------------------------------------------------------------ */
-/* Loads                                                               */
+/* Fleet                                                               */
 /* ------------------------------------------------------------------ */
-
-export const LOAD_STATUSES = ["PLANNED", "ASSIGNED", "IN_TRANSIT", "DELIVERED", "INVOICED", "CANCELLED", "TONU"] as const;
-export type LoadStatus = (typeof LOAD_STATUSES)[number];
-
-export const LOAD_STATUS_LABELS: Record<LoadStatus, string> = {
-  PLANNED: "Booked",
-  ASSIGNED: "Dispatched",
-  IN_TRANSIT: "In transit",
-  DELIVERED: "Delivered",
-  INVOICED: "Invoiced",
-  CANCELLED: "Cancelled",
-  TONU: "TONU",
-};
-
-/** Allowed next statuses from each status (the dispatch workflow). TONU = truck ordered, not used. */
-export const LOAD_TRANSITIONS: Record<LoadStatus, LoadStatus[]> = {
-  PLANNED: ["ASSIGNED", "CANCELLED"],
-  ASSIGNED: ["IN_TRANSIT", "PLANNED", "CANCELLED", "TONU"],
-  IN_TRANSIT: ["DELIVERED"],
-  DELIVERED: ["INVOICED"],
-  INVOICED: [],
-  CANCELLED: ["PLANNED"],
-  TONU: ["INVOICED"],
-};
-
-export const BILLING_STAGES = ["NONE", "MISSING_DOCS", "READY_TO_INVOICE", "INVOICED", "PAID"] as const;
-export type BillingStage = (typeof BILLING_STAGES)[number];
-export const BILLING_STAGE_LABELS: Record<BillingStage, string> = {
-  NONE: "—", MISSING_DOCS: "Missing docs", READY_TO_INVOICE: "Ready to invoice", INVOICED: "Invoiced", PAID: "Paid",
-};
-
-/** Documents a load needs before it can be billed. */
-export const REQUIRED_LOAD_DOCS = ["RC", "POD"] as const;
-/** Billing paperwork by load status: a TONU (truck ordered, not used) was never delivered, so only the RC applies. */
-export const requiredDocsFor = (status: string): readonly string[] => (status === "TONU" ? ["RC"] : REQUIRED_LOAD_DOCS);
 
 export const PRIORITIES = ["LOW", "NORMAL", "HIGH", "URGENT"] as const;
+/** Trailer body types. */
 export const EQUIPMENT = ["DRY_VAN", "REEFER", "FLATBED", "TANKER", "CONTAINER"] as const;
 export const EQUIPMENT_LABELS: Record<string, string> = {
   DRY_VAN: "Dry van",
@@ -58,14 +39,6 @@ export const EQUIPMENT_LABELS: Record<string, string> = {
   TANKER: "Tanker",
   CONTAINER: "Container",
 };
-
-
-export const CUSTOMER_KINDS = ["SHIPPER", "BROKER", "BOTH"] as const;
-export const CUSTOMER_KIND_LABELS: Record<string, string> = { SHIPPER: "Shipper", BROKER: "Broker", BOTH: "Shipper & broker" };
-
-/* ------------------------------------------------------------------ */
-/* Fleet                                                               */
-/* ------------------------------------------------------------------ */
 
 export const TRUCK_STATUSES = ["ACTIVE", "MAINTENANCE", "OUT_OF_SERVICE", "INACTIVE"] as const;
 export const OWNERSHIP = ["COMPANY", "OWNER_OPERATOR", "LEASED"] as const;
@@ -84,7 +57,6 @@ export const WORK_ORDER_CATEGORY_LABELS: Record<string, string> = {
 export const WORK_ORDER_PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"] as const;
 export const WORK_ORDER_STATUSES = ["DRAFT", "OPEN", "IN_PROGRESS", "DONE", "CANCELLED"] as const;
 
-
 /* ------------------------------------------------------------------ */
 /* Drivers                                                             */
 /* ------------------------------------------------------------------ */
@@ -94,35 +66,6 @@ export const DRIVER_STATUSES = ["ACTIVE", "ON_LEAVE", "INACTIVE"] as const;
 export const DRIVER_TYPES = ["COMPANY", "OWNER_OPERATOR", "LEASE"] as const;
 export const DRIVER_TYPE_LABELS: Record<string, string> = { COMPANY: "Company", OWNER_OPERATOR: "Owner-operator", LEASE: "Lease-operator" };
 export const DRIVER_TYPE_SHORT: Record<string, string> = { COMPANY: "C", OWNER_OPERATOR: "OO", LEASE: "LO" };
-
-/** Dispatch-board state. The first five are derived automatically from the driver's load. */
-export const BOARD_STATUSES = ["READY", "DISPATCHED", "AT_PICKUP", "EN_ROUTE", "UNLOADING", "STOP", "REST", "HOME", "VACATION"] as const;
-export type BoardStatus = (typeof BOARD_STATUSES)[number];
-export const BOARD_STATUS_LABELS: Record<BoardStatus, string> = {
-  READY: "Ready", DISPATCHED: "Dispatched", AT_PICKUP: "At pickup", EN_ROUTE: "En route", UNLOADING: "Unloading",
-  STOP: "Stopped", REST: "Rest", HOME: "Home", VACATION: "Vacation",
-};
-/** Statuses a dispatcher sets by hand (the rest are computed from loads). */
-export const MANUAL_BOARD_STATUSES: BoardStatus[] = ["STOP", "REST", "HOME", "VACATION", "READY"];
-/** Order used by the "flat" board view. */
-export const BOARD_STATUS_ORDER: BoardStatus[] = ["DISPATCHED", "AT_PICKUP", "EN_ROUTE", "UNLOADING", "READY", "STOP", "REST", "HOME", "VACATION"];
-
-/* ------------------------------------------------------------------ */
-/* Finance, claims                                                     */
-/* ------------------------------------------------------------------ */
-
-export const INVOICE_STATUSES = ["DRAFT", "SENT", "PAID", "VOID"] as const;
-
-export const CLAIM_TYPES = ["CARGO_DAMAGE", "CARGO_LOSS", "LATE_CARGO", "OSD", "ACCIDENT", "EQUIPMENT_DAMAGE", "INJURY", "OTHER"] as const;
-export const CLAIM_TYPE_LABELS: Record<string, string> = {
-  CARGO_DAMAGE: "Cargo damage", CARGO_LOSS: "Cargo loss", LATE_CARGO: "Late cargo", OSD: "OS&D",
-  ACCIDENT: "Accident / liability", EQUIPMENT_DAMAGE: "Equipment damage", INJURY: "Injury", OTHER: "Other",
-};
-export const CLAIM_SEVERITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"] as const;
-export const CLAIM_STATUSES = ["REPORTED", "UNDER_REVIEW", "DOCS_COLLECTED", "SUBMITTED", "NEGOTIATION", "APPROVED", "DENIED", "PAID", "CLOSED", "DISPUTED", "LITIGATION"] as const;
-export const CLAIM_OPEN_STATUSES = ["REPORTED", "UNDER_REVIEW", "DOCS_COLLECTED", "SUBMITTED", "NEGOTIATION", "DISPUTED", "LITIGATION"] as const;
-export const CLAIM_FAULTS = ["OURS", "THIRD_PARTY", "SHARED", "UNKNOWN"] as const;
-export const CLAIM_FAULT_LABELS: Record<string, string> = { OURS: "Ours", THIRD_PARTY: "Third party", SHARED: "Shared", UNKNOWN: "Unknown" };
 
 /* ------------------------------------------------------------------ */
 /* Helpers & geography                                                 */
@@ -139,7 +82,7 @@ export function humanize(value: string | null | undefined) {
 
 export const TIMEZONE = "Asia/Tashkent";
 
-// Known depots / cities used for quick route entry and demo data.
+// Known depots / cities used for quick location entry and demo data.
 export const CITIES: { name: string; country: string; lat: number; lng: number }[] = [
   { name: "Tashkent", country: "UZ", lat: 41.2995, lng: 69.2401 },
   { name: "Samarkand", country: "UZ", lat: 39.6542, lng: 66.9597 },

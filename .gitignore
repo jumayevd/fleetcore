@@ -56,3 +56,6 @@ DEMO-CREDENTIALS.local.txt
 
 # local postgres cluster
 .pgdata
+
+# local tool config
+/.claude/launch.json

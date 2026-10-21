@@ -1,18 +1,14 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { isSameDay, addDays, format } from "date-fns";
-import {
-  ArrowRightLeft, ArrowUpRight, CalendarClock, FileText, FileWarning, Pencil, Phone, PackagePlus, Receipt, StickyNote, TriangleAlert, UserCheck,
-  type LucideIcon,
-} from "lucide-react";
-import { Chip, EmptyState, IconTile, LinkButton, Progress, StatusDot, buttonClass, cardClass, cn, type Hue, type Tone } from "@/components/ui";
-import { ago, km, money, money2 } from "@/lib/format";
-import type { weeklyProduction } from "@/lib/stats";
-import type { billingQueue, RecentEvent, UpcomingPickup } from "./queries";
-import { plural, type FleetLegend } from "./lib";
-
-type Weekly = Awaited<ReturnType<typeof weeklyProduction>>;
-type Billing = Awaited<ReturnType<typeof billingQueue>>;
+import { format } from "date-fns";
+import { ArrowUpRight, Building2, Check, Container, Gauge, Truck, User, type LucideIcon } from "lucide-react";
+import { Chip, EmptyState, IconTile, LinkButton, Progress, StatusDot, cardClass, cn, type Hue, type Tone } from "@/components/ui";
+import { WORK_ORDER_CATEGORY_LABELS, type Role } from "@/lib/constants";
+import { number } from "@/lib/format";
+import { can, canOpen, type Permission } from "@/lib/permissions";
+import type { PaperworkItem, PaperworkOwner } from "@/lib/alerts";
+import type { SetupProgress, ShopDay, ShopJob } from "./queries";
+import { daysBetween, daysUntil, plural } from "./lib";
 
 /** Quiet "see more" link for card headers. */
 export function MoreLink({ href, children }: { href: string; children: ReactNode }) {
@@ -35,11 +31,9 @@ export type Kpi = {
   label: string; value: ReactNode; href?: string; icon?: LucideIcon; tone?: Tone | Hue;
   /** Context line. Shown under the number only when `alert` is set; otherwise it is the tile's hover tip. */
   sub?: ReactNode; alert?: boolean;
-  /** Small coloured change chip next to the number ("+12%"). */
-  delta?: { text: string; tone?: SubTone };
 };
 
-/** The day in six numbers: one tile each, a coloured icon per number, words only where something needs a look. */
+/** The fleet in six numbers: one tile each, a coloured icon per number, words only where something needs a look. */
 export function KpiStrip({ items }: { items: Kpi[] }) {
   return (
     <section aria-label="Key numbers" className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
@@ -51,10 +45,7 @@ export function KpiStrip({ items }: { items: Kpi[] }) {
               {Icon && <IconTile tone={k.tone ?? "accent"}><Icon aria-hidden /></IconTile>}
               {k.href && <ArrowUpRight aria-hidden className="h-4 w-4 text-fg-faint opacity-0 transition-opacity duration-150 group-hover:opacity-100" />}
             </div>
-            <div className="mt-3 flex items-baseline gap-2">
-              <p className="num truncate text-[26px] font-semibold leading-none tracking-[-0.025em] text-fg">{k.value}</p>
-              {k.delta && <span className={cn("num rounded-full px-1.5 text-[11px] font-medium leading-5", DELTA_TONE[k.delta.tone ?? "ok"])}>{k.delta.text}</span>}
-            </div>
+            <p className="num mt-3 truncate text-[26px] font-semibold leading-none tracking-[-0.025em] text-fg">{k.value}</p>
             <p className="mt-1.5 truncate text-[12px] font-medium text-fg-muted">{k.label}</p>
             {k.sub && (k.alert
               ? <p className="mt-0.5 truncate text-[12px]">{k.sub}</p>
@@ -78,8 +69,6 @@ export function KpiStrip({ items }: { items: Kpi[] }) {
     </section>
   );
 }
-
-const DELTA_TONE: Record<SubTone, string> = { ok: "bg-ok-soft text-ok", warn: "bg-warn-soft text-warn", danger: "bg-danger-soft text-danger" };
 
 /* ------------------------------------------------------------------ */
 /* Metric list (label · value · note)                                  */
@@ -111,209 +100,274 @@ export function MetricList({ items, className }: { items: Metric[]; className?: 
 }
 
 /* ------------------------------------------------------------------ */
-/* Billing queue                                                       */
+/* Small list pieces                                                   */
 /* ------------------------------------------------------------------ */
 
-function QueueRow({ href, label, hint, count, sum, tone, icon: Icon }: {
-  href: string; label: string; hint: string; count: number; sum?: number; tone: Tone; icon: LucideIcon;
-}) {
+/** Sub-heading inside a list card: dot, label, count and an "All N" link when the list is cut short. */
+function GroupHead({ tone, label, count, more }: { tone: Tone; label: string; count: number; more?: { href: string; label: string } }) {
   return (
-    <Link href={href} title={hint} className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-raised">
-      <IconTile tone={count ? tone : "neutral"}><Icon aria-hidden /></IconTile>
-      <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-fg">{label}</span>
-      {sum !== undefined && count > 0 && <span className="num text-[12px] text-fg-subtle">{money(sum)}</span>}
-      <span className={cn("num min-w-6 text-right text-[16px] font-semibold", count ? (tone === "danger" ? "text-danger" : "text-fg") : "text-fg-faint")}>{count}</span>
-    </Link>
-  );
-}
-
-export function BillingQueue({ queue, overdue, showMoney }: { queue: Billing; overdue: { count: number; amount: number } | null; showMoney: boolean }) {
-  // Finance roles work the queue on /finance (its default tab); everyone else gets the loads list filtered by billing stage.
-  return (
-    <div className="divide-y divide-line">
-      <QueueRow href={showMoney ? "/finance" : "/loads?billing=MISSING_DOCS"} label="Missing documents" hint="Delivered, waiting on RC or POD" icon={FileWarning} tone="warn"
-        count={queue.missingDocs.count} sum={showMoney ? queue.missingDocs.sum : undefined} />
-      <QueueRow href={showMoney ? "/finance" : "/loads?billing=READY_TO_INVOICE"} label="Ready to invoice" hint="Paperwork complete, not billed yet" icon={Receipt} tone="info"
-        count={queue.ready.count} sum={showMoney ? queue.ready.sum : undefined} />
-      {overdue && <QueueRow href="/finance?status=overdue" label="Overdue invoices" hint="Sent, past the due date" icon={CalendarClock} tone="danger" count={overdue.count} sum={overdue.amount} />}
-    </div>
+    <li className="flex items-center justify-between gap-2 bg-raised/60 px-4 py-1.5">
+      <span className="flex items-center gap-2 text-[12px] font-medium text-fg-muted">
+        <StatusDot tone={tone} />{label}<span className="num text-fg-subtle">{count}</span>
+      </span>
+      {more && <Link href={more.href} className="whitespace-nowrap text-[12px] font-medium text-fg-muted hover:text-fg">{more.label} →</Link>}
+    </li>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/* Fleet snapshot (roles without the live map)                         */
+/* Today in the shop                                                   */
 /* ------------------------------------------------------------------ */
 
-const MOTION: { key: "rolling" | "idle" | "stopped" | "inService"; label: string; tone: Tone; faded?: boolean }[] = [
-  { key: "rolling", label: "Rolling", tone: "progress" },
-  { key: "idle", label: "Idle", tone: "info" },
-  { key: "stopped", label: "Stopped", tone: "info", faded: true },
-  { key: "inService", label: "In service", tone: "warn" },
-];
+type JobKind = "progress" | "overdue" | "today";
 
-/** The live map's legend as static numbers, for roles that cannot open /tracking or poll /api/fleet. */
-export function FleetSummary({ legend: f }: { legend: FleetLegend }) {
-  return (
-    <div>
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
-        {MOTION.map((m) => (
-          <div key={m.key} className="min-w-0">
-            <dt className="flex items-center gap-1.5 text-[12px] text-fg-muted">
-              <StatusDot tone={m.tone} className={cn(m.faded && "opacity-50")} />{m.label}
-            </dt>
-            <dd className="num mt-0.5 text-[18px] font-semibold text-fg">{f[m.key]}</dd>
-          </div>
-        ))}
-      </dl>
-      <p className="mt-4 text-[12px] text-fg-muted">
-        <span className="num">{f.onLoad}</span> of <span className="num">{plural(f.trucks, "truck")}</span> on loads
-        {f.late > 0 && <> · <span className="num text-danger">{f.late} running late</span></>}
-        {f.noSignal > 0 && <> · <span className="num text-warn">{f.noSignal} no signal</span></>}
-      </p>
-      <p className="mt-1 text-[12px] text-fg-subtle">As of this page load.</p>
-    </div>
-  );
+function unitOf(job: ShopJob) {
+  if (job.truck) return { label: job.truck.unitNumber, href: `/fleet/${job.truck.id}` };
+  if (job.trailer) return { label: job.trailer.unitNumber, href: `/fleet/trailers/${job.trailer.id}` };
+  return null;
 }
 
-/* ------------------------------------------------------------------ */
-/* This week production                                                */
-/* ------------------------------------------------------------------ */
+function jobWhen(job: ShopJob, kind: JobKind, now: Date) {
+  if (kind === "today") return format(job.scheduledAt, "HH:mm");
+  if (kind === "overdue") return `${Math.max(1, daysBetween(job.scheduledAt, now))} d late`;
+  const since = job.inAt ?? job.scheduledAt;
+  const d = daysBetween(since, now);
+  return d === 0 ? `since ${format(since, "HH:mm")}` : `in shop ${d} d`;
+}
 
-export function WeekProduction({ week, showMoney }: { week: Weekly; showMoney: boolean }) {
-  const rows = week.groups.flatMap((g) => g.rows);
-  const goal = rows.reduce((a, r) => a + r.goal, 0);
-  const producing = rows.filter((r) => r.total > 0).length;
-  const reach = goal ? week.grand.total / goal : 0;
-  const tone = reach >= 1 ? "ok" : reach >= 0.6 ? "progress" : "warn";
-  const loads = rows.reduce((a, r) => a + r.days.reduce((b, d) => b + d.loads.length, 0), 0);
-  const cells: [string, ReactNode][] = showMoney
-    ? [["Revenue", money(week.grand.total)], ["Distance", km(week.grand.km)], ["Per km", money2(week.grand.rpk)], ["Per driver", money(week.grand.avgPerTruck)]]
-    : [["Distance", km(week.grand.km)], ["Loads", String(loads)]];
+function JobRow({ job, kind, now, canEdit }: { job: ShopJob; kind: JobKind; now: Date; canEdit: boolean }) {
+  const unit = unitOf(job);
+  const href = `/maintenance/work-orders/${job.id}`;
+  const urgent = job.priority === "URGENT" || job.priority === "HIGH";
   return (
-    <div>
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
-        {cells.map(([k, v]) => (
-          <div key={k} className="min-w-0">
-            <dt className="text-[12px] text-fg-muted">{k}</dt>
-            <dd className="num mt-0.5 truncate text-[16px] font-semibold text-fg">{v}</dd>
-          </div>
-        ))}
-      </dl>
-      <div className="mt-4">
-        <div className="mb-1.5 flex items-center justify-between gap-2 text-[12px]">
-          <span className="truncate text-fg-muted">Weekly goal · {producing} of {plural(week.grand.drivers, "driver")} producing</span>
-          <span className="num font-medium text-fg">{Math.round(reach * 100)}%</span>
-        </div>
-        <Progress value={reach} tone={tone} />
+    <li className="grid grid-cols-[80px_minmax(0,1fr)_auto] items-center gap-x-3 px-4 py-2">
+      <div className="min-w-0">
+        {unit
+          ? <Link href={unit.href} className="num block truncate text-[13px] font-medium text-fg hover:text-accent-text">{unit.label}</Link>
+          : <span className="block truncate text-[13px] text-fg-faint">No unit</span>}
+        <span className={cn("num block truncate text-[12px]", kind === "overdue" ? "text-danger" : "text-fg-subtle")}>{jobWhen(job, kind, now)}</span>
       </div>
-    </div>
+      <Link href={href} className="min-w-0">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="num shrink-0 text-[12px] text-fg-subtle">#{job.number}</span>
+          <span className="truncate text-[13px] font-medium text-fg">{job.title}</span>
+          {urgent && <Chip tone={job.priority === "URGENT" ? "danger" : "warn"}>{job.priority === "URGENT" ? "Urgent" : "High"}</Chip>}
+        </span>
+        <span className="block truncate text-[12px] text-fg-subtle">
+          {WORK_ORDER_CATEGORY_LABELS[job.category] ?? job.category}{job.vendor ? ` · ${job.vendor}` : ""}{job.status === "DRAFT" ? " · draft" : ""}
+        </span>
+      </Link>
+      {canEdit
+        ? <LinkButton href={href} variant="secondary" size="sm" title={`Open #${job.number} to ${kind === "progress" ? "complete" : "start"} it`}>{kind === "progress" ? "Complete" : "Start"}</LinkButton>
+        : <Link href={href} className="text-[12px] font-medium text-fg-muted hover:text-fg">Open →</Link>}
+    </li>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Upcoming pickups                                                    */
-/* ------------------------------------------------------------------ */
-
-/** "Today" / "Tomorrow" / "Wed 7 Oct" in company time (the server clock runs in the company zone). */
-const dayLabel = (d: Date, now: Date) => (isSameDay(d, now) ? "Today" : isSameDay(d, addDays(now, 1)) ? "Tomorrow" : format(d, "EEE d MMM"));
-function lateBy(d: Date, now: Date) {
-  const mins = Math.max(1, Math.round((now.getTime() - d.getTime()) / 60_000));
-  return mins < 60 ? `${mins} min late` : mins < 48 * 60 ? `${Math.round(mins / 60)} h late` : `${Math.round(mins / 1440)} d late`;
-}
-
-export function UpcomingPickups({ loads, total, now, canEdit }: { loads: UpcomingPickup[]; total: number; now: Date; canEdit: boolean }) {
-  if (loads.length === 0) {
+/** Jobs in the shop now, then late ones, then today's bookings: each with the one button that moves it on. */
+export function ShopToday({ day, now, canEdit }: { day: ShopDay; now: Date; canEdit: boolean }) {
+  const groups: { kind: JobKind; label: string; tone: Tone; jobs: ShopJob[]; total: number; href: string }[] = [
+    { kind: "progress", label: "In progress", tone: "progress", jobs: day.inProgress, total: day.counts.inProgress, href: "/maintenance/work-orders?status=IN_PROGRESS" },
+    { kind: "overdue", label: "Overdue, not started", tone: "danger", jobs: day.overdue, total: day.counts.overdue, href: "/maintenance/work-orders" },
+    { kind: "today", label: "Booked for today", tone: "info", jobs: day.today, total: day.counts.today, href: "/maintenance/work-orders" },
+  ];
+  const shown = groups.filter((g) => g.total > 0);
+  if (shown.length === 0) {
     return (
       <EmptyState
-        title="No pickups in the next 24 hours"
-        description="Loads with a later pickup are on the dispatch board's prebook view."
-        action={canEdit ? <LinkButton href="/loads/new" variant="secondary" size="sm">New load</LinkButton> : <LinkButton href="/loads" variant="secondary" size="sm">All loads</LinkButton>}
+        title="Nothing in the shop today"
+        description="No work in progress and nothing booked for today. Book PM and repairs as work orders and they show up here on the day."
+        action={canEdit
+          ? <LinkButton href="/maintenance/work-orders/new" variant="secondary" size="sm">New work order</LinkButton>
+          : <LinkButton href="/maintenance/work-orders" variant="secondary" size="sm">All work orders</LinkButton>}
       />
     );
   }
-  const more = total - loads.length;
   return (
-    <>
-      <ul className="divide-y divide-line">
-        {loads.map((l) => {
-          const late = l.pickupAt < now;
-          return (
-            <li key={l.id} className="grid grid-cols-[72px_minmax(0,1fr)_auto] items-center gap-x-4 px-4 py-2 md:grid-cols-[72px_minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1.1fr)]">
-              <Link href={`/loads/${l.id}`} className="min-w-0">
-                <span className="num block text-[13px] font-medium text-fg">{format(l.pickupAt, "HH:mm")}</span>
-                <span className={cn("block truncate text-[12px]", late ? "text-danger" : "text-fg-subtle")}>{late ? lateBy(l.pickupAt, now) : dayLabel(l.pickupAt, now)}</span>
-              </Link>
-              <Link href={`/loads/${l.id}`} className="min-w-0">
-                <span className="flex min-w-0 items-center gap-1.5">
-                  <span className="num truncate text-[13px] font-medium text-fg">{l.reference}</span>
-                  {(l.priority === "URGENT" || l.priority === "HIGH") && <Chip tone={l.priority === "URGENT" ? "danger" : "warn"}>{l.priority === "URGENT" ? "Urgent" : "High"}</Chip>}
-                  {l.hazmat && <Chip tone="warn">Hazmat</Chip>}
+    <ul className="divide-y divide-line">
+      {shown.map((g) => (
+        <GroupRows key={g.kind} head={<GroupHead tone={g.tone} label={g.label} count={g.total} more={g.total > g.jobs.length ? { href: g.href, label: `All ${g.total}` } : undefined} />}>
+          {g.jobs.map((j) => <JobRow key={j.id} job={j} kind={g.kind} now={now} canEdit={canEdit} />)}
+        </GroupRows>
+      ))}
+    </ul>
+  );
+}
+
+/** A heading row followed by its rows, flattened into the parent list (no nested lists for screen readers to walk). */
+function GroupRows({ head, children }: { head: ReactNode; children: ReactNode }) {
+  return <>{head}{children}</>;
+}
+
+/* ------------------------------------------------------------------ */
+/* Coming up                                                           */
+/* ------------------------------------------------------------------ */
+
+const OWNER_ICON: Record<PaperworkOwner, LucideIcon> = { truck: Truck, trailer: Container, driver: User, company: Building2 };
+
+export type PmDue = { id: string; unitNumber: string; leftKm: number; booked: { id: string; number: number; scheduledAt: Date } | null };
+
+const SHOW_PAPERS = 6;
+const SHOW_PM = 5;
+
+/**
+ * The next 30 days, soonest first: paperwork that is about to expire (already expired sits in Needs attention), then
+ * trucks close to their PM by odometer, each with a way to book it.
+ */
+export function ComingUp({ papers, pm, now, role, canEdit }: { papers: PaperworkItem[]; pm: PmDue[]; now: Date; role: Role; canEdit: boolean }) {
+  if (papers.length === 0 && pm.length === 0) {
+    return (
+      <EmptyState
+        title="Nothing due in the next 30 days"
+        description="Paperwork expiries and PM services by odometer show up here a month ahead, so there is time to book them."
+      />
+    );
+  }
+  const morePapers = papers.length - SHOW_PAPERS;
+  const morePm = pm.length - SHOW_PM;
+  return (
+    <ul className="divide-y divide-line">
+      {papers.length > 0 && (
+        <GroupRows head={<GroupHead tone="warn" label="Paperwork expiring" count={papers.length}
+          more={morePapers > 0 ? { href: "/dashboard/alerts", label: `${morePapers} more` } : undefined} />}>
+          {papers.slice(0, SHOW_PAPERS).map((p, i) => {
+            const Icon = OWNER_ICON[p.owner];
+            const days = daysUntil(p.expiresAt, now);
+            const row = (
+              <>
+                <span className="min-w-0">
+                  <span className="num block text-[13px] font-medium text-fg">{format(p.expiresAt, "d MMM")}</span>
+                  <span className={cn("num block text-[12px]", days <= 7 ? "text-warn" : "text-fg-subtle")}>{days <= 0 ? "today" : days === 1 ? "tomorrow" : `in ${days} d`}</span>
                 </span>
-                <span className="block truncate text-[12px] text-fg-subtle" title={l.commodity}>{l.originCity} → {l.destCity}</span>
-              </Link>
-              <span className="hidden min-w-0 truncate text-[13px] text-fg-muted md:block" title={l.customer.name}>{l.customer.name}</span>
-              <div className="min-w-0 text-right md:text-left">
-                {l.truck ? (
-                  <>
-                    <span className="flex min-w-0 items-center justify-end gap-1.5 text-[13px] md:justify-start">
-                      <span className="num text-fg">{l.truck.unitNumber}</span>
-                      <span className="truncate text-fg-muted">{l.driver?.name ?? "no driver"}</span>
-                      {l.driver?.hold && <Chip tone="warn">Hold</Chip>}
-                    </span>
-                    {l.team && (
-                      <span className="flex items-center justify-end gap-1.5 truncate text-[12px] text-fg-subtle md:justify-start">
-                        {l.team.color && <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: l.team.color }} aria-hidden />}
-                        {l.team.name}
-                      </span>
-                    )}
-                  </>
-                ) : canEdit ? (
-                  <Link href={`/loads/${l.id}/edit`} className={buttonClass("secondary", "sm")}>Assign truck</Link>
-                ) : (
-                  <span className="text-[12px] text-fg-subtle">No truck yet</span>
-                )}
+                <span className="flex min-w-0 items-center gap-2">
+                  <Icon aria-hidden className="h-3.5 w-3.5 shrink-0 text-fg-faint" />
+                  <span className="truncate text-[13px] text-fg"><span className="font-medium">{p.who}</span><span className="text-fg-muted"> · {p.what}</span></span>
+                </span>
+              </>
+            );
+            const cls = "grid grid-cols-[64px_minmax(0,1fr)] items-center gap-x-3 px-4 py-2";
+            return (
+              <li key={`${p.href}-${p.what}-${i}`}>
+                {canOpen(role, p.href) ? <Link href={p.href} className={cn(cls, "transition-colors hover:bg-raised")}>{row}</Link> : <div className={cls}>{row}</div>}
+              </li>
+            );
+          })}
+        </GroupRows>
+      )}
+      {pm.length > 0 && (
+        <GroupRows head={<GroupHead tone="info" label="PM by odometer" count={pm.length}
+          more={morePm > 0 ? { href: "/maintenance?tab=pm", label: `${morePm} more` } : undefined} />}>
+          {pm.slice(0, SHOW_PM).map((t) => (
+            <li key={t.id} className="grid grid-cols-[64px_minmax(0,1fr)_auto] items-center gap-x-3 px-4 py-2">
+              <Link href={`/fleet/${t.id}`} className="num truncate text-[13px] font-medium text-fg hover:text-accent-text">{t.unitNumber}</Link>
+              <span className="flex min-w-0 items-center gap-2">
+                <Gauge aria-hidden className="h-3.5 w-3.5 shrink-0 text-fg-faint" />
+                <span className={cn("num truncate text-[13px]", t.leftKm < 500 ? "text-warn" : "text-fg-muted")}>Service in {number(t.leftKm)} km</span>
+              </span>
+              {t.booked ? (
+                <Link href={`/maintenance/work-orders/${t.booked.id}`} className="whitespace-nowrap text-[12px] text-fg-subtle hover:text-fg">
+                  Booked <span className="num">{format(t.booked.scheduledAt, "d MMM")}</span>
+                </Link>
+              ) : canEdit ? (
+                <LinkButton href={`/maintenance/work-orders/new?truck=${t.id}&category=PM`} variant="secondary" size="sm">Book PM</LinkButton>
+              ) : (
+                <span className="text-[12px] text-fg-subtle">Not booked</span>
+              )}
+            </li>
+          ))}
+        </GroupRows>
+      )}
+    </ul>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Getting started                                                     */
+/* ------------------------------------------------------------------ */
+
+type Step = { key: string; title: string; description: string; href: string; cta: string; perm: Permission; done: boolean };
+
+/**
+ * First-run checklist for a new company: each step is done once the record exists, and links to where it is done.
+ * Steps this role cannot do say who can; a view-only member sees the progress without buttons.
+ */
+export function SetupChecklist({ company, progress, role, fresh }: { company: string; progress: SetupProgress; role: Role; fresh: boolean }) {
+  const steps: Step[] = [
+    { key: "truck", title: "Add a truck", description: "Unit number, plate, odometer and PM interval. Its paperwork dates drive the expiry reminders.", href: "/fleet/new", cta: "Add a truck", perm: "fleet.edit", done: progress.trucks > 0 },
+    { key: "trailer", title: "Add a trailer", description: "Pair it with a truck so it travels with its tractor on the live map.", href: "/fleet/trailers/new", cta: "Add a trailer", perm: "fleet.edit", done: progress.trailers > 0 },
+    { key: "driver", title: "Add a driver", description: "Licence and medical expiry dates, then put them on a truck.", href: "/drivers/new", cta: "Add a driver", perm: "drivers.edit", done: progress.drivers > 0 },
+    { key: "docs", title: "Upload company documents", description: "Company licence, insurance and tax certificate, with their expiry dates.", href: "/admin/company", cta: "Upload documents", perm: "company.manage", done: progress.companyDocs > 0 },
+    { key: "invite", title: "Invite a teammate", description: "Fleet specialists can edit everything; view-only members just look.", href: "/admin/members", cta: "Invite someone", perm: "members.manage", done: progress.members > 1 || progress.invites > 0 },
+  ];
+  const done = steps.filter((s) => s.done).length;
+  const allDone = done === steps.length;
+  const viewer = !can(role, "fleet.edit");
+  const next = steps.find((s) => !s.done && can(role, s.perm));
+  return (
+    <section aria-labelledby="setup-title" className={cn(cardClass, "overflow-hidden")}>
+      <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3 px-5 pb-4 pt-4">
+        <div className="min-w-0 max-w-2xl">
+          <h2 id="setup-title" className="text-[15px] font-semibold text-fg">{allDone ? "Your fleet is set up" : "Get your fleet set up"}</h2>
+          <p className="mt-0.5 text-[13px] text-fg-muted">
+            {allDone
+              ? `Everything is in place for ${company}. The overview now shows what needs you each day.`
+              : fresh
+                ? `Welcome to ${company}. Add your units and people, and this page starts showing what needs you each day: PM, paperwork, the shop and the live map.`
+                : `A few steps left before ${company} is fully set up.`}
+          </p>
+        </div>
+        <div className="w-full shrink-0 sm:w-44">
+          <p className="mb-1.5 flex justify-between text-[12px] text-fg-muted"><span>Progress</span><span className="num font-medium text-fg">{done} of {steps.length}</span></p>
+          <Progress value={done / steps.length} tone="ok" />
+        </div>
+      </header>
+      <ol className="divide-y divide-line border-t border-line">
+        {steps.map((s, i) => {
+          const allowed = can(role, s.perm);
+          return (
+            <li key={s.key} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-3 sm:flex-nowrap">
+              <span aria-hidden className={cn("num flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
+                s.done ? "bg-ok-soft text-ok" : "border border-line-strong text-fg-subtle")}>
+                {s.done ? <Check className="h-3.5 w-3.5" /> : i + 1}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className={cn("text-[13px] font-medium", s.done ? "text-fg-muted" : "text-fg")}>
+                  {s.title}{s.done && <span className="sr-only"> (done)</span>}
+                </p>
+                <p className="text-[12px] text-fg-subtle">{s.description}</p>
+              </div>
+              <div className="ml-9 shrink-0 sm:ml-0">
+                {s.done
+                  ? <Chip tone="ok">Done</Chip>
+                  : allowed
+                    ? <LinkButton href={s.href} size="sm" variant={next?.key === s.key ? "primary" : "secondary"}>{s.cta}</LinkButton>
+                    : !viewer && <span className="text-[12px] text-fg-subtle">An owner or admin does this</span>}
               </div>
             </li>
           );
         })}
-      </ul>
-      {more > 0 && (
-        <Link href="/dispatch" className="block border-t border-line px-4 py-2 text-[12px] text-fg-muted transition-colors hover:bg-raised hover:text-fg">
-          <span className="num">{plural(more, "more pickup")}</span> on the dispatch board
-        </Link>
+      </ol>
+      {viewer && !allDone && (
+        <p className="border-t border-line px-5 py-2.5 text-[12px] text-fg-subtle">
+          You have view-only access in {company}. An owner, admin or fleet specialist adds the trucks, trailers and drivers.
+        </p>
       )}
-    </>
+      {allDone && (
+        <div className="border-t border-line px-5 py-3">
+          <LinkButton href="/dashboard" variant="secondary" size="sm">Go to the overview</LinkButton>
+        </div>
+      )}
+    </section>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/* Recent activity                                                     */
+/* Copy                                                                */
 /* ------------------------------------------------------------------ */
 
-const EVENT_ICON: Record<string, LucideIcon> = {
-  CREATED: PackagePlus, ASSIGNED: UserCheck, STATUS: ArrowRightLeft, NOTE: StickyNote, CHECK_CALL: Phone,
-  ISSUE: TriangleAlert, DOCUMENT: FileText, BILLING: Receipt, EDIT: Pencil,
-};
-
-export function RecentActivity({ events }: { events: RecentEvent[] }) {
-  if (events.length === 0) return <EmptyState title="No activity yet" description="Load updates from dispatchers and drivers appear here." />;
-  return (
-    <ul className="divide-y divide-line">
-      {events.map((e) => {
-        const Icon = EVENT_ICON[e.type] ?? ArrowRightLeft;
-        return (
-          <li key={e.id} className="flex items-center gap-3 px-4 py-2">
-            <IconTile size="sm" tone={e.type === "ISSUE" ? "danger" : "neutral"}><Icon aria-hidden /></IconTile>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] text-fg" title={e.message}>
-                <Link href={`/loads/${e.load.id}`} className="num font-medium hover:text-accent-text">{e.load.reference}</Link>
-                <span className="text-fg-muted"> · {e.message}</span>
-              </p>
-              <p className="text-[12px] text-fg-subtle">{e.user?.name ?? "System"} · {ago(e.createdAt)}</p>
-            </div>
-          </li>
-        );
-      })}
-    </ul>
-  );
+/** Context line for a paperwork tile: the expired part in red, the rest plain. */
+export function paperworkLine(expired: number, soon: number, noun = "paper") {
+  if (expired) return <><Flag tone="danger">{expired} expired</Flag>{soon ? ` · ${soon} expiring` : ""}</>;
+  if (soon) return `${plural(soon, noun)} expiring within 30 days`;
+  return "Nothing expires in the next 30 days";
 }

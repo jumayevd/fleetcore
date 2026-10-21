@@ -1,5 +1,7 @@
+import "server-only";
 import { db } from "./db";
 
+/** Record a change in the active company's audit log. */
 export async function audit(
   userId: string | null,
   action: string,

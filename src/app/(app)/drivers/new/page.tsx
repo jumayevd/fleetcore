@@ -1,18 +1,19 @@
 import { requireUser } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { saveDriver } from "@/app/actions/people";
+import { can } from "@/lib/permissions";
+import { saveDriver } from "@/app/actions/drivers";
 import { PageHeader } from "@/components/ui";
 import { DriverForm } from "../driver-form";
+import { truckOptions } from "../data";
 
 export const metadata = { title: "Add driver" };
 
 export default async function NewDriver() {
-  await requireUser("drivers.edit");
-  const teams = await db.team.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true, color: true } });
+  const user = await requireUser("drivers.edit");
+  const trucks = can(user.role, "fleet.edit") ? await truckOptions(null) : null;
   return (
     <>
-      <PageHeader eyebrow="Drivers" title="Add driver" subtitle="Profile, papers and dispatch settings. You can upload licence scans after saving." />
-      <DriverForm action={saveDriver.bind(null, null)} teams={teams} cancelHref="/drivers" />
+      <PageHeader title="Add driver" subtitle="Profile, licence and medical dates, and a truck if they have one. Upload scans after saving." />
+      <DriverForm action={saveDriver.bind(null, null)} trucks={trucks} cancelHref="/drivers" />
     </>
   );
 }

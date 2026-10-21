@@ -1,4 +1,5 @@
 import type { Tone } from "@/components/ui";
+import { CITIES, humanize } from "@/lib/constants";
 import { daysUntil } from "@/lib/format";
 
 /* ------------------------------------------------------------------ */
@@ -20,13 +21,17 @@ export const FUEL_TYPE_LABELS: Record<string, string> = Object.fromEntries(FUEL_
 /** Telematics vendors offered in the trailer form's datalist (free text is still allowed). */
 export const GPS_PROVIDERS = ["Teltonika", "Wialon", "Samsara", "Geotab", "Navixy"];
 
-export const COMPLETED_LOAD_STATUSES = ["DELIVERED", "INVOICED"];
-
 /**
  * Trailer statuses that physically leave the tractor, so setting one clears the pairing. In use and Empty stay hooked:
- * the load workflow marks a trailer Empty on delivery and keeps it on the truck (src/lib/workflow.ts).
+ * an empty trailer usually stays on its truck until someone drops it.
  */
 export const UNHOOKED_TRAILER_STATUSES: readonly string[] = ["DROPPED", "YARD", "SHOP", "OUT_OF_SERVICE"];
+
+/** Odometer readings this far above the last one need a second look before they are saved (an extra digit). */
+export const ODOMETER_JUMP_KM = 50_000;
+
+/** An odometer nobody updated for this long makes the PM countdown unreliable. */
+export const READINGS_STALE_DAYS = 30;
 
 /** The truck and trailer tables stop at this many rows (KPI tiles still count every unit). */
 export const LIST_LIMIT = 500;
@@ -101,13 +106,25 @@ export function compass(deg: number | null | undefined) {
   return DIRS[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
 }
 
+const PING_SOURCE_LABELS: Record<string, string> = { MANUAL: "Manual update", DEVICE: "GPS device", SAMSARA: "Samsara" };
+
+/** Where the last position came from. Positions recorded before this workspace existed show as "Recorded position". */
 export function pingSourceLabel(src: string | null | undefined) {
-  switch (src) {
-    case "DEVICE": return "Driver GPS";
-    case "SAMSARA": return "Samsara";
-    case "SIMULATED": return "Route estimate";
-    default: return src ?? "No source";
-  }
+  if (!src) return "No source";
+  return PING_SOURCE_LABELS[src] ?? (src === "SIMULATED" ? "Recorded position" : humanize(src));
+}
+
+/**
+ * A place typed by hand → what to store. When it names a known city ("Samarkand", "Samarkand depot") the unit gets
+ * that city's coordinates, so it shows on the map; anything else is kept as text with no position.
+ */
+export function placeFromText(text: string): { locationName: string; lat: number | null; lng: number | null } {
+  const name = text.trim().replace(/\s+/g, " ");
+  const lower = name.toLowerCase();
+  const city = CITIES.find((c) => c.name.toLowerCase() === lower)
+    ?? CITIES.find((c) => new RegExp(`(^|[^a-z])${c.name.toLowerCase()}([^a-z]|$)`).test(lower));
+  if (!city) return { locationName: name, lat: null, lng: null };
+  return { locationName: city.name.toLowerCase() === lower ? city.name : name, lat: city.lat, lng: city.lng };
 }
 
 export function pingStale(d: Date | string | null | undefined, hours = 1) {

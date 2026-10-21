@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { ROLE_LABELS, type Role } from "@/lib/constants";
+import { rootDb } from "@/lib/db-root";
 import { dateTime, daysAgo, number } from "@/lib/format";
 import { Badge, Card, FilterPills, InfoTip, LinkButton, PageHeader, Table } from "@/components/ui";
 import { AuditFilters } from "./filters";
@@ -15,7 +15,7 @@ const PAGE_SIZE = 50;
 const str = (v: string | string[] | undefined) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
 
 export default async function AuditPage({ searchParams }: PageProps<"/admin/audit">) {
-  await requireUser("audit.view");
+  const me = await requireUser("audit.view");
   const sp = await searchParams;
   const params: AuditFilterParams = {
     entity: str(sp.entity), user: str(sp.user), action: str(sp.action), from: isoDay(str(sp.from)), to: isoDay(str(sp.to)), q: str(sp.q),
@@ -39,14 +39,15 @@ export default async function AuditPage({ searchParams }: PageProps<"/admin/audi
   const { entity: _entity, ...whereNoEntity } = where; // eslint-disable-line @typescript-eslint/no-unused-vars
 
   const pageRows = (p: number) => db.auditLog.findMany({
-    where, orderBy: { createdAt: "desc" }, skip: (p - 1) * PAGE_SIZE, take: PAGE_SIZE, include: { user: { select: { id: true, name: true, role: true } } },
+    where, orderBy: { createdAt: "desc" }, skip: (p - 1) * PAGE_SIZE, take: PAGE_SIZE, include: { user: { select: { id: true, name: true, email: true } } },
   });
   const [requestedRows, total, entities, actions, users, last24] = await Promise.all([
     pageRows(requested),
     db.auditLog.count({ where }),
     db.auditLog.groupBy({ by: ["entity"], where: whereNoEntity, _count: true, orderBy: { _count: { entity: "desc" } } }),
     db.auditLog.groupBy({ by: ["action"], _count: true, orderBy: { action: "asc" } }),
-    db.user.findMany({ where: { audits: { some: {} } }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    // People who changed something in THIS company (users are global; never list them unfiltered).
+    rootDb.user.findMany({ where: { audits: { some: { companyId: me.company.id } } }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     db.auditLog.count({ where: { createdAt: { gte: daysAgo(1) } } }),
   ]);
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -61,15 +62,14 @@ export default async function AuditPage({ searchParams }: PageProps<"/admin/audi
   return (
     <>
       <PageHeader
-        eyebrow="Company"
         title="Audit log"
         subtitle={
           <span className="inline-flex items-center gap-1.5">
             <span><span className="num">{number(last24)}</span> entries in the last 24 hours</span>
-            <InfoTip>Every change, who made it and when. The log is append-only.</InfoTip>
+            <InfoTip>Every change in this company, who made it and when. The log is append-only.</InfoTip>
           </span>
         }
-        actions={<LinkButton href="/admin/users" variant="secondary">Users &amp; roles</LinkButton>}
+        actions={<LinkButton href="/admin/members" variant="secondary">Members</LinkButton>}
       />
 
       <div className="mb-3 space-y-2">
@@ -97,8 +97,8 @@ export default async function AuditPage({ searchParams }: PageProps<"/admin/audi
             return (
               <tr key={r.id}>
                 <td className="num whitespace-nowrap text-[12px] text-fg-muted" title={r.createdAt.toISOString()}>{dateTime(r.createdAt)}</td>
-                <td className="min-w-40" title={r.user ? ROLE_LABELS[r.user.role as Role] ?? r.user.role : "Automatic change"}>
-                  {r.user ? <Link href={`/admin/users/${r.user.id}`} className="hover:underline">{r.user.name}</Link> : <span className="text-fg-muted">System</span>}
+                <td className="min-w-40" title={r.user ? r.user.email : "Automatic change"}>
+                  {r.user ? <Link href={auditHref(params, { user: r.user.id })} className="hover:underline">{r.user.name}</Link> : <span className="text-fg-muted">System</span>}
                 </td>
                 <td><Badge value={r.action} tone={actionTone(r.action)} label={actionLabel(r.action)} /></td>
                 <td className="whitespace-nowrap">

@@ -11,7 +11,7 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 
 export const metadata: Metadata = {
   title: { default: "FleetOps", template: "%s · FleetOps" },
-  description: "Dispatch, fleet, tracking and finance in one control tower.",
+  description: "Trucks, trailers, maintenance and compliance for fleet specialists, across every company you work for.",
 };
 
 // Day is the default theme whatever the device prefers, so the browser chrome matches the Day canvas.

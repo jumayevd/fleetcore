@@ -8,14 +8,12 @@ import { Card, Field, InfoTip, Input, Select, Textarea, buttonClass, cn } from "
 import { WORK_ORDER_CATEGORIES, WORK_ORDER_CATEGORY_LABELS, WORK_ORDER_PRIORITIES, WORK_ORDER_STATUSES, humanize } from "@/lib/constants";
 import { money2, number } from "@/lib/format";
 import type { ActionState } from "@/lib/action";
-import { IN_HOUSE_VENDOR, onLoadReason } from "../_lib/shared";
+import { IN_HOUSE_VENDOR } from "../_lib/shared";
 
 export type UnitOption = {
   id: string; unitNumber: string; detail: string; odometerKm?: number;
   /** Odometer at the truck's last PM, to flag a PM reading below it. */
   lastPmKm?: number | null;
-  /** Load the unit is on (assigned or in transit): it cannot go into the shop until the load is recovered. */
-  onLoad?: string | null;
 };
 
 type DateKey = "scheduledAt" | "inAt" | "outAt";
@@ -110,8 +108,6 @@ export function WorkOrderForm({ action, trucks, trailers, vendors = [], initial 
   const shownTotal = manualTotal ? total : sum ? String(sum) : "";
   const truck = trucks.find((t) => t.id === truckId);
   const unit = mode === "truck" ? truck : trailers.find((t) => t.id === trailerId);
-  // Starting work on a unit that is still on a load would take it off the board under the load: the fleet pages refuse it.
-  const loadBlock = status === "IN_PROGRESS" && !inShop && unit?.onLoad ? `${onLoadReason(unit.unitNumber, unit.onLoad)} Keep the job open until then.` : null;
   const lastPmKm = mode === "truck" && category === "PM" ? truck?.lastPmKm : null;
   const belowLastPm = lastPmKm != null && odometer !== "" && Number(odometer) < lastPmKm;
 
@@ -159,12 +155,12 @@ export function WorkOrderForm({ action, trucks, trailers, vendors = [], initial 
               <input type="hidden" name={mode === "truck" ? "truckId" : "trailerId"} value={mode === "truck" ? truckId : trailerId} />
             </Field>
           ) : mode === "truck" ? (
-            <Field label="Truck" required hint={truck ? `Odometer ${number(truck.odometerKm)} km · ${truck.detail}${truck.onLoad ? ` · on ${truck.onLoad}` : ""}` : undefined}>
+            <Field label="Truck" required hint={truck ? `Odometer ${number(truck.odometerKm)} km · ${truck.detail}` : undefined}>
               <Select name="truckId" required value={truckId} onChange={(e) => pickTruck(e.target.value)} placeholder="Select a truck…"
                 options={trucks.map((t) => ({ value: t.id, label: `${t.unitNumber} · ${t.detail}` }))} />
             </Field>
           ) : (
-            <Field label="Trailer" required hint={unit?.onLoad ? `On ${unit.onLoad}.` : undefined}>
+            <Field label="Trailer" required hint={unit ? unit.detail : undefined}>
               <Select name="trailerId" required value={trailerId} onChange={(e) => setTrailerId(e.target.value)} placeholder="Select a trailer…"
                 options={trailers.map((t) => ({ value: t.id, label: `${t.unitNumber} · ${t.detail}` }))} />
             </Field>
@@ -182,8 +178,7 @@ export function WorkOrderForm({ action, trucks, trailers, vendors = [], initial 
             <Field label="Priority">
               <Select name="priority" defaultValue={initial.priority ?? "MEDIUM"} options={WORK_ORDER_PRIORITIES.map((p) => ({ value: p, label: humanize(p) }))} />
             </Field>
-            <TipField id={`${uid}-status`} label="Status" tip={inShop && status === "IN_PROGRESS" ? IN_SHOP_HINT : STATUS_HINT[status]}
-              hint={loadBlock ? <span className="text-warn">{loadBlock}</span> : undefined}>
+            <TipField id={`${uid}-status`} label="Status" tip={inShop && status === "IN_PROGRESS" ? IN_SHOP_HINT : STATUS_HINT[status]}>
               <Select id={`${uid}-status`} name="status" value={status} onChange={(e) => changeStatus(e.target.value)} options={statusOptions(inShop ? IN_SHOP_STATUSES : WORK_ORDER_STATUSES)} />
             </TipField>
             <TipField id={`${uid}-vendor`} label="Vendor / shop" tip={<>Your own shop is {IN_HOUSE_VENDOR}; outside shops are suggested as you type.</>}>
@@ -238,9 +233,7 @@ export function WorkOrderForm({ action, trucks, trailers, vendors = [], initial 
         </Card>
 
         <div className="flex items-center gap-2">
-          <span className="flex flex-1" title={loadBlock ?? undefined}>
-            <SubmitButton className="flex-1" disabled={Boolean(loadBlock)}>{submitLabel}</SubmitButton>
-          </span>
+          <SubmitButton className="flex-1">{submitLabel}</SubmitButton>
           <Link href={cancelHref} className={buttonClass("secondary")}>Cancel</Link>
         </div>
       </div>

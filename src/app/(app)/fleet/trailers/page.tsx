@@ -1,15 +1,14 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
-import { Plus, Truck as TruckIcon, Container, FileCheck, CalendarClock, X } from "lucide-react";
+import { Plus, Truck as TruckIcon, Container, FileCheck, CalendarClock, MapPinned, Unlink, Wrench, X } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { EQUIPMENT, EQUIPMENT_LABELS, TRAILER_STATUSES, TRAILER_STATUS_LABELS } from "@/lib/constants";
 import { REQUIRED_UNIT_DOCS } from "@/lib/documents";
 import { kg, ago, daysUntil } from "@/lib/format";
-import { syncSimulatedPositions } from "@/lib/telemetry";
-import { Badge, Card, Cell, EmptyState, ExpiryBadge, FilterPills, InfoTip, LinkButton, PageHeader, Segmented, STATUS_TONE, Stat, Table, cn } from "@/components/ui";
+import { Badge, Card, Cell, EmptyState, ExpiryBadge, FilterPills, InfoTip, LinkButton, PageHeader, Segmented, Stat, Table, cn } from "@/components/ui";
 import { ListFilters } from "../filters";
 import { LinkRow } from "../link-row";
 import { daysSince, docExpiryByUnit, docsByUnit, EXPIRY_SOON_DAYS, expiryCounts, LIST_LIMIT, missingDocs, paperworkExpiry, pingStale, sinceShort } from "../lib";
@@ -19,6 +18,7 @@ import { TrailerRowMenu } from "./row-menu";
 export const metadata = { title: "Trailers" };
 
 const str = (v: string | string[] | undefined) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+const PAIRED_FILTERS = { no: "Not paired", yes: "Paired" } as const;
 
 export default async function TrailersPage({ searchParams }: PageProps<"/fleet/trailers">) {
   const user = await requireUser("fleet.view");
@@ -32,15 +32,15 @@ export default async function TrailersPage({ searchParams }: PageProps<"/fleet/t
   const q = str(sp.q);
   const docsParam = str(sp.docs);
   const docsFilter = docsParam === "incomplete" || docsParam === "expiring" ? docsParam : undefined;
-  const params = { status, type, q, docs: docsFilter };
-
-  await syncSimulatedPositions();
+  const paired = str(sp.paired) === "no" || str(sp.paired) === "yes" ? str(sp.paired) : undefined;
+  const params = { status, type, q, docs: docsFilter, paired };
 
   const like = { contains: q ?? "", mode: "insensitive" as const };
   const where: Prisma.TrailerWhereInput = {
     AND: [
       status ? { status } : {},
       type ? { type } : {},
+      paired === "no" ? { truckId: null } : paired === "yes" ? { truckId: { not: null } } : {},
       q ? { OR: [{ unitNumber: like }, { plate: like }, { locationName: like }, { gpsProvider: like }, { truck: { unitNumber: like } }, { truck: { driver: { name: like } } }] } : {},
     ],
   };
@@ -52,6 +52,21 @@ export default async function TrailersPage({ searchParams }: PageProps<"/fleet/t
     }),
     db.truck.count(),
   ]);
+
+  if (all.length === 0) {
+    return (
+      <>
+        <PageHeader title="Trailers" actions={<FleetSwitch trucks={truckCount} trailers={0} />} />
+        <Card>
+          <EmptyState icon={<Container />} title={editable ? "Add your first trailer" : "No trailers yet"}
+            description={editable
+              ? "Each trailer gets its status, the truck it is paired with, where it was left, its paperwork and its repairs."
+              : "Trailers appear here once someone with edit access adds them."}
+            action={editable && <LinkButton href="/fleet/trailers/new"><Plus />Add trailer</LinkButton>} />
+        </Card>
+      </>
+    );
+  }
 
   const docs = docsByUnit(docRows.map((d) => ({ id: d.trailerId, kind: d.kind })));
   const docExpiry = docExpiryByUnit(docRows.map((d) => ({ id: d.trailerId, kind: d.kind, expiresAt: d.expiresAt })));
@@ -68,10 +83,7 @@ export default async function TrailersPage({ searchParams }: PageProps<"/fleet/t
   const listWhere: Prisma.TrailerWhereInput = computedIds ? { AND: [where, { id: { in: computedIds } }] } : where;
   const rows = await db.trailer.findMany({
     where: listWhere, orderBy: { unitNumber: "asc" }, take: LIST_LIMIT + 1,
-    include: {
-      truck: { select: { id: true, unitNumber: true, driver: { select: { id: true, name: true } } } },
-      loads: { where: { status: { in: ["ASSIGNED", "IN_TRANSIT"] } }, orderBy: { pickupAt: "asc" }, take: 1, select: { id: true, reference: true } },
-    },
+    include: { truck: { select: { id: true, unitNumber: true, make: true, model: true, driver: { select: { id: true, name: true } } } } },
   });
   const capped = rows.length > LIST_LIMIT;
   const trailers = capped ? rows.slice(0, LIST_LIMIT) : rows;
@@ -82,9 +94,9 @@ export default async function TrailersPage({ searchParams }: PageProps<"/fleet/t
   const incomplete = all.filter((t) => missingFor(t.id).length > 0).length;
   const shopOldest = oldest("SHOP");
   const dropOldest = oldest("DROPPED");
-  const paired = all.filter((t) => t.truckId).length;
-  // The load workflow leaves a delivered trailer Empty and still on its tractor; only hand-set ones may be loose.
-  const emptyLoose = byStatus("EMPTY").filter((t) => !t.truckId).length;
+  const pairedCount = all.filter((t) => t.truckId).length;
+  const unpaired = all.length - pairedCount;
+  const outOfService = byStatus("OUT_OF_SERVICE").length;
   const expiringHint = [
     expiredUnits ? `${expiredUnits} expired` : null,
     expiringUnits > expiredUnits ? `${expiringUnits - expiredUnits} within ${EXPIRY_SOON_DAYS} days` : null,
@@ -96,37 +108,35 @@ export default async function TrailersPage({ searchParams }: PageProps<"/fleet/t
     const s = p.toString();
     return `/fleet/trailers${s ? `?${s}` : ""}`;
   };
-  const tile = (href: string, node: React.ReactNode) => <Link href={href} className="group block rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">{node}</Link>;
+  // A KPI tile opens the list showing exactly the trailers it counts.
+  const only = (patch: Partial<typeof params>) => qs({ status: undefined, docs: undefined, paired: undefined, ...patch });
+  const filtered = Boolean(status || docsFilter || type || q || paired);
+  const tile = (href: string | null, node: React.ReactNode) =>
+    href ? <Link href={href} className="group block rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">{node}</Link> : node;
   const tileClass = "h-full transition-colors group-hover:border-line-strong";
-  const statusTile = (s: string, hint?: string) => tile(qs({ status: s, docs: undefined }),
-    <Stat className={tileClass} label={TRAILER_STATUS_LABELS[s]} value={byStatus(s).length} hint={hint} tone={byStatus(s).length ? STATUS_TONE[s] : "neutral"} />);
 
   return (
     <>
       <PageHeader
-        eyebrow="Fleet"
         title="Trailers"
         actions={
           <>
-            <Segmented active="trailers" items={[
-              { key: "trucks", label: <span className="inline-flex items-center gap-1"><TruckIcon className="h-3.5 w-3.5" />Trucks</span>, href: "/fleet", count: truckCount },
-              { key: "trailers", label: <span className="inline-flex items-center gap-1"><Container className="h-3.5 w-3.5" />Trailers</span>, href: "/fleet/trailers", count: all.length },
-            ]} />
+            <FleetSwitch trucks={truckCount} trailers={all.length} />
             {editable && <LinkButton href="/fleet/trailers/new"><Plus />Add trailer</LinkButton>}
           </>
         }
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 2xl:grid-cols-9">
-        {tile(status || docsFilter || type || q ? "/fleet/trailers" : qs({}), <Stat className={tileClass} label="Trailers" value={all.length} hint={`${paired} paired · ${truckCount} tractors`} icon={<Container />} />)}
-        {statusTile("IN_USE", "on a load")}
-        {statusTile("EMPTY", emptyLoose ? `unloaded · ${emptyLoose} unpaired` : "unloaded, still paired")}
-        {statusTile("DROPPED", dropOldest ? `oldest ${daysSince(dropOldest.statusSince)}d · ${dropOldest.unitNumber}` : "at customer sites")}
-        {statusTile("YARD", "parked, available")}
-        {statusTile("SHOP", shopOldest ? `${shopOldest.unitNumber} in ${daysSince(shopOldest.statusSince)}d` : "none in repair")}
-        {statusTile("OUT_OF_SERVICE", "needs decision")}
-        {tile(qs({ docs: "incomplete", status: undefined }), <Stat className={tileClass} label="Docs incomplete" value={incomplete} hint="registration, insurance, inspection" tone={incomplete ? "warn" : "ok"} icon={<FileCheck />} />)}
-        {tile(qs({ docs: "expiring", status: undefined }), <Stat className={tileClass} label="Docs expiring" value={expiringUnits} hint={expiringHint} tone={expiredUnits ? "danger" : expiringUnits ? "warn" : "ok"} icon={<CalendarClock />} />)}
+      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        {tile(filtered ? "/fleet/trailers" : null, <Stat className={tileClass} label="Trailers" value={all.length} hint={`${pairedCount} paired · ${truckCount} trucks`} icon={<Container />} />)}
+        {tile(only({ paired: "no" }), <Stat className={tileClass} label="Not paired" value={unpaired} hint="in the yard, dropped, in the shop or loose" icon={<Unlink />} />)}
+        {tile(only({ status: "DROPPED" }), <Stat className={tileClass} label="Dropped" value={byStatus("DROPPED").length}
+          hint={dropOldest ? `oldest ${daysSince(dropOldest.statusSince)}d · ${dropOldest.unitNumber}` : "none left at a site"} tone={dropOldest && daysSince(dropOldest.statusSince) > 14 ? "warn" : "neutral"} icon={<MapPinned />} />)}
+        {tile(only({ status: "SHOP" }), <Stat className={tileClass} label="In shop" value={byStatus("SHOP").length}
+          hint={[shopOldest ? `${shopOldest.unitNumber} in ${daysSince(shopOldest.statusSince)}d` : null, outOfService ? `${outOfService} out of service` : null].filter(Boolean).join(" · ") || "none in repair"}
+          tone={byStatus("SHOP").length || outOfService ? "warn" : "neutral"} icon={<Wrench />} />)}
+        {tile(only({ docs: "incomplete" }), <Stat className={tileClass} label="Paperwork incomplete" value={incomplete} hint="registration, insurance, inspection" tone={incomplete ? "warn" : "ok"} icon={<FileCheck />} />)}
+        {tile(only({ docs: "expiring" }), <Stat className={tileClass} label="Paperwork expiring" value={expiringUnits} hint={expiringHint} tone={expiredUnits ? "danger" : expiringUnits ? "warn" : "ok"} icon={<CalendarClock />} />)}
       </div>
 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -135,10 +145,11 @@ export default async function TrailersPage({ searchParams }: PageProps<"/fleet/t
             { key: "all", label: "All", href: qs({ status: undefined }), count: all.length },
             ...TRAILER_STATUSES.map((s) => ({ key: s, label: TRAILER_STATUS_LABELS[s], href: qs({ status: s }), count: byStatus(s).length })),
           ]} />
-          {docsFilter && <Link href={qs({ docs: undefined })} className="inline-flex h-6 items-center gap-1 rounded-full bg-accent-soft px-2.5 text-[12px] font-medium text-accent-text hover:opacity-80">{docsFilter === "expiring" ? "Docs expiring" : "Docs incomplete"}<X className="h-3 w-3" /></Link>}
+          {docsFilter && <Link href={qs({ docs: undefined })} className="inline-flex h-6 items-center gap-1 rounded-full bg-accent-soft px-2.5 text-[12px] font-medium text-accent-text hover:opacity-80">{docsFilter === "expiring" ? "Paperwork expiring" : "Paperwork incomplete"}<X className="h-3 w-3" /></Link>}
         </div>
         <ListFilters basePath="/fleet/trailers" params={params} placeholder="Unit, plate, truck, driver, place…" selects={[
           { name: "type", label: "Type", placeholder: "All types", options: EQUIPMENT.map((e) => ({ value: e, label: EQUIPMENT_LABELS[e] })) },
+          { name: "paired", label: "Pairing", placeholder: "Paired or not", options: Object.entries(PAIRED_FILTERS).map(([value, label]) => ({ value, label })) },
         ]} />
       </div>
 
@@ -154,7 +165,6 @@ export default async function TrailersPage({ searchParams }: PageProps<"/fleet/t
           {trailers.map((t) => {
             const missing = missingFor(t.id);
             const onFile = REQUIRED_UNIT_DOCS.length - missing.length;
-            const load = t.loads[0];
             const paper = paperworkExpiry(t, docExpiry.get(t.id));
             return (
               <LinkRow key={t.id} href={`/fleet/trailers/${t.id}`}>
@@ -166,11 +176,11 @@ export default async function TrailersPage({ searchParams }: PageProps<"/fleet/t
                 <td>
                   {t.truck ? (
                     <Cell mono primary={<Link href={`/fleet/${t.truck.id}`} className="font-medium hover:underline">{t.truck.unitNumber}</Link>}
-                      secondary={load ? <Link href={`/loads/${load.id}`} className="hover:underline">{load.reference}</Link> : undefined} />
+                      secondary={`${t.truck.make} ${t.truck.model}`} />
                   ) : <span className="text-fg-faint">—</span>}
                 </td>
                 <td>{t.truck?.driver ? <Link href={`/drivers/${t.truck.driver.id}`} className="hover:underline">{t.truck.driver.name}</Link> : <span className="text-fg-faint">—</span>}</td>
-                <td title={t.lastPingAt ? `Last position ${ago(t.lastPingAt)}` : t.gpsProvider ? "No ping yet" : "No tracker"}>
+                <td title={t.lastPingAt ? `Last GPS position ${ago(t.lastPingAt)}` : t.gpsProvider ? "No GPS position yet" : "No tracker"}>
                   {/* The age of the position only shows when it is old or missing; the GPS column already says when there is no tracker. */}
                   <Cell primary={t.locationName ?? <span className="text-fg-faint">Unknown</span>}
                     secondary={t.lastPingAt ? (pingStale(t.lastPingAt) ? ago(t.lastPingAt) : undefined) : t.gpsProvider ? "no ping yet" : undefined} />
@@ -181,8 +191,10 @@ export default async function TrailersPage({ searchParams }: PageProps<"/fleet/t
                 <td><ExpiryBadge days={daysUntil(paper.INSURANCE)} /></td>
                 <td><ExpiryBadge days={daysUntil(paper.REGISTRATION)} /></td>
                 <td>
-                  <Badge value="DOCS" tone={onFile === REQUIRED_UNIT_DOCS.length ? "ok" : onFile === 0 ? "neutral" : "warn"} label={`${onFile}/${REQUIRED_UNIT_DOCS.length}`}
-                    className={cn("num", onFile === 0 && "text-fg-subtle")} />
+                  <Link href={`/fleet/trailers/${t.id}#documents`} className="hover:opacity-80" title={missing.length ? `Missing ${missing.map((m) => m.toLowerCase()).join(", ")}` : "All required documents on file"}>
+                    <Badge value="DOCS" tone={onFile === REQUIRED_UNIT_DOCS.length ? "ok" : onFile === 0 ? "neutral" : "warn"} label={`${onFile}/${REQUIRED_UNIT_DOCS.length}`}
+                      className={cn("num", onFile === 0 && "text-fg-subtle")} />
+                  </Link>
                 </td>
                 <td className="text-right"><TrailerRowMenu id={t.id} truckId={t.truckId} editable={editable} /></td>
               </LinkRow>
@@ -190,11 +202,18 @@ export default async function TrailersPage({ searchParams }: PageProps<"/fleet/t
           })}
         </Table>
         {trailers.length === 0 && (
-          all.length === 0
-            ? <EmptyState title="No trailers yet" description="Add your trailers to pair them with tractors and track where each one is." action={editable && <LinkButton href="/fleet/trailers/new"><Plus />Add trailer</LinkButton>} />
-            : <EmptyState title="No trailers match" description="Try another status or type, or clear the search." action={<LinkButton href="/fleet/trailers" variant="secondary">Clear filters</LinkButton>} />
+          <EmptyState title="No trailers match" description="Try another status, type or pairing, or clear the search." action={<LinkButton href="/fleet/trailers" variant="secondary">Clear filters</LinkButton>} />
         )}
       </Card>
     </>
+  );
+}
+
+function FleetSwitch({ trucks, trailers }: { trucks: number; trailers: number }) {
+  return (
+    <Segmented active="trailers" items={[
+      { key: "trucks", label: <span className="inline-flex items-center gap-1"><TruckIcon className="h-3.5 w-3.5" />Trucks</span>, href: "/fleet", count: trucks },
+      { key: "trailers", label: <span className="inline-flex items-center gap-1"><Container className="h-3.5 w-3.5" />Trailers</span>, href: "/fleet/trailers", count: trailers },
+    ]} />
   );
 }

@@ -1,15 +1,24 @@
-import { NextResponse, after } from "next/server";
+import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import { ALLOWED_TYPES, MAX_UPLOAD_BYTES, makeKey, saveFile } from "@/lib/storage";
 import { canUploadDoc, ownerData, DOC_KIND_LABELS, type DocOwner, type DocTarget } from "@/lib/documents";
-import { recomputeBillingStage } from "@/lib/workflow";
-import { notifyDocumentUploaded } from "@/lib/notify";
 
-const OWNERS: DocOwner[] = ["load", "truck", "trailer", "driver", "customer", "workOrder", "claim", "company"];
+const OWNERS: DocOwner[] = ["truck", "trailer", "driver", "workOrder", "company"];
 
-/** Multipart upload: file, kind, one of loadId/truckId/trailerId/driverId/customerId/workOrderId/claimId (or company=1), optional expiresAt/notes. */
+/** Does the parent record exist in the active company? (The scope makes another company's id "not found".) */
+async function parentExists(t: DocTarget) {
+  switch (t.type) {
+    case "truck": return (await db.truck.count({ where: { id: t.id } })) > 0;
+    case "trailer": return (await db.trailer.count({ where: { id: t.id } })) > 0;
+    case "driver": return (await db.driver.count({ where: { id: t.id } })) > 0;
+    case "workOrder": return (await db.workOrder.count({ where: { id: t.id } })) > 0;
+    case "company": return true;
+  }
+}
+
+/** Multipart upload: file, kind, one of truckId/trailerId/driverId/workOrderId (or company=1), optional expiresAt/notes. */
 export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Sign in required" }, { status: 401 });
@@ -31,12 +40,13 @@ export async function POST(req: Request) {
   }
   if (!target) return NextResponse.json({ error: "Missing target" }, { status: 400 });
   if (!(await canUploadDoc(user, target, kind))) return NextResponse.json({ error: "You can't upload this document here" }, { status: 403 });
+  if (!(await parentExists(target))) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const expiresRaw = form.get("expiresAt");
   const expiresAt = typeof expiresRaw === "string" && expiresRaw ? new Date(expiresRaw) : null;
   const notes = typeof form.get("notes") === "string" ? String(form.get("notes")).trim() || null : null;
 
-  const storageKey = makeKey(`${target.type}/${target.id}`, file.name);
+  const storageKey = makeKey(`${user.company.id}/${target.type}/${target.id}`, file.name);
   await saveFile(storageKey, Buffer.from(await file.arrayBuffer()), contentType);
   const doc = await db.document.create({
     data: {
@@ -46,11 +56,6 @@ export async function POST(req: Request) {
     },
   });
   await audit(user.id, "upload", "document", doc.id, `${DOC_KIND_LABELS[kind] ?? kind}: ${doc.name} (${target.type})`);
-  if (target.type === "load") {
-    await db.loadEvent.create({ data: { loadId: target.id, type: "DOCUMENT", message: `${DOC_KIND_LABELS[kind] ?? kind} uploaded · ${doc.name}`, userId: user.id } });
-    await recomputeBillingStage(target.id, user.id);
-    after(() => notifyDocumentUploaded(doc.id));
-  }
   // Compliance docs with an expiry keep the unit's own expiry field in sync.
   if (expiresAt && target.type === "truck") {
     const field = kind === "INSURANCE" ? "insuranceExpiry" : kind === "INSPECTION" ? "inspectionExpiry" : kind === "REGISTRATION" ? "registrationExpiry" : null;

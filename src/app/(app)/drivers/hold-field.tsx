@@ -8,9 +8,9 @@ export function HoldField({ hold, reason }: { hold: boolean; reason: string | nu
   const [on, setOn] = useState(hold);
   return (
     <div className="space-y-3">
-      <Checkbox name="hold" label="On hold — exclude from dispatch until released" checked={on} onChange={(e) => setOn(e.target.checked)} />
+      <Checkbox name="hold" label="On hold — not cleared to drive until released" checked={on} onChange={(e) => setOn(e.target.checked)} />
       {on && (
-        <Field label="Hold reason" hint="Shown on the board and the roster so dispatchers know why." className="max-w-md">
+        <Field label="Hold reason" hint="Shown on the roster and the driver page so everyone knows why.">
           <Input name="holdReason" defaultValue={reason ?? ""} placeholder="Licence renewal pending, safety review, unpaid fines…" autoFocus={!hold} />
         </Field>
       )}

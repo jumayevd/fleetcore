@@ -1,5 +1,5 @@
 {
-  "name": "web",
+  "name": "fleetops-fleet",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -13,7 +13,8 @@
     "db:migrate": "dotenv -e .env.local -- prisma migrate deploy",
     "db:migrate:dev": "dotenv -e .env.local -- prisma migrate dev",
     "db:stop": "node scripts/dev-db.mjs stop",
-    "env:pull": "vercel env pull .env.vercel --yes"
+    "env:pull": "vercel env pull .env.vercel --yes",
+    "user:reset-password": "dotenv -e .env.local -- node scripts/reset-password.mjs"
   },
   "dependencies": {
     "@ai-sdk/react": "^4.0.130",

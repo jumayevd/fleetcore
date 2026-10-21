@@ -1,30 +1,23 @@
 import type { Role } from "./constants";
 
-// Single source of truth for who can do what.
+const EVERYONE = ["OWNER", "ADMIN", "SPECIALIST", "VIEWER"] as const;
+const EDITORS = ["OWNER", "ADMIN", "SPECIALIST"] as const;
+const ADMINS = ["OWNER", "ADMIN"] as const;
+
+// Single source of truth for who can do what inside a company. Roles are per company (Membership.role).
 export const PERMISSIONS = {
-  "dashboard.view": ["OWNER", "ADMIN", "DISPATCHER", "FLEET_MANAGER", "ACCOUNTANT"],
-  "loads.view": ["OWNER", "ADMIN", "DISPATCHER", "FLEET_MANAGER", "ACCOUNTANT"],
-  "loads.edit": ["OWNER", "ADMIN", "DISPATCHER"],
-  "tracking.view": ["OWNER", "ADMIN", "DISPATCHER", "FLEET_MANAGER"],
-  "fleet.view": ["OWNER", "ADMIN", "DISPATCHER", "FLEET_MANAGER"],
-  "fleet.edit": ["OWNER", "ADMIN", "FLEET_MANAGER"],
-  "drivers.view": ["OWNER", "ADMIN", "DISPATCHER", "FLEET_MANAGER"],
-  "drivers.edit": ["OWNER", "ADMIN", "FLEET_MANAGER"],
-  "customers.view": ["OWNER", "ADMIN", "DISPATCHER", "ACCOUNTANT"],
-  "customers.edit": ["OWNER", "ADMIN", "DISPATCHER", "ACCOUNTANT"],
-  "finance.view": ["OWNER", "ADMIN", "ACCOUNTANT"],
-  "finance.edit": ["OWNER", "ADMIN", "ACCOUNTANT"],
-  "reports.view": ["OWNER", "ADMIN", "ACCOUNTANT", "FLEET_MANAGER"],
-  "users.manage": ["OWNER", "ADMIN"],
-  "audit.view": ["OWNER", "ADMIN"],
-  "driver.portal": ["DRIVER"],
-  "claims.view": ["OWNER", "ADMIN", "DISPATCHER", "FLEET_MANAGER", "ACCOUNTANT"],
-  "claims.edit": ["OWNER", "ADMIN", "DISPATCHER", "FLEET_MANAGER"],
-  "chat.view": ["OWNER", "ADMIN", "DISPATCHER", "FLEET_MANAGER", "ACCOUNTANT", "DRIVER"],
-  "announcements.manage": ["OWNER", "ADMIN"],
-  "company.manage": ["OWNER", "ADMIN"],
-  "board.edit": ["OWNER", "ADMIN", "DISPATCHER"],
-  "assistant.use": ["OWNER", "ADMIN", "DISPATCHER", "FLEET_MANAGER", "ACCOUNTANT"],
+  "dashboard.view": EVERYONE,
+  "tracking.view": EVERYONE,
+  "fleet.view": EVERYONE,
+  "fleet.edit": EDITORS,
+  "drivers.view": EVERYONE,
+  "drivers.edit": EDITORS,
+  "reports.view": EVERYONE,
+  "assistant.use": EVERYONE,
+  "company.manage": ADMINS,
+  "members.manage": ADMINS,
+  "audit.view": ADMINS,
+  "company.delete": ["OWNER"],
 } as const satisfies Record<string, readonly Role[]>;
 
 export type Permission = keyof typeof PERMISSIONS;
@@ -35,20 +28,21 @@ export function can(role: string | undefined | null, permission: Permission): bo
 }
 
 // Which permission a destination needs (mirrors each page's requireUser). Links, alerts and KPI tiles pointing
-// somewhere a role cannot open are hidden or re-targeted rather than shown as dead links (requireUser would
-// bounce the user straight back). Keep in step with the pages' gates.
+// somewhere a role cannot open are hidden or re-targeted rather than shown as dead links. Keep in step with the pages.
 const ROUTE_PERMISSIONS: [prefix: string, perm: Permission][] = [
-  ["/finance", "finance.view"], ["/claims", "claims.view"], ["/fleet", "fleet.view"], ["/drivers", "drivers.view"],
-  ["/customers", "customers.view"], ["/admin", "company.manage"], ["/loads", "loads.view"], ["/dispatch", "loads.view"],
-  ["/tracking", "tracking.view"], ["/reports", "reports.view"], ["/maintenance", "fleet.view"],
+  ["/fleet", "fleet.view"], ["/maintenance", "fleet.view"], ["/drivers", "drivers.view"], ["/tracking", "tracking.view"],
+  ["/reports", "reports.view"], ["/admin/members", "members.manage"], ["/admin/audit", "audit.view"], ["/admin", "company.manage"],
 ];
 
-/** Whether `role` can open `href` (unlisted routes are open to every signed-in user). */
+/** Whether `role` can open `href` (unlisted routes are open to every signed-in member). */
 export function canOpen(role: string | undefined | null, href: string) {
   const hit = ROUTE_PERMISSIONS.find(([p]) => href === p || href.startsWith(`${p}/`) || href.startsWith(`${p}?`) || href.startsWith(`${p}#`));
   return hit ? can(role, hit[1]) : true;
 }
 
-export function homeFor(role: string) {
-  return role === "DRIVER" ? "/driver" : "/dashboard";
+/** Roles `actor` may hand out: only an owner makes owners. */
+export function assignableRoles(actor: string): Role[] {
+  return actor === "OWNER" ? ["OWNER", "ADMIN", "SPECIALIST", "VIEWER"] : ["ADMIN", "SPECIALIST", "VIEWER"];
 }
+
+export const HOME = "/dashboard";

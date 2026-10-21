@@ -10,30 +10,40 @@ export default function Loading() {
           <Skeleton className="h-6 w-64" />
           <Skeleton className="h-3 w-80 max-w-[60vw]" />
         </div>
-        <Skeleton className="h-8 w-28 rounded-md" />
+        <Skeleton className="h-8 w-40 rounded-md" />
       </div>
-      <div className={`${card} grid grid-cols-2 gap-px overflow-hidden bg-line sm:grid-cols-3 xl:grid-cols-6`}>
+      {/* Six number tiles */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="space-y-2 bg-surface px-4 py-3">
+          <div key={i} className={`${card} space-y-3 px-4 py-3.5`}>
+            <Skeleton className="h-8 w-8 rounded-[9px]" />
+            <Skeleton className="h-6 w-14" />
             <Skeleton className="h-3 w-24" />
-            <Skeleton className="h-6 w-16" />
-            <Skeleton className="h-3 w-28" />
           </div>
         ))}
       </div>
-      <div className="mt-4 grid gap-4 xl:grid-cols-3">
-        <div className={`${card} space-y-4 p-4 xl:col-span-2`}>
-          {Array.from({ length: 7 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
+      {/* Left: today in the shop over the live map · right: needs attention over coming up */}
+      <div className="mt-4 grid items-start gap-4 xl:grid-cols-3">
+        <div className="grid gap-4 xl:col-span-2">
+          <div className={`${card} space-y-3 p-4`}>
+            {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
+          </div>
+          <div className={`${card} p-1.5`}><Skeleton className="h-[350px] w-full" /></div>
         </div>
-        <div className={`${card} space-y-4 p-4`}>
-          {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
+        <div className="order-first grid gap-4 xl:order-none">
+          <div className={`${card} space-y-3 p-4`}>
+            {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
+          </div>
+          <div className={`${card} space-y-3 p-4`}>
+            {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-7 w-full" />)}
+          </div>
         </div>
       </div>
-      <div className="mt-4 grid gap-4 xl:grid-cols-3">
-        <div className={`${card} p-1.5 xl:col-span-2`}><Skeleton className="h-[350px] w-full" /></div>
-        <div className="grid content-start gap-4">
-          <div className={`${card} h-[190px] p-4`}><Skeleton className="h-full w-full" /></div>
-          <div className={`${card} h-[170px] p-4`}><Skeleton className="h-full w-full" /></div>
+      {/* Costs */}
+      <div className={`${card} mt-4 grid gap-6 p-4 lg:grid-cols-3`}>
+        <Skeleton className="h-[220px] w-full lg:col-span-2" />
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-7 w-full" />)}
         </div>
       </div>
     </div>

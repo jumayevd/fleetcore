@@ -1,79 +1,70 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Truck } from "lucide-react";
-import { getCurrentUser } from "@/lib/auth";
-import { homeFor } from "@/lib/permissions";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { ArrowLeft } from "lucide-react";
+import { rootDb } from "@/lib/db-root";
+import { getSessionContext, listWorkspaces } from "@/lib/session";
+import { HOME } from "@/lib/permissions";
+import { ROLE_LABELS, isRole } from "@/lib/constants";
+import { AuthCard, AuthFrame } from "./frame";
 import { LoginForm } from "./login-form";
-import { Signal, SignalGrid } from "./signal";
 
 export const metadata = { title: "Sign in" };
 
 const DEMO_ACCOUNTS = [
-  { role: "Owner", email: "owner@demo.local" },
-  { role: "Admin", email: "admin@demo.local" },
-  { role: "Dispatcher", email: "dispatch@demo.local" },
-  { role: "Fleet manager", email: "fleet@demo.local" },
-  { role: "Accountant", email: "accounting@demo.local" },
-  { role: "Driver", email: "driver@demo.local" },
+  { label: "Aziza · 2 companies", hint: "Owner of Silk Road Freight, specialist at Caspian Carriers", email: "aziza@demo.local" },
+  { label: "Aziza · Nomad login", hint: "A second login, issued by Nomad Trucking", email: "aziza@nomadtrucking.demo" },
+  { label: "Kamron · owner", hint: "Owner of Caspian Carriers", email: "owner@demo.local" },
+  { label: "Dilnoza · view only", hint: "Read-only at Silk Road Freight", email: "viewer@demo.local" },
 ];
 
-function Wordmark() {
-  return (
-    <div className="flex items-center gap-2.5">
-      <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-mark bg-linear-to-br from-white/25 to-white/0 text-on-mark shadow-card">
-        <Truck className="h-4 w-4" />
-      </span>
-      <span className="text-[15px] font-semibold tracking-tight text-fg">FleetOps</span>
-      <span className="eyebrow mt-px">TMS</span>
-    </div>
-  );
-}
+const str = (v: string | string[] | undefined) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
 
-export default async function LoginPage() {
-  const user = await getCurrentUser();
-  if (user) redirect(homeFor(user.role));
+export default async function LoginPage({ searchParams }: PageProps<"/login">) {
+  const sp = await searchParams;
+  const adding = str(sp.add) === "1";
+  const token = str(sp.invite);
+  const ctx = await getSessionContext();
+  if (!adding && !token) {
+    if (ctx.active) redirect(HOME);
+    if (ctx.accounts.length) redirect("/select");
+  }
+  const [signedIn, invite] = await Promise.all([
+    adding ? listWorkspaces(ctx.accounts) : Promise.resolve([]),
+    token ? rootDb.invite.findUnique({ where: { token }, include: { company: { select: { name: true } } } }) : Promise.resolve(null),
+  ]);
+  const usable = invite && !invite.acceptedAt && invite.expiresAt > new Date() ? invite : null;
   const demo = process.env.DEMO_MODE === "true";
-  const year = new Date().getFullYear();
+  const signupHref = usable ? `/signup?invite=${encodeURIComponent(usable.token)}` : "/signup";
+
+  const title = usable ? `Join ${usable.company.name}` : adding ? "Add another account" : "Welcome back";
+  const subtitle = usable
+    ? <>Sign in as <span className="font-medium text-fg">{usable.email}</span> to join as {(isRole(usable.role) ? ROLE_LABELS[usable.role] : usable.role).toLowerCase()}.</>
+    : adding
+      ? <>Sign in with another email to work with another company&apos;s data. You stay signed in to {signedIn.map((a) => a.email).join(", ") || "your other accounts"}.</>
+      : "Sign in to your fleet workspace.";
 
   return (
-    <main className="relative grid min-h-dvh bg-canvas lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-      <div className="absolute right-4 top-4 z-20">
-        <ThemeToggle showLabel className="h-8 border border-line bg-surface px-2" />
-      </div>
-
-      {/* Product statement */}
-      <section className="relative hidden flex-col justify-between overflow-hidden border-r border-line bg-surface p-10 lg:flex xl:p-14">
-        <SignalGrid />
-        {/* A soft wash of the accent behind the headline: colour without a picture. */}
-        <div aria-hidden className="pointer-events-none absolute inset-0 bg-[radial-gradient(55%_45%_at_18%_42%,var(--accent-soft),transparent_70%)]" />
-        <div className="relative z-10"><Wordmark /></div>
-        <div className="relative z-10 max-w-xl">
-          <p className="eyebrow mb-3">Dispatch · Tracking · Fleet · Billing</p>
-          {/* Marketing line, not the page heading: this panel is hidden below lg, "Sign in" is the h1. */}
-          <p className="text-[32px] font-semibold leading-[1.15] tracking-tight text-fg xl:text-[36px]">
-            Every truck, load and dollar,{" "}
-            <span className="bg-linear-to-r from-accent to-progress bg-clip-text text-transparent">in one control room.</span>
-          </p>
-          <p className="mt-4 max-w-md text-[14px] leading-6 text-fg-muted">
-            Boards, live map, maintenance, documents and invoices share one record of each load, so dispatch,
-            fleet and accounting see the same truth and act on it sooner.
-          </p>
-          <Signal />
-        </div>
-        <p className="relative z-10 text-[11px] text-fg-subtle">© {year} FleetOps · Day and night themes · Keyboard first</p>
-      </section>
-
-      {/* Sign-in form */}
-      <section className="flex items-center justify-center px-5 py-14 sm:px-8">
-        <div className="w-full max-w-[400px]">
-          <div className="mb-6 lg:hidden"><Wordmark /></div>
-          <div className="rounded-xl border border-line bg-surface p-6 shadow-lift sm:p-7">
-          <h1 className="text-[22px] font-semibold tracking-[-0.015em] text-fg">Welcome back</h1>
-          <p className="mt-1 text-[13px] text-fg-subtle">Sign in with your company account.</p>
-          <LoginForm demoAccounts={demo ? DEMO_ACCOUNTS : []} />
-          </div>
-        </div>
-      </section>
-    </main>
+    <AuthFrame>
+      {(adding || usable) && ctx.accounts.length > 0 && (
+        <Link href={ctx.active ? HOME : "/select"} className="mb-4 inline-flex items-center gap-1.5 text-[12px] font-medium text-fg-muted hover:text-fg">
+          <ArrowLeft className="h-3.5 w-3.5" />Back to FleetOps
+        </Link>
+      )}
+      <AuthCard title={title} subtitle={subtitle}>
+        {token && !usable && (
+          <p className="mt-4 rounded-md bg-warn-soft px-3 py-2 text-[12px] text-warn">This invitation link has expired or was already used. Ask for a new one, or sign in normally.</p>
+        )}
+        <LoginForm
+          demoAccounts={demo ? DEMO_ACCOUNTS : []}
+          defaultEmail={usable?.email}
+          invite={usable?.token}
+          submitLabel={adding ? "Add account" : usable ? "Sign in and join" : "Sign in"}
+        />
+        <p className="mt-5 border-t border-line pt-4 text-[12px] text-fg-muted">
+          {usable ? "No FleetOps account for this email yet? " : "New to FleetOps? "}
+          <Link href={signupHref} className="font-medium text-accent-text hover:underline">{usable ? "Create one and join" : "Create an account"}</Link>
+        </p>
+      </AuthCard>
+    </AuthFrame>
   );
 }

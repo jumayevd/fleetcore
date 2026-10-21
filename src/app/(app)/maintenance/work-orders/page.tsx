@@ -8,9 +8,9 @@ import { db } from "@/lib/db";
 import { WORK_ORDER_CATEGORIES, WORK_ORDER_CATEGORY_LABELS, WORK_ORDER_PRIORITIES, WORK_ORDER_STATUSES, humanize } from "@/lib/constants";
 import { date, money, number } from "@/lib/format";
 import { Badge, Card, FilterPills, InfoTip, LinkButton, PageHeader, Stat, Table } from "@/components/ui";
-import { activeLoadsByUnit, daysBetween, str, unitsInShopCount, type ActiveLoad } from "../_lib/data";
+import { daysBetween, str, unitsInShopCount } from "../_lib/data";
 import { newWorkOrderHref, workOrderHref, workOrdersHref } from "../_lib/links";
-import { NO_VENDOR, onLoadReason, plural } from "../_lib/shared";
+import { NO_VENDOR, plural } from "../_lib/shared";
 import { FilterBar } from "../_components/filter-bar";
 import { Priority, UnitLink } from "../_components/unit-link";
 import { WorkOrderStatusButtons } from "../_components/work-order-status";
@@ -75,10 +75,6 @@ export default async function WorkOrdersPage({ searchParams }: PageProps<"/maint
           (STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9)
           || (PRIORITY_RANK[a.priority] ?? 9) - (PRIORITY_RANK[b.priority] ?? 9)
           || a.scheduledAt.getTime() - b.scheduledAt.getTime());
-  // Jobs that have not started yet, on a unit still out on a load: Start stays disabled until the load is recovered.
-  const notStarted = (s: string) => s === "DRAFT" || s === "OPEN";
-  const waitingUnits = [...new Set(rows.filter((w) => notStarted(w.status)).map((w) => w.truckId ?? w.trailerId).filter((v): v is string => Boolean(v)))];
-  const loads = waitingUnits.length ? await activeLoadsByUnit(waitingUnits) : new Map<string, ActiveLoad>();
   const countOf = (s: string) => byStatus.find((c) => c.status === s)?._count ?? 0;
   const open = countOf("DRAFT") + countOf("OPEN");
   const inProgress = countOf("IN_PROGRESS");
@@ -133,13 +129,10 @@ export default async function WorkOrdersPage({ searchParams }: PageProps<"/maint
             : "Clear a filter or pick another status."}>
           {rows.map((w) => {
             const shopDays = w.inAt ? daysBetween(w.inAt, w.outAt ?? undefined) : null;
-            const unitId = w.truckId ?? w.trailerId;
-            const load = notStarted(w.status) && unitId ? loads.get(unitId) : undefined;
-            const unitNumber = w.truck?.unitNumber ?? w.trailer?.unitNumber;
             return (
               <tr key={w.id}>
                 <td><Link href={workOrderHref(w.id)} className="num font-medium text-fg hover:underline">#{w.number}</Link></td>
-                <td><UnitLink truck={w.truck} trailer={w.trailer} secondary={load ? <span className="text-warn">on <span className="num">{load.reference}</span></span> : undefined} /></td>
+                <td><UnitLink truck={w.truck} trailer={w.trailer} /></td>
                 <td className="max-w-80 truncate" title={w.description ?? undefined}>
                   <Link href={workOrderHref(w.id)} className="font-medium hover:underline">{w.title}</Link>
                 </td>
@@ -155,7 +148,7 @@ export default async function WorkOrdersPage({ searchParams }: PageProps<"/maint
                 </td>
                 <td className="num font-medium">{w.cost ? money(w.cost) : <span className="font-normal text-fg-faint">—</span>}</td>
                 <td className="text-right">
-                  {editable && <WorkOrderStatusButtons id={w.id} status={w.status} number={w.number} compact blockedBy={load && unitNumber ? onLoadReason(unitNumber, load.reference) : null} />}
+                  {editable && <WorkOrderStatusButtons id={w.id} status={w.status} number={w.number} compact />}
                 </td>
               </tr>
             );

@@ -21,4 +21,4 @@ export function LeafletMap(props: ComponentProps<typeof LeafletMapInner>) {
   );
 }
 
-export type { MapTruck, MapPoint, MapPointKind } from "./leaflet-map";
+export type { MapTruck, MapTone, MapPoint, MapPointKind } from "./leaflet-map";

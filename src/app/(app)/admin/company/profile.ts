@@ -1,10 +1,11 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { getSetting } from "@/lib/settings";
 import { COMPANY_PROFILE_KEY, companyCompliance, parseCompanyProfile, type CompanyProfile } from "./shared";
 
-/** Profile plus when it was last saved (null until the first save). */
+/** The active company's profile plus when it was last saved (null until the first save). */
 export async function getCompanyProfileRecord(): Promise<{ profile: CompanyProfile; updatedAt: Date | null }> {
-  const row = await db.appSetting.findUnique({ where: { key: COMPANY_PROFILE_KEY } });
+  const row = await getSetting(COMPANY_PROFILE_KEY);
   return { profile: parseCompanyProfile(row?.value), updatedAt: row?.updatedAt ?? null };
 }
 

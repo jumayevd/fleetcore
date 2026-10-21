@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
-import { AlertTriangle, Pencil } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { getCurrentUser, requireUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { db } from "@/lib/db";
@@ -9,9 +9,9 @@ import { WORK_ORDER_CATEGORY_LABELS, humanize } from "@/lib/constants";
 import { ago, date, dateTime, km, money, number } from "@/lib/format";
 import { Badge, Card, Chip, DL, InfoTip, LinkButton, PageHeader, Table, cn } from "@/components/ui";
 import { DocumentsPanel } from "@/components/documents/panel";
-import { activeLoadsByUnit, daysBetween, pmNextService, shopTone } from "../../_lib/data";
-import { loadHref, maintenanceHref, trailerHref, truckHref, workOrderHref } from "../../_lib/links";
-import { NO_VENDOR, onLoadReason } from "../../_lib/shared";
+import { daysBetween, pmNextService, shopTone } from "../../_lib/data";
+import { maintenanceHref, trailerHref, truckHref, workOrderHref } from "../../_lib/links";
+import { NO_VENDOR } from "../../_lib/shared";
 import { UnitLink } from "../../_components/unit-link";
 import { WorkOrderStatusButtons } from "../../_components/work-order-status";
 
@@ -31,18 +31,10 @@ export default async function WorkOrderDetail({ params }: PageProps<"/maintenanc
   if (!wo) notFound();
   const editable = can(user.role, "fleet.edit");
   const path = workOrderHref(id);
-  const unitId = wo.truckId ?? wo.trailerId;
   const unitWhere = wo.truckId ? { truckId: wo.truckId } : wo.trailerId ? { trailerId: wo.trailerId } : null;
-  const [related, loads] = await Promise.all([
-    unitWhere
-      ? db.workOrder.findMany({ where: { ...unitWhere, id: { not: id } }, orderBy: { scheduledAt: "desc" }, take: 6, select: { id: true, number: true, title: true, status: true, category: true, cost: true, scheduledAt: true, completedAt: true } })
-      : [],
-    unitId ? activeLoadsByUnit([unitId]) : null,
-  ]);
-  const load = unitId ? loads?.get(unitId) : undefined;
-  const unitNumber = wo.truck?.unitNumber ?? wo.trailer?.unitNumber;
-  // Not started yet and the unit is out on a load: Start stays disabled until the load is recovered.
-  const startBlocked = load && unitNumber && (wo.status === "DRAFT" || wo.status === "OPEN") ? onLoadReason(unitNumber, load.reference) : null;
+  const related = unitWhere
+    ? await db.workOrder.findMany({ where: { ...unitWhere, id: { not: id } }, orderBy: { scheduledAt: "desc" }, take: 6, select: { id: true, number: true, title: true, status: true, category: true, cost: true, scheduledAt: true, completedAt: true } })
+    : [];
 
   const now = new Date();
   const shopDays = wo.inAt ? daysBetween(wo.inAt, wo.outAt ?? undefined) : null;
@@ -63,7 +55,6 @@ export default async function WorkOrderDetail({ params }: PageProps<"/maintenanc
         : <span key="n" className={cn("num", kmToService <= 2000 && "text-warn")}>in {number(kmToService)} km</span>],
     );
   }
-  if (load) unitFacts.push(["On load", <Link key="l" href={loadHref(load.id)} className="num hover:underline">{load.reference}</Link>]);
 
   // `done` defaults to "has a date"; the scheduled date exists from the start, so it only counts once it has passed.
   const steps: { label: string; at: Date | null; hint?: string; done?: boolean; dateOnly?: boolean }[] = [
@@ -90,22 +81,11 @@ export default async function WorkOrderDetail({ params }: PageProps<"/maintenanc
         }
         actions={editable && (
           <>
-            <WorkOrderStatusButtons id={wo.id} status={wo.status} number={wo.number} size="md" blockedBy={startBlocked} />
+            <WorkOrderStatusButtons id={wo.id} status={wo.status} number={wo.number} size="md" />
             <LinkButton href={`${path}/edit`} variant="secondary"><Pencil />Edit</LinkButton>
           </>
         )}
       />
-
-      {startBlocked && load && (
-        <p role="note" className="mb-4 flex items-start gap-2 rounded-md bg-warn-soft px-3 py-2 text-[12px] leading-4 text-warn">
-          <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
-          <span>
-            <span className="num font-medium">{unitNumber}</span> is on load{" "}
-            <Link href={loadHref(load.id)} className="num font-medium underline underline-offset-2">{load.reference}</Link> ({humanize(load.status).toLowerCase()}).
-            {" "}Recover the load to another unit before starting this job.
-          </span>
-        </p>
-      )}
 
       <div className="grid gap-4 xl:grid-cols-3">
         <div className="space-y-4 xl:col-span-2">

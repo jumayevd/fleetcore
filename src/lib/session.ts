@@ -1,0 +1,171 @@
+import "server-only";
+import { cookies } from "next/headers";
+import { SignJWT, jwtVerify } from "jose";
+import { cache } from "react";
+import { rootDb } from "./db-root";
+import { isRole, type Role } from "./constants";
+import { ACTIVE_COOKIE, parseWorkspaceKey, workspaceKey, type WorkspaceAccount } from "./workspace-shared";
+
+/*
+ * Sessions, Gmail-style: one browser can be signed in to several accounts at once (each added with its own password),
+ * and works in one company of one of those accounts at a time.
+ *
+ *  - fo_session (httpOnly, signed): the signed-in accounts, each with the time it signed in. Each sign-in lasts
+ *    ACCOUNT_TTL on its own, so adding a second account never extends the first.
+ *  - fo_active (readable by the page, not trusted): "<userId>.<companyId>". Every request re-checks that the user is
+ *    one of the signed-in accounts and still an active member of that company, so editing the cookie gains nothing.
+ *    The page reads it only to notice that another tab switched company.
+ */
+
+export const SESSION_COOKIE = "fo_session";
+const ACCOUNT_TTL_S = 60 * 60 * 24 * 14;
+/** More than this and the oldest sign-in drops off. */
+export const MAX_ACCOUNTS = 6;
+
+function secret() {
+  const s = process.env.AUTH_SECRET;
+  if (!s || s.length < 32) throw new Error("AUTH_SECRET must be set (32+ chars) in .env");
+  return new TextEncoder().encode(s);
+}
+
+const secure = () => process.env.NODE_ENV === "production";
+const nowS = () => Math.floor(Date.now() / 1000);
+
+export type SessionAccount = { userId: string; /** Epoch seconds of the sign-in. */ at: number };
+
+async function readAccounts(token: string | undefined): Promise<SessionAccount[]> {
+  if (!token) return [];
+  try {
+    const { payload } = await jwtVerify(token, secret());
+    const raw = Array.isArray(payload.acc) ? (payload.acc as unknown[]) : [];
+    const now = nowS();
+    return raw
+      .filter((a): a is { u: string; t: number } => typeof a === "object" && a !== null && typeof (a as { u?: unknown }).u === "string" && typeof (a as { t?: unknown }).t === "number")
+      .filter((a) => now - a.t < ACCOUNT_TTL_S)
+      .map((a) => ({ userId: a.u, at: a.t }));
+  } catch {
+    return [];
+  }
+}
+
+/** Replace the signed-in accounts (most recent first). Server actions and route handlers only. */
+export async function writeAccounts(accounts: SessionAccount[]) {
+  const jar = await cookies();
+  const list = accounts.slice(0, MAX_ACCOUNTS);
+  if (!list.length) {
+    jar.delete(SESSION_COOKIE);
+    jar.delete(ACTIVE_COOKIE);
+    return;
+  }
+  const exp = Math.max(...list.map((a) => a.at)) + ACCOUNT_TTL_S;
+  const token = await new SignJWT({ acc: list.map((a) => ({ u: a.userId, t: a.at })) })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(exp)
+    .sign(secret());
+  jar.set(SESSION_COOKIE, token, { httpOnly: true, sameSite: "lax", secure: secure(), path: "/", maxAge: exp - nowS() });
+  forgetSessions();
+}
+
+/** Signed-in accounts, as written: use in actions that are about to change them. */
+export async function currentAccounts() {
+  return readAccounts((await cookies()).get(SESSION_COOKIE)?.value);
+}
+
+/** Add (or refresh) an account after a successful password check. */
+export async function addAccount(userId: string) {
+  const others = (await currentAccounts()).filter((a) => a.userId !== userId);
+  await writeAccounts([{ userId, at: nowS() }, ...others]);
+}
+
+/** Point this browser at a company. Pass null to leave it on the chooser. */
+export async function writeActive(userId: string, companyId: string | null) {
+  const jar = await cookies();
+  if (!companyId) jar.delete(ACTIVE_COOKIE);
+  else jar.set(ACTIVE_COOKIE, workspaceKey(userId, companyId), { httpOnly: false, sameSite: "lax", secure: secure(), path: "/", maxAge: ACCOUNT_TTL_S });
+  forgetSessions();
+}
+
+/* ------------------------------------------------------------------ */
+/* Resolving the request's account and company                         */
+/* ------------------------------------------------------------------ */
+
+export type ActiveContext = {
+  user: { id: string; name: string; email: string; phone: string | null; lastLoginAt: Date | null };
+  company: { id: string; name: string; color: string | null };
+  role: Role;
+  membershipId: string;
+};
+export type SessionContext = { accounts: SessionAccount[]; active: ActiveContext | null };
+
+async function resolve(token: string | undefined, activeRaw: string | undefined): Promise<SessionContext> {
+  const accounts = await readAccounts(token);
+  if (!accounts.length) return { accounts, active: null };
+  const ref = parseWorkspaceKey(activeRaw);
+  if (!ref || !accounts.some((a) => a.userId === ref.userId)) return { accounts, active: null };
+  const m = await rootDb.membership.findUnique({
+    where: { userId_companyId: { userId: ref.userId, companyId: ref.companyId } },
+    select: {
+      id: true, role: true, active: true,
+      user: { select: { id: true, name: true, email: true, phone: true, lastLoginAt: true, active: true } },
+      company: { select: { id: true, name: true, color: true } },
+    },
+  });
+  if (!m || !m.active || !m.user.active || !isRole(m.role)) return { accounts, active: null };
+  const user = { id: m.user.id, name: m.user.name, email: m.user.email, phone: m.user.phone, lastLoginAt: m.user.lastLoginAt };
+  return { accounts, active: { user, company: m.company, role: m.role, membershipId: m.id } };
+}
+
+// Server actions and route handlers do not share React's per-request cache, and the company scope resolves the session
+// on every query. A short memo keyed by the exact cookie values keeps that to one lookup; a removed member loses access
+// within MEMO_MS at most (and at once on this server instance, see forgetSessions).
+const MEMO_MS = 5_000;
+const memo = new Map<string, { at: number; value: Promise<SessionContext> }>();
+
+/** Drop memoised sessions after memberships, roles or accounts change. */
+export function forgetSessions() {
+  memo.clear();
+}
+
+export const getSessionContext = cache(async (): Promise<SessionContext> => {
+  const jar = await cookies();
+  const token = jar.get(SESSION_COOKIE)?.value;
+  if (!token) return { accounts: [], active: null };
+  const activeRaw = jar.get(ACTIVE_COOKIE)?.value;
+  const key = `${token}|${activeRaw ?? ""}`;
+  const hit = memo.get(key);
+  if (hit && Date.now() - hit.at < MEMO_MS) return hit.value;
+  const value = resolve(token, activeRaw);
+  memo.set(key, { at: Date.now(), value });
+  if (memo.size > 1000) for (const [k, v] of memo) if (Date.now() - v.at >= MEMO_MS) memo.delete(k);
+  value.catch(() => memo.delete(key));
+  return value;
+});
+
+/* ------------------------------------------------------------------ */
+/* Workspaces (every signed-in account × its companies)               */
+/* ------------------------------------------------------------------ */
+
+/** The switcher's list, in sign-in order (most recent account first), companies by name. */
+export async function listWorkspaces(accounts: SessionAccount[]): Promise<WorkspaceAccount[]> {
+  if (!accounts.length) return [];
+  const users = await rootDb.user.findMany({
+    where: { id: { in: accounts.map((a) => a.userId) }, active: true },
+    select: {
+      id: true, name: true, email: true,
+      memberships: {
+        where: { active: true },
+        orderBy: { company: { name: "asc" } },
+        select: { role: true, company: { select: { id: true, name: true, color: true } } },
+      },
+    },
+  });
+  return accounts.flatMap((a) => {
+    const u = users.find((x) => x.id === a.userId);
+    if (!u) return [];
+    return [{
+      userId: u.id, name: u.name, email: u.email,
+      companies: u.memberships.filter((m) => isRole(m.role)).map((m) => ({ ...m.company, role: m.role as Role })),
+    }];
+  });
+}

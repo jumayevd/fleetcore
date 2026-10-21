@@ -2,13 +2,13 @@
 
 import { useState, useTransition } from "react";
 import { ChevronDown } from "lucide-react";
-import { setDriverEmployment } from "@/app/actions/people";
+import { setDriverEmployment } from "@/app/actions/drivers";
 import { DRIVER_STATUSES } from "@/lib/constants";
 import { Badge, STATUS_TONE, StatusDot, buttonClass, cn } from "@/components/ui";
 import { DropMenu } from "../menu";
 import { EMPLOYMENT_LABELS } from "../shared";
 
-const HINT: Record<string, string> = { ACTIVE: "back on the board", ON_LEAVE: "board shows Vacation", INACTIVE: "leaves the roster" };
+const HINT: Record<string, string> = { ACTIVE: "back at work", ON_LEAVE: "keeps their truck", INACTIVE: "frees their truck" };
 
 /** Header control: current employment status, menu of the others → setDriverEmployment. */
 export function EmploymentMenu({ id, status }: { id: string; status: string }) {
@@ -23,9 +23,8 @@ export function EmploymentMenu({ id, status }: { id: string; status: string }) {
       try {
         const res = await setDriverEmployment(id, s);
         if (res?.error) setError(res.error);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "";
-        setError(msg && !/server components|digest/i.test(msg) ? msg : "Could not change status — the driver may still be on a load");
+      } catch {
+        setError("Could not change the status. Try again.");
       }
     }),
   }));

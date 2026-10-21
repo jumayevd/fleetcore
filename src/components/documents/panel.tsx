@@ -19,9 +19,8 @@ function iconFor(contentType: string) {
 const actionClass = "inline-flex h-7 w-7 items-center justify-center rounded-md text-fg-subtle hover:bg-sunken hover:text-fg [&_svg]:h-4 [&_svg]:w-4";
 
 /**
- * Documents attached to a load / truck / trailer / driver / customer / work order / claim / company.
- * `required` renders a checklist row (ok when on file, warn when missing) — loads pass ["RC","BOL","POD"],
- * units pass REQUIRED_UNIT_DOCS.
+ * Documents attached to a truck / trailer / driver / work order / the company (always of the active company).
+ * `required` renders a checklist row (ok when on file, warn when missing) — units pass REQUIRED_UNIT_DOCS.
  */
 export async function DocumentsPanel({ user, target, path, title = "Documents", withExpiry, camera, defaultKind, plain, required, description }: {
   user: CurrentUser;
@@ -39,8 +38,6 @@ export async function DocumentsPanel({ user, target, path, title = "Documents", 
   /** Quiet line under the checklist / above the list. */
   description?: string;
 }) {
-  // Checks start in the same tick: a driver's per-kind "is this my load?" lookups are identical
-  // findUnique calls, which Prisma's dataloader batches into one query instead of one per kind.
   const kinds: readonly string[] = DOC_KINDS[target.type];
   const [docs, uploadOk] = await Promise.all([listDocs(target), Promise.all(kinds.map((k) => canUploadDoc(user, target, k)))]);
   const uploadable = kinds.filter((_, i) => uploadOk[i]);

@@ -8,7 +8,3 @@ export const NO_VENDOR = "No vendor recorded";
 
 /** "1 unit" / "3 units". */
 export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-
-/** Why a job cannot start: its unit is still on a load. The fleet pages refuse the same move. */
-export const onLoadReason = (unit: string, load: string) =>
-  `${unit} is on ${load}. Recover the load to another unit before starting this job.`;

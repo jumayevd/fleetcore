@@ -9,29 +9,8 @@ import { unitComplianceHref } from "./links";
 
 const DAY = 86_400_000;
 
-/* ------------------------------------------------------------------ */
-/* Period selector (trailing windows so period-over-period is fair)    */
-/* ------------------------------------------------------------------ */
-
-export const PERIODS = {
-  week: { days: 7, label: "Week", hint: "Last 7 days" },
-  month: { days: 30, label: "Month", hint: "Last 30 days" },
-  quarter: { days: 90, label: "Quarter", hint: "Last 90 days" },
-  year: { days: 365, label: "Year", hint: "Last 12 months" },
-} as const;
-export type PeriodKey = keyof typeof PERIODS;
-const DEFAULT_PERIOD: PeriodKey = "quarter";
-
-export function parsePeriod(v: unknown): PeriodKey {
-  return typeof v === "string" && v in PERIODS ? (v as PeriodKey) : DEFAULT_PERIOD;
-}
-
-export function periodRange(p: PeriodKey) {
-  const { days } = PERIODS[p];
-  const to = new Date();
-  const from = new Date(to.getTime() - days * DAY);
-  return { from, to, prevFrom: new Date(from.getTime() - days * DAY), prevTo: from, days };
-}
+// Period selector: trailing windows so period-over-period is fair (shared with Reports).
+export { PERIODS, parsePeriod, periodRange, type PeriodKey } from "./period";
 
 /* ------------------------------------------------------------------ */
 /* Tabs                                                                */
@@ -78,46 +57,20 @@ export async function unitsInShopCount() {
   return countUnits(rows);
 }
 
-export type ActiveLoad = { id: string; reference: string; status: string };
-
-/**
- * Loads holding a unit right now (assigned or in transit), keyed by truck / trailer id. A unit on one of these
- * must not go into the shop: the fleet pages refuse it too ("recover the load first"). Pass ids to narrow the lookup.
- */
-export async function activeLoadsByUnit(ids?: string[]) {
-  const loads = await db.load.findMany({
-    where: {
-      status: { in: ["ASSIGNED", "IN_TRANSIT"] },
-      OR: ids ? [{ truckId: { in: ids } }, { trailerId: { in: ids } }] : [{ truckId: { not: null } }, { trailerId: { not: null } }],
-    },
-    orderBy: { updatedAt: "desc" },
-    take: 1000,
-    select: { id: true, reference: true, status: true, truckId: true, trailerId: true },
-  });
-  const byUnit = new Map<string, ActiveLoad>();
-  for (const l of loads) {
-    const load = { id: l.id, reference: l.reference, status: l.status };
-    if (l.truckId && !byUnit.has(l.truckId)) byUnit.set(l.truckId, load);
-    if (l.trailerId && !byUnit.has(l.trailerId)) byUnit.set(l.trailerId, load);
-  }
-  return byUnit;
-}
-
 /** Pickers for the work order form: units with a one-line description, plus known vendors for autocomplete. */
 export async function workOrderFormOptions() {
-  const [trucks, trailers, vendors, loads] = await Promise.all([
+  const [trucks, trailers, vendors] = await Promise.all([
     db.truck.findMany({ orderBy: { unitNumber: "asc" }, select: { id: true, unitNumber: true, make: true, model: true, odometerKm: true, lastPmKm: true, status: true } }),
     db.trailer.findMany({ orderBy: { unitNumber: "asc" }, select: { id: true, unitNumber: true, type: true, status: true } }),
     db.workOrder.findMany({ where: { vendor: { not: null } }, distinct: ["vendor"], select: { vendor: true }, orderBy: { vendor: "asc" } }),
-    activeLoadsByUnit(),
   ]);
   return {
     trucks: trucks.map((t) => ({
-      id: t.id, unitNumber: t.unitNumber, odometerKm: t.odometerKm, lastPmKm: t.lastPmKm, onLoad: loads.get(t.id)?.reference ?? null,
+      id: t.id, unitNumber: t.unitNumber, odometerKm: t.odometerKm, lastPmKm: t.lastPmKm,
       detail: `${t.make} ${t.model}${t.status !== "ACTIVE" ? ` · ${t.status.toLowerCase().replace(/_/g, " ")}` : ""}`,
     })),
     trailers: trailers.map((t) => ({
-      id: t.id, unitNumber: t.unitNumber, onLoad: loads.get(t.id)?.reference ?? null,
+      id: t.id, unitNumber: t.unitNumber,
       detail: `${EQUIPMENT_LABELS[t.type] ?? t.type}${t.status !== "EMPTY" && t.status !== "YARD" ? ` · ${t.status.toLowerCase().replace(/_/g, " ")}` : ""}`,
     })),
     vendors: vendors.map((v) => v.vendor!).filter(Boolean),

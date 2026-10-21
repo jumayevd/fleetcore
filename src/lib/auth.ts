@@ -1,62 +1,41 @@
 import "server-only";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { SignJWT, jwtVerify } from "jose";
 import { cache } from "react";
-import { db } from "./db";
-import { can, homeFor, type Permission } from "./permissions";
+import { can, HOME, type Permission } from "./permissions";
+import { getSessionContext, type ActiveContext } from "./session";
+import type { Role } from "./constants";
 
-const COOKIE = "lp_session";
-const MAX_AGE = 60 * 60 * 12; // 12h
+/**
+ * The person working in this request, as a member of the active company. `role` is their role in THIS company;
+ * the same person may hold another role in another company.
+ */
+export type CurrentUser = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  lastLoginAt: Date | null;
+  role: Role;
+  membershipId: string;
+  company: { id: string; name: string; color: string | null };
+};
 
-function secret() {
-  const s = process.env.AUTH_SECRET;
-  if (!s || s.length < 32) throw new Error("AUTH_SECRET must be set (32+ chars) in .env");
-  return new TextEncoder().encode(s);
-}
+const toUser = (a: ActiveContext): CurrentUser => ({ ...a.user, role: a.role, membershipId: a.membershipId, company: a.company });
 
-export async function createSession(userId: string) {
-  const token = await new SignJWT({ sub: userId })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime(`${MAX_AGE}s`)
-    .sign(secret());
-  (await cookies()).set(COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: MAX_AGE,
-  });
-}
-
-export async function destroySession() {
-  (await cookies()).delete(COOKIE);
-}
-
-export const getCurrentUser = cache(async () => {
-  const token = (await cookies()).get(COOKIE)?.value;
-  if (!token) return null;
-  try {
-    const { payload } = await jwtVerify(token, secret());
-    if (!payload.sub) return null;
-    const user = await db.user.findUnique({
-      where: { id: payload.sub },
-      select: { id: true, name: true, email: true, role: true, active: true, phone: true, teamId: true, lastLoginAt: true, driver: { select: { id: true } } },
-    });
-    if (!user || !user.active) return null;
-    return user;
-  } catch {
-    return null;
-  }
+export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
+  const { active } = await getSessionContext();
+  return active ? toUser(active) : null;
 });
 
-export type CurrentUser = NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>;
-
-/** Use in pages/actions: redirects to login if signed out, home if lacking permission. */
+/**
+ * Use in pages and actions. Signed out → sign-in page; signed in but no company chosen (or access removed) → the
+ * company chooser; lacking the permission → overview.
+ */
 export async function requireUser(permission?: Permission): Promise<CurrentUser> {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  if (permission && !can(user.role, permission)) redirect(homeFor(user.role));
+  const ctx = await getSessionContext();
+  if (!ctx.accounts.length) redirect("/login");
+  if (!ctx.active) redirect("/select");
+  const user = toUser(ctx.active);
+  if (permission && !can(user.role, permission)) redirect(HOME);
   return user;
 }
