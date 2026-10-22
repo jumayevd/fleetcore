@@ -94,6 +94,71 @@ export async function setTruckType(truckId: string, truckTypeId: string | null):
 }
 
 /* ------------------------------------------------------------------ */
+/* Inline edits on the board                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Type the odometer of the last oil change straight into the board. The interval restarts from it (nextServiceKm),
+ * and so do "used", "due at" and the status. A higher number than before is a newer oil change, dated today; a lower
+ * one is a correction and keeps the date. A last change above the truck's odometer moves the odometer up to it (the
+ * truck has been at least that far). Empty clears it.
+ */
+export async function setLastOilChange(truckId: string, value: number | null): Promise<ActionState> {
+  const me = await requireUser("fleet.edit");
+  return attempt(async () => {
+    const fmt = makeFormat(normalizeLocale(me.company));
+    const truck = await db.truck.findUnique({
+      where: { id: truckId },
+      select: { unitNumber: true, odometerKm: true, lastPmKm: true, lastPmAt: true, pmIntervalKm: true, truckType: { select: { oilIntervalKm: true } } },
+    });
+    if (!truck) throw new FormError("This truck no longer exists. Reload the page.");
+    if (value == null) {
+      await db.truck.update({ where: { id: truckId }, data: { lastPmKm: null, lastPmAt: null, nextServiceKm: null } });
+      await audit(me.id, "update", "truck", truckId, `${truck.unitNumber} last oil change cleared`);
+      refreshOil();
+      revalidatePath(`/fleet/${truckId}`);
+      return { ok: `${truck.unitNumber}: last oil change cleared` };
+    }
+    if (!Number.isFinite(value) || value < 0) throw new FormError("Enter the odometer at the last oil change");
+    const reading = Math.round(value);
+    if (reading > truck.odometerKm + MAX_JUMP) {
+      throw new FormError(`${fmt.dist(reading)} is far above ${truck.unitNumber}'s odometer of ${fmt.dist(truck.odometerKm)}. Check the digits.`);
+    }
+    const interval = truck.truckType?.oilIntervalKm ?? truck.pmIntervalKm;
+    const newer = truck.lastPmKm == null || reading > truck.lastPmKm;
+    const now = new Date();
+    await db.truck.update({
+      where: { id: truckId },
+      data: {
+        lastPmKm: reading, nextServiceKm: reading + interval,
+        ...(newer ? { lastPmAt: now } : {}),
+        ...(reading > truck.odometerKm ? { odometerKm: reading, odometerAt: now } : {}),
+      },
+    });
+    await audit(me.id, "update", "truck", truckId, `${truck.unitNumber} last oil change ${truck.lastPmKm == null ? "—" : fmt.dist(truck.lastPmKm)} → ${fmt.dist(reading)}`);
+    refreshOil();
+    revalidatePath(`/fleet/${truckId}`);
+    return { ok: `${truck.unitNumber}: next oil change at ${fmt.dist(reading + interval)}` };
+  });
+}
+
+/** The shop (name or address, free text) a truck goes to for its oil change. Empty clears it. */
+export async function setOilShop(truckId: string, text: string): Promise<ActionState> {
+  const me = await requireUser("fleet.edit");
+  return attempt(async () => {
+    const truck = await db.truck.findUnique({ where: { id: truckId }, select: { unitNumber: true, oilShop: true } });
+    if (!truck) throw new FormError("This truck no longer exists. Reload the page.");
+    const oilShop = text.replace(/\s+/g, " ").trim().slice(0, 200) || null;
+    if (oilShop === truck.oilShop) return { ok: "No change" };
+    await db.truck.update({ where: { id: truckId }, data: { oilShop } });
+    await audit(me.id, "update", "truck", truckId, `${truck.unitNumber} oil shop → ${oilShop ?? "none"}`);
+    revalidatePath("/maintenance/oil");
+    revalidatePath(`/fleet/${truckId}`);
+    return { ok: oilShop ? `${truck.unitNumber}: shop saved` : `${truck.unitNumber}: shop cleared` };
+  });
+}
+
+/* ------------------------------------------------------------------ */
 /* Book                                                                */
 /* ------------------------------------------------------------------ */
 

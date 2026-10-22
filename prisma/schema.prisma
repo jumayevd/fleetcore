@@ -194,6 +194,8 @@ model Truck {
   lastPmKm           Int?
   lastPmAt           DateTime?
   nextServiceKm      Int?
+  /// Where this truck goes for its oil change: a shop name or an address, as the specialist types it on the oil board.
+  oilShop            String?
   // Last known telemetry
   lat                Float?
   lng                Float?

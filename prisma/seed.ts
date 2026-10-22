@@ -209,6 +209,8 @@ async function seedCompany(spec: CompanySpec, people: { owner: string; members: 
         pmIntervalKm: spec.ownInterval,
         lastPmKm, lastPmAt: ago(Math.min(170, Math.max(3, Math.round((odo - lastPmKm) / Math.max(1, daily))))),
         nextServiceKm: lastPmKm + interval,
+        // Where it goes for oil changes, as a specialist would type it on the oil board (about half the trucks).
+        oilShop: i % 2 === 0 ? (() => { const v = spec.vendors.find((x) => x.type === "SHOP" || x.type === "DEALER"); return v ? `${v.name}${v.address ? `, ${v.address}` : ""}, ${v.city}` : null; })() : null,
         fuelCapacityL: pick(spec.tanks),
         insuranceExpiry: ahead(i === 1 ? 9 : int(40, 360)),
         inspectionExpiry,

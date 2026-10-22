@@ -1,23 +1,24 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
-import { CalendarPlus, Droplet, Gauge, X } from "lucide-react";
+import { CalendarPlus, Droplet, X } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { getFormat } from "@/lib/format-server";
-import { OIL_DUE_SOON, roLabel, serviceStatus, SERVICE_STATE_LABELS, SERVICE_STATE_TONE, STALE_READING_DAYS, type ServiceState } from "@/lib/service";
-import { Badge, Card, Field, Input, LinkButton, PageHeader, Progress, Stat, Table, Textarea, buttonClass, cn } from "@/components/ui";
+import { OIL_DUE_SOON, roLabel, serviceStatus, SERVICE_STATE_LABELS, STALE_READING_DAYS, type ServiceState } from "@/lib/service";
+import { Card, Field, Input, LinkButton, PageHeader, Stat, Table, Textarea, buttonClass } from "@/components/ui";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { VendorPicker } from "@/components/shop/vendor-picker";
 import { OIL_SERVICE_TYPES } from "@/components/shop/shared";
 import { bookOilChange } from "@/app/actions/oil";
-import { oilHref, readingsHref, truckHref, vendorHref, workOrderHref } from "../_lib/links";
+import { oilHref, readingsHref, workOrderHref } from "../_lib/links";
 import { str } from "../_lib/data";
 import { vendorOptions } from "../_lib/repairs";
 import { SearchBox } from "../_components/search-box";
 import { OilLogForm } from "../_components/oil-log-form";
-import { TruckTypeSelect, TruckTypesDialog } from "../_components/oil-types";
+import { TruckTypesDialog } from "../_components/oil-types";
+import { OilRow } from "../_components/oil-row";
 
 export const metadata = { title: "Oil & PM" };
 
@@ -30,9 +31,10 @@ const VIEW_STATES: Record<View, ServiceState[] | null> = {
 const RANK: Record<ServiceState, number> = { overdue: 0, due_now: 1, due_soon: 2, no_reading: 3, ok: 4, unknown: 5 };
 
 /**
- * Oil & PM board: every truck in service by its oil change, worst first. `view` filters (overdue, due, ok, stale,
- * unknown), `q` searches unit / driver, `log=1[&truck=]` opens "Log oil change", `book=<truckId>` opens a booking,
- * `reading=<truckId>` goes to that truck's readings.
+ * Oil & PM board: every truck in service by its oil change, worst first. Editors type each truck's shop and the
+ * odometer of its last oil change into the row (see OilRow). `view` filters (overdue, due, ok, stale, unknown), `q`
+ * searches unit / driver, `log=1[&truck=]` opens "Log oil change", `book=<truckId>` opens a booking (the Today page
+ * links there), `reading=<truckId>` goes to that truck's readings.
  */
 export default async function OilBoard({ searchParams }: PageProps<"/maintenance/oil">) {
   const user = await requireUser("fleet.view");
@@ -124,7 +126,8 @@ export default async function OilBoard({ searchParams }: PageProps<"/maintenance
               <Field label="Booked for" required><Input type="date" name="scheduledAt" required defaultValue={f.dateInput(now)} min={f.dateInput(now)} className="num" /></Field>
               <div className="lg:col-span-2">
                 <span className="mb-1 block text-[12px] font-medium text-fg-muted">Shop</span>
-                <VendorPicker vendors={vendors} />
+                {/* The shop typed on the board carries over; pick a vendor to link it properly. */}
+                <VendorPicker vendors={vendors} legacyName={bookRow.t.oilShop} />
               </div>
               <Field label="Promised back"><Input type="date" name="promisedAt" min={f.dateInput(now)} className="num" /></Field>
               <Field label="Note for the shop" className="sm:col-span-2 lg:col-span-3"><Textarea name="description" rows={1} placeholder="Anything else to look at while it is in" /></Field>
@@ -152,67 +155,26 @@ export default async function OilBoard({ searchParams }: PageProps<"/maintenance
           </p>
           <SearchBox action="/maintenance/oil" q={str(sp.q)} keep={keep} placeholder="Search unit, driver, type" />
         </div>
-        <Table head={["Unit", "Odometer", "Last change", "Interval", "Used", "Due at", "Status", "Shop", ""]} empty={rows.length === 0}
+        {/* Editors type the shop and the last oil change straight into the row; the row works out the rest. */}
+        <Table head={["Unit", "Odometer", "Interval", "Used", "Due at", "Status", "Shop", "Last change"]} empty={rows.length === 0}
           emptyTitle={all.length ? "Nothing matches" : "No trucks in service"}
           emptyDescription={all.length ? "Clear the search or pick another tile." : "Trucks appear here once they are added to the fleet."}>
-          {rows.map(({ t, s, booked }) => {
-            const tone = SERVICE_STATE_TONE[s.state];
-            return (
-              <tr key={t.id} className={bookId === t.id ? "bg-accent-soft" : undefined}>
-                <td>
-                  <Link href={truckHref(t.id)} className="num font-medium text-fg hover:underline">{t.unitNumber}</Link>
-                  <p className="truncate text-[11px] text-fg-subtle">{t.driver?.name ?? "No driver"}</p>
-                </td>
-                <td className="whitespace-nowrap">
-                  <span className="num">{f.dist(t.odometerKm)}</span>
-                  <p className={cn("text-[11px]", s.stale ? "text-warn" : "text-fg-subtle")}>{s.readingAt ? `as of ${f.day(s.readingAt)}` : "no reading date"}</p>
-                </td>
-                <td className="whitespace-nowrap">
-                  {s.lastKm != null ? <span className="num">{f.dist(s.lastKm)}</span> : <span className="text-fg-faint">—</span>}
-                  <p className="text-[11px] text-fg-subtle">{t.lastPmAt ? f.date(t.lastPmAt) : s.lastKm != null ? "no date" : ""}</p>
-                </td>
-                <td className="whitespace-nowrap">
-                  <span className="num">{f.dist(s.interval)}</span>
-                  <div className="mt-0.5">
-                    {editable ? <TruckTypeSelect truckId={t.id} value={t.truckTypeId} types={typeOptions} /> : <p className="text-[11px] text-fg-subtle">{s.intervalFrom ?? "truck's own"}</p>}
-                  </div>
-                </td>
-                <td className="min-w-32 whitespace-nowrap">
-                  {s.used != null ? <span className="num">{s.stale ? "≥ " : ""}{f.dist(s.used)}</span> : <span className="text-fg-faint">—</span>}
-                  {s.pct != null && <Progress value={Math.min(1, s.pct)} tone={tone === "neutral" ? "neutral" : tone} className="mt-1.5 w-28" />}
-                </td>
-                <td className="num whitespace-nowrap text-fg-muted">{s.dueAtKm != null ? f.dist(s.dueAtKm) : <span className="text-fg-faint">—</span>}</td>
-                <td className="min-w-40">
-                  <Badge value={s.state} tone={tone} label={SERVICE_STATE_LABELS[s.state]} />
-                  <p className={cn("num mt-0.5 text-[11px]", s.state === "overdue" ? "text-danger" : "text-fg-subtle")}>{statusLine(s, f)}</p>
-                </td>
-                <td className="max-w-44">
-                  {booked ? (
-                    <>
-                      <Link href={workOrderHref(booked.id)} className="num font-medium text-fg hover:underline">{roLabel(booked.number)}</Link>
-                      <p className="truncate text-[11px] text-fg-subtle">
-                        {booked.status === "IN_PROGRESS" ? "In the shop" : f.day(booked.scheduledAt)}
-                        {booked.vendorRef ? <> · <Link href={vendorHref(booked.vendorRef.id)} className="hover:underline">{booked.vendorRef.name}</Link></> : booked.vendor ? ` · ${booked.vendor}` : ""}
-                      </p>
-                    </>
-                  ) : <span className="text-fg-faint">—</span>}
-                </td>
-                <td className="text-right">
-                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-                    {s.stale && s.state !== "overdue" && editable && (
-                      <LinkButton href={readingsHref(t.id)} size="sm" variant="ghost"><Gauge />Get reading</LinkButton>
-                    )}
-                    {editable && !booked && (
-                      <LinkButton href={oilHref({ ...keep, book: t.id })} size="sm" variant="secondary" scroll={false}>Book</LinkButton>
-                    )}
-                    {editable && (
-                      <Link href={oilHref({ ...keep, log: 1, truck: t.id })} className="text-[12px] font-medium text-fg-muted hover:text-fg">{s.state === "unknown" ? "Log the last one" : "Log"}</Link>
-                    )}
-                  </span>
-                </td>
-              </tr>
-            );
-          })}
+          {rows.map(({ t, booked }) => (
+            // Keyed by the saved values, so a row starts fresh from the server after each save.
+            <OilRow key={`${t.id}:${t.lastPmKm ?? ""}:${t.oilShop ?? ""}:${t.odometerKm}`} editable={editable} highlighted={bookId === t.id}
+              now={now.toISOString()} types={typeOptions}
+              t={{
+                id: t.id, unitNumber: t.unitNumber, driverName: t.driver?.name ?? null,
+                odometerKm: t.odometerKm, odometerAt: t.odometerAt?.toISOString() ?? null,
+                pmIntervalKm: t.pmIntervalKm, lastPmKm: t.lastPmKm, lastPmAt: t.lastPmAt?.toISOString() ?? null, nextServiceKm: t.nextServiceKm,
+                truckTypeId: t.truckTypeId, truckType: t.truckType ? { name: t.truckType.name, oilIntervalKm: t.truckType.oilIntervalKm } : null,
+                oilShop: t.oilShop,
+                booked: booked ? {
+                  id: booked.id, number: booked.number, inShop: booked.status === "IN_PROGRESS", scheduledAt: booked.scheduledAt.toISOString(),
+                  vendor: booked.vendorRef ? { id: booked.vendorRef.id, name: booked.vendorRef.name } : null, vendorName: booked.vendor,
+                } : null,
+              }} />
+          ))}
         </Table>
       </Card>
     </>
