@@ -71,6 +71,8 @@ model Company {
   defects     Defect[]
   roadside    RoadsideInspection[]
   violations  RoadsideViolation[]
+  eldLinks    EldConnection[]
+  eldUnits    EldUnit[]
   memberships Membership[]
   invites     Invite[]
   drivers     Driver[]
@@ -227,6 +229,7 @@ model Truck {
   walkArounds        WalkAround[]
   defects            Defect[]
   roadside           RoadsideInspection[]
+  eldUnits           EldUnit[]
 
   @@unique([companyId, unitNumber])
   @@index([companyId, status])
@@ -639,4 +642,78 @@ model RoadsideViolation {
   correctedAt  DateTime?
 
   @@index([inspectionId])
+}
+
+/**
+ * ------------------------------------------------------------------
+ */
+/**
+ * ELD integrations
+ */
+/**
+ * ------------------------------------------------------------------
+ */
+
+/// A company's connection to its ELD provider (TrackPro). The API token is stored encrypted (src/lib/secret-box.ts) and
+/// never shown again; tokenHint is its last characters, so people can tell which one is saved.
+model EldConnection {
+  id            String    @id @default(cuid())
+  companyId     String    @default("") // set by the company scope (src/lib/db.ts); "" fails the foreign key
+  company       Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  /// TRACKPRO
+  provider      String
+  tokenEnc      String
+  tokenHint     String
+  /// How the provider's timestamps read: AUTO (worked out on the first sync), UTC, or COMPANY (the company's time zone).
+  timeBasis     String    @default("AUTO")
+  active        Boolean   @default(true)
+  /// When a sync last started (also the lock that keeps two syncs of one company from running at once).
+  lastSyncAt    DateTime?
+  lastSuccessAt DateTime?
+  lastError     String?
+  vehicles      Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  units         EldUnit[]
+
+  @@unique([companyId, provider])
+}
+
+/// One vehicle as the ELD reports it, and the FleetCore truck it belongs to. Keeps the last fix, so the next sync can
+/// work out speed and distance (the TrackPro API gives position, fuel and DEF, but no speed or odometer).
+model EldUnit {
+  id           String        @id @default(cuid())
+  companyId    String        @default("") // set by the company scope (src/lib/db.ts); "" fails the foreign key
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  connectionId String
+  connection   EldConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  /// The provider's own vehicle id.
+  externalId   String
+  unitNumber   String?
+  vin          String?
+  make         String?
+  model        String?
+  driverName   String?
+  truckId      String?
+  truck        Truck?        @relation(fields: [truckId], references: [id], onDelete: SetNull)
+  /// AUTO: matched by VIN, else unit number, on every sync. MANUAL: someone picked the truck (or "none") by hand.
+  matchMode    String        @default("AUTO")
+  lat          Float?
+  lng          Float?
+  fixAt        DateTime?
+  place        String?
+  fuelPct      Float?
+  defPct       Float?
+  /// Worked out from the last two fixes, in the company's unit (mph / km/h). Null when the fixes are too far apart.
+  speed        Float?
+  /// Straight-line distance between fixes since the truck's last odometer reading (company unit): a lower bound of
+  /// what it drove. Starts again from 0 whenever the truck gets a new reading (gpsFrom = that reading's time).
+  gpsDistance  Float         @default(0)
+  gpsFrom      DateTime?
+  seenAt       DateTime      @default(now())
+  createdAt    DateTime      @default(now())
+
+  @@unique([connectionId, externalId])
+  @@index([companyId])
+  @@index([truckId])
 }

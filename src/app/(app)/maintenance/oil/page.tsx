@@ -19,6 +19,7 @@ import { SearchBox } from "../_components/search-box";
 import { OilLogForm } from "../_components/oil-log-form";
 import { TruckTypesDialog } from "../_components/oil-types";
 import { OilRow } from "../_components/oil-row";
+import { eldByTruck } from "@/lib/eld/sync";
 
 export const metadata = { title: "Oil & PM" };
 
@@ -51,7 +52,7 @@ export default async function OilBoard({ searchParams }: PageProps<"/maintenance
   const bookId = editable ? str(sp.book) : undefined;
   const now = new Date();
 
-  const [trucks, open, types, vendors] = await Promise.all([
+  const [trucks, open, types, vendors, eld] = await Promise.all([
     db.truck.findMany({
       where: { status: { not: "INACTIVE" } }, orderBy: { unitNumber: "asc" },
       include: { truckType: true, driver: { select: { id: true, name: true } } },
@@ -63,7 +64,13 @@ export default async function OilBoard({ searchParams }: PageProps<"/maintenance
     }),
     db.truckType.findMany({ orderBy: { name: "asc" }, include: { _count: { select: { trucks: true } } } }),
     editable && (logOpen || bookId) ? vendorOptions() : Promise.resolve([]),
+    eldByTruck(),
   ]);
+  /** Distance driven by GPS since each truck's last reading (ELD), counted only against that same reading. */
+  const gpsSince = (t: { id: string; odometerAt: Date | null }) => {
+    const u = eld.get(t.id);
+    return u && (u.gpsFrom?.getTime() ?? null) === (t.odometerAt?.getTime() ?? null) ? u.gpsDistance : 0;
+  };
   const bookedBy = new Map<string, (typeof open)[number]>();
   for (const w of open) if (w.truckId && !bookedBy.has(w.truckId)) bookedBy.set(w.truckId, w);
 
@@ -165,7 +172,7 @@ export default async function OilBoard({ searchParams }: PageProps<"/maintenance
               now={now.toISOString()} types={typeOptions}
               t={{
                 id: t.id, unitNumber: t.unitNumber, driverName: t.driver?.name ?? null,
-                odometerKm: t.odometerKm, odometerAt: t.odometerAt?.toISOString() ?? null,
+                odometerKm: t.odometerKm, odometerAt: t.odometerAt?.toISOString() ?? null, gpsDistance: gpsSince(t),
                 pmIntervalKm: t.pmIntervalKm, lastPmKm: t.lastPmKm, lastPmAt: t.lastPmAt?.toISOString() ?? null, nextServiceKm: t.nextServiceKm,
                 truckTypeId: t.truckTypeId, truckType: t.truckType ? { name: t.truckType.name, oilIntervalKm: t.truckType.oilIntervalKm } : null,
                 oilShop: t.oilShop,

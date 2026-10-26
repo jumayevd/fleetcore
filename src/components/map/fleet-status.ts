@@ -45,7 +45,7 @@ export const serviceTone = (s: ServiceSnapshot): Tone => SERVICE_STATE_TONE[s.st
  */
 export const isTrackerSource = (src: string | null | undefined) => Boolean(src && src !== "MANUAL" && src !== "SIMULATED");
 
-export const SOURCE_LABEL: Record<string, string> = { MANUAL: "Manual update", SIMULATED: "Manual update", DEVICE: "GPS device", SAMSARA: "Samsara" };
+export const SOURCE_LABEL: Record<string, string> = { MANUAL: "Manual update", SIMULATED: "Manual update", DEVICE: "GPS device", SAMSARA: "Samsara", TRACKPRO: "TrackPro ELD" };
 export const sourceLabel = (src: string | null | undefined) => (src ? (SOURCE_LABEL[src] ?? src.charAt(0) + src.slice(1).toLowerCase()) : "No tracker");
 
 /* ------------------------------------------------------------------ */

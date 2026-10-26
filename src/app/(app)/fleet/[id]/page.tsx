@@ -10,6 +10,7 @@ import { DOC_KIND_LABELS, REQUIRED_UNIT_DOCS, UNIT_DOC_SLOTS } from "@/lib/docum
 import { ago, daysUntil } from "@/lib/format";
 import { getFormat } from "@/lib/format-server";
 import { daysToCover, distancePerDay, kmDriven } from "@/lib/mileage";
+import { eldByTruck } from "@/lib/eld/sync";
 import { roLabel, SERVICE_STATE_LABELS, serviceStatus, STALE_READING_DAYS, type ServiceStatus } from "@/lib/service";
 import { addTruckNote, updateTruckReadings } from "@/app/actions/fleet";
 import { ActionForm, SubmitButton } from "@/components/forms";
@@ -284,14 +285,18 @@ async function OverviewTab({ truck, now, editable, showMoney, prompts, attention
   const id = truck.id;
   const lease = leaseStatus(truck);
   const since90 = new Date(now.getTime() - 90 * DAY);
-  const [spend, fuel90, driven90, repairs90] = await Promise.all([
+  const [spend, fuel90, driven90, repairs90, eldMap] = await Promise.all([
     showMoney
       ? db.workOrder.aggregate({ where: { truckId: id, status: "DONE", voidedAt: null, completedAt: { gte: since90 } }, _sum: { cost: true } })
       : Promise.resolve(null),
     db.fuelLog.aggregate({ where: { truckId: id, date: { gte: since90 } }, _sum: { liters: true } }),
     kmDriven(since90, now, [id]),
     db.workOrder.count({ where: { truckId: id, status: "DONE", voidedAt: null, completedAt: { gte: since90 } } }),
+    eldByTruck([id]),
   ]);
+  // What the ELD adds: distance driven by GPS since this reading (a lower bound), its driver and DEF level.
+  const eld = eldMap.get(id) ?? null;
+  const gps = eld && (eld.gpsFrom?.getTime() ?? null) === (truck.odometerAt?.getTime() ?? null) ? eld.gpsDistance : 0;
   const distance = driven90.byTruck.get(id) ?? 0;
   const economy = f.economy(distance, fuel90._sum.liters ?? 0);
   const stale = pingStale(truck.lastPingAt);
@@ -344,12 +349,12 @@ async function OverviewTab({ truck, now, editable, showMoney, prompts, attention
         }>
           <div className="grid grid-cols-2 gap-px bg-line sm:grid-cols-3 lg:grid-cols-6">
             <Metric icon={<Gauge />} label="Speed" value={truck.speedKmh == null ? "—" : f.number(truck.speedKmh)} unit={truck.speedKmh == null ? undefined : f.labels.speed}
-              hint={truck.speedKmh == null ? "no live data" : truck.speedKmh > 1 ? "Moving" : "Stopped"} />
+              hint={truck.speedKmh == null ? "no live data" : `${truck.speedKmh > 1 ? "Moving" : "Stopped"}${truck.pingSource === "TRACKPRO" ? " · ≈ from GPS" : ""}`} />
             <Metric icon={<Fuel />} label="Fuel" value={truck.fuelPct == null ? "—" : `${Math.round(truck.fuelPct)}`} unit={truck.fuelPct == null ? undefined : "%"}
-              hint={truck.fuelPct == null ? "not recorded" : `≈ ${f.number((truck.fuelPct / 100) * truck.fuelCapacityL)} of ${f.number(truck.fuelCapacityL)} ${f.labels.volume}`}
+              hint={truck.fuelPct == null ? "not recorded" : `≈ ${f.number((truck.fuelPct / 100) * truck.fuelCapacityL)} of ${f.number(truck.fuelCapacityL)} ${f.labels.volume}${eld?.defPct != null ? ` · DEF ${Math.round(eld.defPct)}%` : ""}`}
               bar={truck.fuelPct == null ? undefined : { value: truck.fuelPct / 100, tone: fuelTone(truck.fuelPct) }} />
             <Metric icon={<Power />} label="Engine" value={truck.engineOn == null ? "—" : truck.engineOn ? "On" : "Off"} tone={truck.engineOn ? "ok" : "neutral"}
-              hint={truck.fuelEconomy ? `${f.economyText(truck.fuelEconomy)} rolling` : undefined} />
+              hint={eld?.driverName ? `ELD driver ${eld.driverName}` : truck.fuelEconomy ? `${f.economyText(truck.fuelEconomy)} rolling` : undefined} />
             <Metric icon={<MapPin />} label="Location" value={truck.locationName ?? "Unknown"} small hint={hasPosition ? `${truck.lat!.toFixed(4)}, ${truck.lng!.toFixed(4)}` : truck.locationName ? "not on the map" : undefined} />
             <Metric icon={<Compass />} label="Heading" value={compass(truck.heading)} hint={truck.heading != null ? `${Math.round(truck.heading)}°` : undefined} />
             <Metric icon={<Radio />} label="Last update" value={truck.lastPingAt ? ago(truck.lastPingAt).replace(" ago", "") : "—"} small hint={pingSourceLabel(truck.pingSource)} tone={truck.lastPingAt && pingStale(truck.lastPingAt, 24 * 7) ? "warn" : "neutral"} />
@@ -397,6 +402,11 @@ async function OverviewTab({ truck, now, editable, showMoney, prompts, attention
               <span key="o" className="num">
                 {f.dist(truck.odometerKm)}{" "}
                 <span className={cn("font-normal", s.stale ? "text-warn" : "text-fg-subtle")}>{truck.odometerAt ? `as of ${f.date(truck.odometerAt)}` : "· not dated"}</span>
+                {gps > 0 && (
+                  <span className="block text-[11px] font-normal text-fg-subtle" title="Straight-line distance between ELD positions since this reading: a little short of the road. Not used for the oil countdown.">
+                    ≈ {f.dist(truck.odometerKm + gps)} now · +{f.dist(gps)} by GPS
+                  </span>
+                )}
               </span>
             )],
           ]} />

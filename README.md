@@ -51,12 +51,33 @@ invites and companies. Raw SQL is not scoped — don't use it for company data.
 | **Drivers** | Cleared to drive, assigned truck, dispatcher, licence and medical expiry, hold, safety score, documents |
 | **Live map** | Rolling / idle / stopped / in shop / out of service / no signal, filters, truck details |
 | **Reports** | Spend, distance, cost per distance, downtime, repairs by type and system, repeat repairs, driver charges, defects, walk-around compliance, roadside; CSV export |
-| **Settings** | Company profile, **region & units**, company documents, members and invitations, audit log |
+| **Settings** | Company profile, **region & units**, company documents, members and invitations, audit log, **integrations** (TrackPro ELD) |
 | **Fleet assistant** | Ask about the active company's fleet in plain language (Vercel AI Gateway) |
 
 Distances come from odometer readings (fuel fills, repairs, manual readings) — `src/lib/mileage.ts` — since there are
 no loads in this product. The oil-change rule is in `src/lib/service.ts`: a reading older than 14 days makes "used" a
 lower bound and shows "no recent reading" rather than "on schedule".
+
+### ELD: TrackPro
+
+Settings → Integrations (owners and admins). Paste the carrier's TrackPro integration API token; FleetCore checks it
+against TrackPro, stores it encrypted (AES-GCM keyed from `AUTH_SECRET`, `src/lib/secret-box.ts`) and shows only its
+last characters. TrackPro's API (`GET https://api.trackproeld.com/logger/integrations/access/trucks`, version 2 of
+https://trackproeld.com/docs) gives each truck's position, place, direction, time of the fix, fuel and DEF level and the
+driver logged in, but **no speed and no odometer**. So `src/lib/eld/sync.ts`:
+
+- matches ELD vehicles to trucks by VIN, then unit number (leading zeros ignored); a match can be picked by hand;
+- writes position, place, heading, fuel and the fix time onto the truck (`pingSource = TRACKPRO`, so the live map treats
+  it as a tracker);
+- works speed out from the last two fixes, and adds up the straight-line distance between fixes since the truck's last
+  odometer reading (`EldUnit.gpsDistance`, shown as "≈ +312 mi by GPS"). It never overwrites the odometer: the oil
+  countdown stays on real readings;
+- reads TrackPro's zone-less timestamps as UTC or company time, worked out on the first sync (changeable on the page).
+
+A sync runs at most once a minute per company: after any page view (`after()` in the app layout), on each live-map poll
+(`/api/fleet`), from "Sync now", and from `/api/cron/eld` (Vercel Cron once a day on the Hobby plan; it needs
+`Authorization: Bearer $CRON_SECRET`, so an outside scheduler can call it more often). `TRACKPRO_API_BASE` points the
+client at a stand-in server for local testing.
 
 ### Units, time zone and currency
 
@@ -103,7 +124,7 @@ it elsewhere):
 2. Add a **new** Neon database from the Vercel Marketplace (sets `DATABASE_URL`, `DATABASE_URL_UNPOOLED`) and a private
    Blob store (`BLOB_READ_WRITE_TOKEN`).
 3. Set `AUTH_SECRET` (random 32-byte hex) and `DEMO_MODE=false`; optionally `APP_URL` for invitation links.
-4. Deploy. The build runs `prisma migrate deploy`, which applies `prisma/migrations` (`0_init`, `1_shop_and_inspections`).
+4. Deploy. The build runs `prisma migrate deploy`, which applies `prisma/migrations` (`0_init` onwards).
 5. Open `/signup` to create the first account and company. Seed demo data into production only on purpose:
    `CONFIRM_SEED=yes` (it wipes the database).
 
@@ -121,7 +142,8 @@ it elsewhere):
 |---|---|
 | `DATABASE_URL`, `DATABASE_URL_UNPOOLED` | Neon integration of this project; local cluster (`.env.local`) |
 | `BLOB_READ_WRITE_TOKEN` | Blob store of this project |
-| `AUTH_SECRET` | Random 32-byte hex |
+| `AUTH_SECRET` | Random 32-byte hex (also keys the encrypted ELD tokens: changing it means pasting them again) |
+| `CRON_SECRET` | Random; Vercel Cron sends it to `/api/cron/eld` |
 | `DEMO_MODE` | `true` locally, `false` in production |
 | `APP_URL` | Optional, base URL for invitation links |
 | `AI_GATEWAY_API_KEY`, `ASSISTANT_MODEL` | Optional locally; OIDC on Vercel |

@@ -146,7 +146,7 @@ export function compass(deg: number | null | undefined) {
   return DIRS[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
 }
 
-const PING_SOURCE_LABELS: Record<string, string> = { MANUAL: "Manual update", DEVICE: "GPS device", SAMSARA: "Samsara" };
+const PING_SOURCE_LABELS: Record<string, string> = { MANUAL: "Manual update", DEVICE: "GPS device", SAMSARA: "Samsara", TRACKPRO: "TrackPro ELD" };
 
 /** Where the last position came from. Positions recorded before this workspace existed show as "Recorded position". */
 export function pingSourceLabel(src: string | null | undefined) {

@@ -1,4 +1,6 @@
 import { cookies } from "next/headers";
+import { after } from "next/server";
+import { syncCompanyEld } from "@/lib/eld/sync";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { getSessionContext, listWorkspaces } from "@/lib/session";
@@ -13,6 +15,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const workspaces = await listWorkspaces(accounts);
   const navOpen = jar.get(NAV_COOKIE)?.value !== "rail";
   const active = { userId: user.id, companyId: user.company.id, companyName: user.company.name, color: user.company.color, role: user.role, email: user.email };
+  // ELD positions refresh while people use the app: at most once a minute per company, after the page is sent.
+  const companyId = user.company.id;
+  after(() => syncCompanyEld(companyId).catch((e) => console.error("eld sync failed", e)));
 
   return (
     // Keyed by company: switching company remounts the shell, so no state (open menus, drafts) crosses over.

@@ -64,6 +64,7 @@ export const NAV: NavSection[] = [
     items: [
       { href: "/admin/company", label: "Company profile", icon: "Landmark", perm: "company.manage", shortcut: "g c", description: "Name, units, time zone, documents" },
       { href: "/admin/members", label: "Members", icon: "ShieldCheck", perm: "members.manage", description: "Who works in this company and their role" },
+      { href: "/admin/integrations", label: "Integrations", icon: "Plug", perm: "company.manage", description: "TrackPro ELD: live positions, fuel, drivers" },
       { href: "/admin/audit", label: "Audit log", icon: "ScrollText", perm: "audit.view" },
     ],
   },
@@ -72,7 +73,7 @@ export const NAV: NavSection[] = [
 /** Breadcrumb titles for route segments that aren't nav items. */
 export const SEGMENT_LABELS: Record<string, string> = {
   new: "New", edit: "Edit", "work-orders": "Repairs", trailers: "Trailers", account: "My account", admin: "Company",
-  company: "Company profile", members: "Members", audit: "Audit log", alerts: "Needs attention", oil: "Oil & PM",
+  company: "Company profile", members: "Members", audit: "Audit log", integrations: "Integrations", alerts: "Needs attention", oil: "Oil & PM",
   defects: "Defects", roadside: "Roadside", vendors: "Vendors", inspections: "Pre-trip board",
 };
 

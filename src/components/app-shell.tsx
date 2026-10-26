@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   LayoutDashboard, Map, Truck, Container, Wrench, ClipboardList, Users, BarChart3, Landmark, ShieldCheck, ScrollText, Settings,
-  Droplet, Store, ClipboardCheck, TriangleAlert, ShieldAlert,
+  Droplet, Store, ClipboardCheck, TriangleAlert, ShieldAlert, Plug,
   Bell, Search, Menu, X, LogOut, UserCircle, PanelLeftClose, PanelLeftOpen, ChevronRight, Palette, Package, UserPlus, LayoutGrid,
   type LucideIcon,
 } from "lucide-react";
@@ -31,7 +31,7 @@ import type { CompanyLocale } from "@/lib/locale";
 
 const ICONS: Record<string, LucideIcon> = {
   LayoutDashboard, Map, Truck, Container, Wrench, ClipboardList, Users, BarChart3, Landmark, ShieldCheck, ScrollText, Settings,
-  Droplet, Store, ClipboardCheck, TriangleAlert, ShieldAlert,
+  Droplet, Store, ClipboardCheck, TriangleAlert, ShieldAlert, Plug,
 };
 
 type ShellUser = { name: string; email: string; role: ActiveWorkspace["role"] };

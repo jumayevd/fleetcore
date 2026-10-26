@@ -16,6 +16,8 @@ export type OilRowData = {
   driverName: string | null;
   odometerKm: number;
   odometerAt: string | null;
+  /** Driven by GPS since that reading (ELD, straight line between positions): shown with ≈, never used for the countdown. */
+  gpsDistance: number;
   pmIntervalKm: number;
   lastPmKm: number | null;
   lastPmAt: string | null;
@@ -90,6 +92,11 @@ export function OilRow({ t, editable, highlighted, now, types }: {
           {raised ? "raised to the last change" : s.readingAt ? `as of ${f.day(s.readingAt)}` : "no reading date"}
           {s.stale && editable && !raised && <> · <Link href={readingsHref(t.id)} className="font-medium hover:underline">get reading</Link></>}
         </p>
+        {t.gpsDistance > 0 && !raised && (
+          <p className="num text-[11px] text-fg-subtle" title="Driven since this reading by ELD GPS (straight line, a little short of the road). Enter a real reading to move the oil countdown.">
+            ≈ +{f.dist(t.gpsDistance)} by GPS
+          </p>
+        )}
       </td>
       <td className="whitespace-nowrap">
         <span className="num">{f.dist(s.interval)}</span>

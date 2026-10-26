@@ -18,7 +18,7 @@ import { currentCompanyId } from "./tenant";
 const SCOPED = new Set([
   "Driver", "Truck", "Trailer", "WorkOrder", "FuelLog", "Document", "AuditLog", "AppSetting",
   "TruckType", "Vendor", "WorkOrderLine", "WorkOrderEvent", "WalkAround", "WalkAroundRating", "Defect",
-  "RoadsideInspection", "RoadsideViolation",
+  "RoadsideInspection", "RoadsideViolation", "EldConnection", "EldUnit",
 ]);
 
 const WHERE_OPS = new Set([
@@ -26,7 +26,7 @@ const WHERE_OPS = new Set([
   "update", "updateMany", "updateManyAndReturn", "delete", "deleteMany", "upsert",
 ]);
 
-type Ref = "driver" | "truck" | "trailer" | "workOrder" | "truckType" | "vendor" | "walkAround" | "roadside";
+type Ref = "driver" | "truck" | "trailer" | "workOrder" | "truckType" | "vendor" | "walkAround" | "roadside" | "eldConnection";
 /** Foreign keys per model that must stay inside the company. */
 const REFS: Record<string, Record<string, Ref>> = {
   Truck: { driverId: "driver", truckTypeId: "truckType" },
@@ -41,6 +41,7 @@ const REFS: Record<string, Record<string, Ref>> = {
   Defect: { truckId: "truck", trailerId: "trailer", walkAroundId: "walkAround", workOrderId: "workOrder" },
   RoadsideInspection: { driverId: "driver", truckId: "truck", trailerId: "trailer" },
   RoadsideViolation: { inspectionId: "roadside" },
+  EldUnit: { connectionId: "eldConnection", truckId: "truck" },
 };
 
 function countIn(ref: Ref, id: string, companyId: string) {
@@ -54,6 +55,7 @@ function countIn(ref: Ref, id: string, companyId: string) {
     case "vendor": return rootDb.vendor.count({ where });
     case "walkAround": return rootDb.walkAround.count({ where });
     case "roadside": return rootDb.roadsideInspection.count({ where });
+    case "eldConnection": return rootDb.eldConnection.count({ where });
   }
 }
 

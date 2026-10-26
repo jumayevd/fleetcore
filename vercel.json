@@ -4,5 +4,11 @@
   "buildCommand": "prisma generate && prisma migrate deploy && next build",
   "regions": [
     "fra1"
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/eld",
+      "schedule": "0 11 * * *"
+    }
   ]
 }
