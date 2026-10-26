@@ -65,14 +65,17 @@ export default async function RepairsPage({ searchParams }: PageProps<"/maintena
       {node}
     </Link>
   );
+  // All comes first and is where the page opens.
   const pills: { key: string; label: string; href: string; count?: number }[] = [
+    { key: "all", label: "All", href: href({ view: "all" }), count: counts.all },
     { key: "active", label: "Active", href: href({ view: "active" }), count: counts.active },
     { key: "completed", label: "Completed", href: href({ view: "completed" }), count: counts.completed },
-    { key: "all", label: "All", href: href({ view: "all" }) },
   ];
   if (!["active", "completed", "all"].includes(filters.view)) pills.splice(1, 0, { key: filters.view, label: REPAIR_VIEW_LABELS[filters.view], href: href({}) });
 
-  const emptyTitle = narrowed ? "Nothing matches these filters" : filters.view === "active" ? "No repairs open" : `No ${REPAIR_VIEW_LABELS[filters.view].toLowerCase()} repairs`;
+  const emptyTitle = narrowed ? "Nothing matches these filters"
+    : filters.view === "all" ? "No repairs yet"
+      : filters.view === "active" ? "No repairs open" : `No ${REPAIR_VIEW_LABELS[filters.view].toLowerCase()} repairs`;
   const emptyDescription = narrowed
     ? "Clear a filter or the search to see more."
     : editable ? "Create a repair to book a unit into a shop, or log work that is already done." : "Repair orders will appear here as the shop team opens them.";

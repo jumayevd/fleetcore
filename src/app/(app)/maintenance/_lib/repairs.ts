@@ -37,9 +37,12 @@ export type RepairFilters = {
 
 type SP = Record<string, string | string[] | undefined>;
 
+/** Repairs opens on every repair; Active, Completed and the tiles narrow it down. */
+export const DEFAULT_REPAIR_VIEW: RepairView = "all";
+
 export function parseRepairFilters(sp: SP): RepairFilters {
   const raw = str(sp.status);
-  const view: RepairView = raw && (REPAIR_VIEWS as readonly string[]).includes(raw) ? (raw as RepairView) : raw ? LEGACY_STATUS[raw] ?? "active" : "active";
+  const view: RepairView = raw && (REPAIR_VIEWS as readonly string[]).includes(raw) ? (raw as RepairView) : raw ? LEGACY_STATUS[raw] ?? DEFAULT_REPAIR_VIEW : DEFAULT_REPAIR_VIEW;
   const kind = str(sp.kind);
   const type = str(sp.type);
   const payer = str(sp.payer);
@@ -59,7 +62,7 @@ export function parseRepairFilters(sp: SP): RepairFilters {
 
 /** The filters as query parameters (to build links and the export URL). */
 export const filterQuery = (f: RepairFilters) => ({
-  status: f.view === "active" ? undefined : f.view, kind: f.kind, shop: f.shop, unit: f.unit, type: f.type, payer: f.payer, q: f.q, told: f.told, stage: f.stage,
+  status: f.view === DEFAULT_REPAIR_VIEW ? undefined : f.view, kind: f.kind, shop: f.shop, unit: f.unit, type: f.type, payer: f.payer, q: f.q, told: f.told, stage: f.stage,
 });
 
 const ACTIVE = ["DRAFT", "OPEN", "IN_PROGRESS"];
@@ -147,16 +150,17 @@ export const unitDriver = (w: Pick<RepairRow, "truck" | "trailer">) => w.truck?.
 
 /** Tile counts (every repair, not just the filtered ones). */
 export async function repairCounts(now: Date, todayStart: Date, monthStart: Date) {
-  const [byStatus, overdue, completedMonth, notTold] = await Promise.all([
+  const [byStatus, overdue, completedMonth, notTold, all] = await Promise.all([
     db.workOrder.groupBy({ by: ["status"], where: { voidedAt: null }, _count: { _all: true } }),
     db.workOrder.count({ where: overdueWhere(now, todayStart) }),
     db.workOrder.count({ where: { status: "DONE", voidedAt: null, completedAt: { gte: monthStart } } }),
     db.workOrder.count({ where: notToldWhere }),
+    db.workOrder.count({ where: viewWhere("all", now, todayStart) }),
   ]);
   const of = (s: string) => byStatus.find((b) => b.status === s)?._count._all ?? 0;
   return {
     scheduled: of("DRAFT") + of("OPEN"), shop: of("IN_PROGRESS"), active: of("DRAFT") + of("OPEN") + of("IN_PROGRESS"),
-    completed: of("DONE"), completedMonth, overdue, notTold,
+    completed: of("DONE"), completedMonth, overdue, notTold, all,
   };
 }
 
