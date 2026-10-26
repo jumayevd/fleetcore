@@ -23,12 +23,15 @@ const WO_STATUS: Record<string, string> = { DRAFT: "draft", OPEN: "booked", IN_P
 const MAX_ISSUES = 3;
 
 function stateLabel(r: BoardRow) {
+  const unseen = r.marks.unseen ? ` · ${r.marks.unseen} not seen` : "";
   switch (r.state) {
     case "out_of_service": return "Out of service";
-    case "review": return "To review";
-    case "issues": return plural(r.defects.filter((d) => d.status === "OPEN").length, "issue");
+    case "review": return r.walk?.reviewedAt ? `To review${unseen}` : "To review";
+    case "issues": return r.cats.issues
+      ? `${plural(r.marks.soon + r.marks.now, "issue")}${unseen}`
+      : plural(r.defects.filter((d) => d.status === "OPEN").length, "issue");
     case "repaired": return "Repaired · to confirm";
-    case "missing": return "Nothing sent";
+    case "missing": return r.walk?.video === "MISSING" ? "Missing" : r.walk?.video === "RECEIVED" ? "Nothing seen" : "Nothing sent";
     case "partial": return `Reviewed · ${r.walk?.unseen ?? 0} not seen`;
     case "clean": return "Clean";
     case "not_expected": return r.truck.status === "MAINTENANCE" ? "In the shop" : r.driver ? "Not expected" : "No driver";
@@ -37,12 +40,13 @@ function stateLabel(r: BoardRow) {
 
 function videoLine(r: BoardRow, f: Formatter) {
   const w = r.walk;
-  if (w?.reviewedAt) return `Reviewed ${f.day(w.reviewedAt)}${w.reviewedBy ? ` by ${w.reviewedBy.split(" ")[0]}` : ""}`;
+  if (w?.video === "RECEIVED" && w.reviewedAt && r.marks.total && r.marks.unseen === r.marks.total) return `Nothing could be seen · reviewed ${f.day(w.reviewedAt)}`;
+  if (w?.reviewedAt && w.video === "RECEIVED") return `Reviewed ${f.day(w.reviewedAt)}${w.reviewedBy ? ` by ${w.reviewedBy.split(" ")[0]}` : ""}`;
   if (w?.video === "RECEIVED") return `Video in ${w.receivedAt ? f.dateTime(w.receivedAt) : ""}`.trim();
   if (w?.video === "MISSING") return "Marked missing";
   if (r.expected) return "No video yet";
   if (r.truck.status === "MAINTENANCE") return "In the shop, no video expected";
-  return r.driver ? "" : "No driver, no video expected";
+  return "No video expected";
 }
 
 function RowAction({ r, week, show, f, sender }: { r: BoardRow; week: Week; show: BoardFilter; f: Formatter; sender: string }) {
@@ -171,13 +175,14 @@ export default async function PreTripBoard({ searchParams }: PageProps<"/inspect
   const weekParam = week.isCurrent ? undefined : week.key;
   const { rows, counts } = await loadBoard(week, now);
 
+  // Each counter lists exactly the trucks it counts (a truck can be in two: not seen + soon/now).
   const filtered: Record<BoardFilter, BoardRow[]> = {
     needs: rows.filter(needsSomething),
-    missing: rows.filter((r) => r.expected && r.walk?.video !== "RECEIVED"),
-    review: rows.filter((r) => r.walk?.video === "RECEIVED" && !r.walk.reviewedAt),
-    issues: rows.filter((r) => r.defects.length > 0),
-    clean: rows.filter((r) => r.state === "clean"),
-    all: rows,
+    missing: rows.filter((r) => r.cats.nothingSent),
+    review: rows.filter((r) => r.cats.review),
+    issues: rows.filter((r) => r.cats.issues),
+    clean: rows.filter((r) => r.cats.clean),
+    all: rows.filter((r) => r.cats.sent),
   };
   const main = filtered[show];
   const rest = show === "needs" ? rows.filter((r) => !needsSomething(r)) : [];
@@ -257,30 +262,31 @@ export default async function PreTripBoard({ searchParams }: PageProps<"/inspect
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         <Counter href={href("missing")} active={show === "missing"}>
-          <Stat label="Nothing sent" value={counts.missing} tone={missingTone} hint={week.isCurrent ? `Due by ${due}. Chase the driver.` : "Never came in that week"} />
+          <Stat label="Nothing sent" value={counts.missing} tone={missingTone}
+            hint={week.isCurrent ? `Missing, not marked or nothing seen · due by ${due}` : "Missing, never marked, or nothing could be seen"} />
         </Counter>
         <Counter href={href("review")} active={show === "review"}>
-          <Stat label="To review" value={counts.review} tone={counts.review ? "info" : "ok"} hint="Video in, nobody has looked yet" />
+          <Stat label="To review" value={counts.review} tone={counts.review ? "info" : "ok"} hint="Video in and not reviewed, or something not seen" />
         </Counter>
         <Counter href={href("issues")} active={show === "issues"}>
-          <Stat label="Open issues" value={counts.openDefects} tone={counts.holdingTrucks ? "danger" : counts.openDefects ? "warn" : "ok"}
+          <Stat label="Open issues" value={counts.issues} tone={counts.holdingTrucks ? "danger" : counts.issues ? "warn" : "ok"}
             hint={counts.holdingTrucks
-              ? `${plural(counts.holdingTrucks, "truck")} held${counts.toConfirm ? ` · ${counts.toConfirm} to confirm` : ""}`
-              : counts.toConfirm ? `${counts.toConfirm} repaired, to confirm` : "No open defects on any truck"} />
+              ? `Marked soon or now · ${plural(counts.holdingTrucks, "truck")} held`
+              : counts.toConfirm ? `Marked soon or now · ${counts.toConfirm} repaired, to confirm` : "Something marked soon or now"} />
         </Counter>
         <Counter href={href("clean")} active={show === "clean"}>
-          <Stat label="Clean" value={counts.clean} hint="Reviewed, every component good, nothing open" />
+          <Stat label="Clean" value={counts.clean} hint="Every item marked good" />
         </Counter>
         <Counter href={href("all")} active={show === "all"}>
           <Stat label="Drivers sent" value={<>{counts.sent}<span className="text-[15px] font-medium text-fg-subtle">/{counts.expected}</span></>}
-            hint="Videos received out of the active trucks with a driver" />
+            hint="Videos marked received, whatever the marks" />
         </Counter>
       </div>
 
       <Card className="mt-4" flush title={
         <span className="flex items-center gap-1.5">
-          {show === "needs" ? "Needs a look" : show === "missing" ? "Nothing sent" : show === "review" ? "To review" : show === "issues" ? "With open issues" : show === "clean" ? "Clean this week" : "Every truck"}
-          <InfoTip>One row per truck. Out of service first, then videos to review, open issues, repairs to confirm and videos still missing. A Now defect holds the truck until someone confirms the repair.</InfoTip>
+          {show === "needs" ? "Needs a look" : show === "missing" ? "Nothing sent" : show === "review" ? "To review" : show === "issues" ? "Open issues" : show === "clean" ? "Clean this week" : "Drivers sent"}
+          <InfoTip>One row per truck. Received videos count as sent whatever the marks. All good is clean; any soon or now is an open issue; any not seen is to review (both, when a video has both); all not seen, missing or never marked is nothing sent. A Now defect holds the truck until someone confirms the repair.</InfoTip>
         </span>
       } actions={show !== "needs" && <Link href={boardHref({ week: weekParam })} scroll={false} className="text-[12px] text-fg-muted hover:text-fg">Show what needs a look</Link>}>
         {main.length === 0 ? (

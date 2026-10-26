@@ -9,6 +9,7 @@ import { dateOnly } from "./locale";
 import { DOC_KIND_LABELS } from "./documents";
 import { OIL_DUE_SOON, defectLabel, roLabel, serviceStatus } from "./service";
 import { PTI_COMPONENT_LABELS, REPAIR_STAGE_LABELS, humanize } from "./constants";
+import { categorize, countMarks } from "./pti-shared";
 import { NO_SIGNAL_MS, isTrackerSource, sourceLabel } from "@/components/map/fleet-status";
 import {
   DECISION_CATEGORIES, DECISION_CATEGORY_HINTS, DECISION_CATEGORY_LABELS, isDecisionCategory, sortDecisions,
@@ -133,7 +134,7 @@ const loadToday = cache(async () => {
         owner: { select: { name: true } }, workOrder: { select: { id: true, number: true, status: true } },
       },
     }),
-    db.walkAround.findMany({ where: { weekStart: dateOnly(week.key) }, select: { truckId: true, video: true, receivedAt: true, reviewedAt: true } }),
+    db.walkAround.findMany({ where: { weekStart: dateOnly(week.key) }, select: { truckId: true, video: true, receivedAt: true, reviewedAt: true, ratings: { select: { rating: true } } } }),
     db.workOrder.findMany({
       where: { status: { in: ["DRAFT", "OPEN", "IN_PROGRESS"] }, voidedAt: null },
       orderBy: [{ promisedAt: { sort: "asc", nulls: "last" } }, { scheduledAt: "asc" }],
@@ -283,7 +284,7 @@ export type TodayTiles = {
   ptiUnassigned: number;
   /** Trucks held out of service by a defect. */
   trucksHeld: number;
-  /** Active trucks with a driver (not in the shop) that should send a walk-around this week. */
+  /** Trucks on the board this week, and the pre-trip board's Nothing sent / To review counters (same rules: categorize in pti.ts). */
   walkExpected: number; walkMissing: number; walkToReview: number;
   /** Last day of this walk-around week (company time). */
   walkDue: Date;
@@ -553,32 +554,35 @@ export const getToday = cache(async (): Promise<Today> => {
   const walkDue = new Date(weekEnd.getTime() - DAY / 2); // noon of the last day: safe across DST
   const daysLeft = Math.max(0, Math.ceil((weekEnd.getTime() - now.getTime()) / DAY));
   const walkByTruck = new Map(walks.map((w) => [w.truckId, w]));
-  const walkToReview = walks.filter((w) => w.video === "RECEIVED" && !w.reviewedAt).length;
-  let walkExpected = 0, walkMissing = 0;
+  let walkExpected = 0, walkMissing = 0, walkToReview = 0;
   for (const t of trucks) {
-    if (t.status !== "ACTIVE" || !t.driver || truckInShop.has(t.id)) continue;
-    walkExpected++;
     const w = walkByTruck.get(t.id);
+    // Same as the pre-trip board: a truck on the road is expected (driver or not); any truck someone marked counts too.
+    const expected = (t.status === "ACTIVE" && !truckInShop.has(t.id)) || (t.status === "OUT_OF_SERVICE" && heldTrucks.has(t.id));
+    if (!expected && !w) continue;
+    walkExpected++;
+    const marks = countMarks(w?.ratings ?? []);
+    const cats = categorize(w?.video, Boolean(w?.reviewedAt), marks, expected);
     const review = `/inspections?review=${t.id}`;
     const unit = truckUnit(t);
     const driver = driverLink(t.driver);
-    if (w?.video === "RECEIVED") {
-      if (!w.reviewedAt) {
-        const waited = w.receivedAt ? daysBetween(w.receivedAt, now) : 0;
-        push({
-          key: `walk:${t.id}`, category: "pti", priority: waited >= 2 ? "high" : "normal", unit, driver, issue: "Walk-around to review",
-          detail: join(w.receivedAt ? `video sent ${f.weekday(w.receivedAt)}` : "video sent", "nobody has looked yet"),
-          action: { label: "Open review", href: review }, view: { label: "Open board", href: "/inspections" },
-          age: waited ? `${waited} d` : "today", since: w.receivedAt,
-        });
-      }
-      continue;
-    }
-    walkMissing++;
-    if (w?.video === "MISSING" || daysLeft <= WALK_CHASE_DAYS_LEFT) {
+    if (cats.review) {
+      walkToReview++;
+      const waited = w?.receivedAt ? daysBetween(w.receivedAt, now) : 0;
       push({
-        key: `walk:${t.id}`, category: "pti", priority: daysLeft <= 1 ? "high" : "normal", unit, driver, issue: "Walk-around not sent",
-        detail: join(`due ${f.weekday(walkDue)}`, t.driver.dispatcher ? `dispatcher ${t.driver.dispatcher}` : null),
+        key: `walk:${t.id}`, category: "pti", priority: waited >= 2 ? "high" : "normal", unit, driver, issue: "Walk-around to review",
+        detail: w?.reviewedAt ? `${marks.unseen} not seen on the video` : join(w?.receivedAt ? `video sent ${f.weekday(w.receivedAt)}` : "video sent", "nobody has looked yet"),
+        action: { label: "Open review", href: review }, view: { label: "Open board", href: "/inspections" },
+        age: waited ? `${waited} d` : "today", since: w?.receivedAt ?? week.at,
+      });
+    }
+    if (!cats.nothingSent) continue;
+    walkMissing++;
+    if (w?.video === "MISSING" || w?.video === "RECEIVED" || daysLeft <= WALK_CHASE_DAYS_LEFT) {
+      push({
+        key: `walk:${t.id}`, category: "pti", priority: daysLeft <= 1 ? "high" : "normal", unit, driver,
+        issue: w?.video === "RECEIVED" ? "Walk-around: nothing could be seen" : "Walk-around not sent",
+        detail: join(`due ${f.weekday(walkDue)}`, t.driver?.dispatcher ? `dispatcher ${t.driver.dispatcher}` : null),
         action: { label: "Chase driver", href: review }, view: { label: "Open board", href: "/inspections" },
         age: daysLeft ? `${daysLeft} d left` : "due today", since: week.at,
       });

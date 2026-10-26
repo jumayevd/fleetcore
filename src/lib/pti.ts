@@ -5,8 +5,11 @@ import { DEFECT_DUE_DAYS } from "./constants";
 import { dateOnly, type Formatter } from "./locale";
 import { roLabel } from "./service";
 import {
-  BOARD_STATE_RANK, DAY_MS, NEEDS_STATES, byUnit, daysBetween, type BoardAction, type BoardState,
+  BOARD_STATE_RANK, DAY_MS, NEEDS_STATES, byUnit, categorize, countMarks, daysBetween,
+  type BoardAction, type BoardCategories, type BoardMarks, type BoardState,
 } from "./pti-shared";
+
+export type { BoardCategories, BoardMarks };
 
 /*
  * Pre-trip walk-arounds and defects: the server side of the inspections module.
@@ -167,12 +170,14 @@ export type BoardDefect = {
 export type BoardRow = {
   truck: { id: string; unitNumber: string; status: string; make: string; model: string };
   driver: { id: string; name: string; phone: string | null; dispatcher: string | null } | null;
-  /** Has a driver and is on the road (or held by a defect), so a video is expected this week. */
+  /** On the road (or held by a defect), so a video is expected this week, driver or not. */
   expected: boolean;
   walk: {
     id: string; video: string; receivedAt: Date | null; reviewedAt: Date | null; reviewedBy: string | null;
     result: string | null; unseen: number;
   } | null;
+  marks: BoardMarks;
+  cats: BoardCategories;
   /** The latest reviewed walk-around up to this week. */
   last: { weekStart: Date; reviewedAt: Date; reviewedBy: string | null; result: string | null } | null;
   defects: BoardDefect[];
@@ -182,8 +187,11 @@ export type BoardRow = {
 };
 
 export type BoardCounts = {
-  missing: number; review: number; openDefects: number; holdingTrucks: number; toConfirm: number;
-  clean: number; sent: number; expected: number;
+  /** Trucks in each counter (see BoardCategories). */
+  missing: number; review: number; issues: number; clean: number; sent: number;
+  /** Trucks on the board this week: expected to send, or marked either way. */
+  expected: number;
+  openDefects: number; holdingTrucks: number; toConfirm: number;
 };
 
 /** Every truck that is not retired, with where it stands for `week`. */
@@ -199,7 +207,7 @@ export async function loadBoard(week: Week, now = new Date()): Promise<{ rows: B
       where: { weekStart },
       select: {
         id: true, truckId: true, video: true, receivedAt: true, reviewedAt: true, result: true, reviewedBy: { select: { name: true } },
-        _count: { select: { ratings: { where: { rating: "UNSEEN" } } } },
+        ratings: { select: { rating: true } },
       },
     }),
     db.walkAround.findMany({
@@ -237,45 +245,50 @@ export async function loadBoard(week: Week, now = new Date()): Promise<{ rows: B
     const holding = list.some((d) => d.holdsUnit);
     const open = list.filter((d) => d.status === "OPEN").length;
     const repaired = list.filter((d) => d.status === "REPAIRED").length;
-    const received = w?.video === "RECEIVED";
     const reviewed = Boolean(w?.reviewedAt);
-    // On the road, or held by a defect (its video shows the repair). Parked out of service by hand or in the shop: excused.
-    const expected = Boolean(t.driver) && (t.status === "ACTIVE" || (t.status === "OUT_OF_SERVICE" && holding));
-    const unseen = w?._count.ratings ?? 0;
+    // On the road, or held by a defect (its video shows the repair), with or without a driver on record. In the shop
+    // or parked out of service by hand: excused, unless someone marks the video anyway.
+    const expected = t.status === "ACTIVE" || (t.status === "OUT_OF_SERVICE" && holding);
+    const marks = countMarks(w?.ratings ?? []);
+    const cats = categorize(w?.video, reviewed, marks, expected);
+    // The badge follows the counters: what needs doing first.
     const state: BoardState = holding ? "out_of_service"
-      : received && !reviewed ? "review"
-        : open ? "issues"
-          : repaired ? "repaired"
-            : expected && !received ? "missing"
-              : reviewed && unseen ? "partial"
-                : reviewed ? "clean"
-                  : "not_expected";
-    const action: BoardAction = received && !reviewed ? "review"
+      : cats.review && !reviewed ? "review"
+        : cats.issues ? "issues"
+          : cats.review ? "review"
+            : repaired ? "repaired"
+              : cats.nothingSent ? "missing"
+                : cats.clean ? "clean"
+                  : open ? "issues"
+                    : "not_expected";
+    const action: BoardAction = cats.review && !reviewed ? "review"
       : repaired ? "confirm"
-        : expected && !received ? "chase"
-          : open ? "review"
+        : cats.nothingSent ? "chase"
+          : cats.review || cats.issues || open ? "review"
             : null;
     return {
       truck: { id: t.id, unitNumber: t.unitNumber, status: t.status, make: t.make, model: t.model },
       driver: t.driver,
       expected,
-      walk: w ? { id: w.id, video: w.video, receivedAt: w.receivedAt, reviewedAt: w.reviewedAt, reviewedBy: w.reviewedBy?.name ?? null, result: w.result, unseen } : null,
+      walk: w ? { id: w.id, video: w.video, receivedAt: w.receivedAt, reviewedAt: w.reviewedAt, reviewedBy: w.reviewedBy?.name ?? null, result: w.result, unseen: marks.unseen } : null,
+      marks, cats,
       last: l?.reviewedAt ? { weekStart: l.weekStart, reviewedAt: l.reviewedAt, reviewedBy: l.reviewedBy?.name ?? null, result: l.result } : null,
       defects: list, holding, state, action,
     };
   });
   rows.sort((a, b) => BOARD_STATE_RANK[a.state] - BOARD_STATE_RANK[b.state] || byUnit(a.truck.unitNumber, b.truck.unitNumber));
 
-  const expectedRows = rows.filter((r) => r.expected);
+  const n = (pick: (c: BoardCategories) => boolean) => rows.filter((r) => pick(r.cats)).length;
   const counts: BoardCounts = {
-    missing: expectedRows.filter((r) => r.walk?.video !== "RECEIVED").length,
-    review: rows.filter((r) => r.walk?.video === "RECEIVED" && !r.walk.reviewedAt).length,
-    openDefects: rows.reduce((n, r) => n + r.defects.length, 0),
+    missing: n((c) => c.nothingSent),
+    review: n((c) => c.review),
+    issues: n((c) => c.issues),
+    clean: n((c) => c.clean),
+    sent: n((c) => c.sent),
+    expected: rows.filter((r) => r.expected || r.walk).length,
+    openDefects: rows.reduce((sum, r) => sum + r.defects.length, 0),
     holdingTrucks: rows.filter((r) => r.holding).length,
-    toConfirm: rows.reduce((n, r) => n + r.defects.filter((d) => d.status === "REPAIRED").length, 0),
-    clean: rows.filter((r) => r.state === "clean").length,
-    sent: expectedRows.filter((r) => r.walk?.video === "RECEIVED").length,
-    expected: expectedRows.length,
+    toConfirm: rows.reduce((sum, r) => sum + r.defects.filter((d) => d.status === "REPAIRED").length, 0),
   };
   return { rows, counts };
 }

@@ -76,6 +76,46 @@ export const NEEDS_STATES: readonly BoardState[] = ["out_of_service", "review", 
 /** The one thing to do on a board row. */
 export type BoardAction = "review" | "confirm" | "chase" | null;
 
+/** How this week's components were marked on the review (GOOD / SOON / NOW / UNSEEN). */
+export type BoardMarks = { good: number; soon: number; now: number; unseen: number; total: number };
+
+export function countMarks(ratings: readonly { rating: string }[]): BoardMarks {
+  const m: BoardMarks = { good: 0, soon: 0, now: 0, unseen: 0, total: 0 };
+  for (const r of ratings) {
+    m.total++;
+    if (r.rating === "GOOD") m.good++;
+    else if (r.rating === "SOON") m.soon++;
+    else if (r.rating === "NOW") m.now++;
+    else if (r.rating === "UNSEEN") m.unseen++;
+  }
+  return m;
+}
+
+/**
+ * The board's counters, per truck and week. A truck can be in more than one:
+ *  - sent:        the video is marked received, whatever the marks say.
+ *  - nothingSent: marked missing, not marked at all (a truck on the road), or received with every item "not seen".
+ *  - review:      received and not reviewed yet, or reviewed with at least one item "not seen" (but not all).
+ *  - issues:      reviewed with at least one item "soon" or "now".
+ *  - clean:       reviewed with every item "good".
+ * "Not seen" together with "soon"/"now" puts the truck in both To review and Open issues. The Today page counts
+ * walk-arounds with the same rule.
+ */
+export type BoardCategories = { sent: boolean; nothingSent: boolean; review: boolean; issues: boolean; clean: boolean };
+
+export function categorize(video: string | null | undefined, reviewed: boolean, marks: BoardMarks, expected: boolean): BoardCategories {
+  const received = video === "RECEIVED";
+  const rated = reviewed && marks.total > 0;
+  const allUnseen = rated && marks.unseen === marks.total;
+  return {
+    sent: received,
+    nothingSent: video === "MISSING" || (!received && expected) || (received && allUnseen),
+    review: received && (!reviewed || (rated && marks.unseen > 0 && !allUnseen)),
+    issues: received && rated && marks.soon + marks.now > 0,
+    clean: received && rated && marks.good === marks.total,
+  };
+}
+
 /** Board filters (the counters are links to them). */
 export const BOARD_FILTERS = ["needs", "missing", "review", "issues", "clean", "all"] as const;
 export type BoardFilter = (typeof BOARD_FILTERS)[number];
