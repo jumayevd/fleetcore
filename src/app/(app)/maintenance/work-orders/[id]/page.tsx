@@ -16,7 +16,8 @@ import { RepairTags } from "@/components/shop/repair-bits";
 import {
   SYSTEM_FOR_TYPE, downtime, downtimeTone, driverNotTold, payerLabel, repairStatusLabel, repairStatusTone, repairTypeLabel, resetsInspection, resetsOil, stageLabel, systemLabel,
 } from "@/components/shop/shared";
-import { addRepairNote, closeOutRepair, markDriverInformed, saveInvoice, startRepair, voidRepair } from "@/app/actions/repairs";
+import { addRepairNote, closeOutRepair, deleteRepair, markDriverInformed, saveInvoice, startRepair, voidRepair } from "@/app/actions/repairs";
+import { DeleteButton } from "@/components/delete-button";
 import { readingsHref, trailerHref, truckHref, vendorHref, vendorsHref, workOrderHref, workOrdersHref } from "../../_lib/links";
 import { StagePipeline } from "../../_components/stage-pipeline";
 import { CloseOutForm } from "../../_components/close-out-form";
@@ -92,10 +93,12 @@ export default async function RepairDetail({ params, searchParams }: PageProps<"
             {(wo.vendorRef || wo.vendor) && <span>at {wo.vendorRef ? <Link href={vendorHref(wo.vendorRef.id)} className="text-fg hover:underline">{wo.vendorRef.name}</Link> : wo.vendor}</span>}
           </span>
         }
-        actions={canWork && (
+        actions={editable && (
           <>
-            {scheduled && <ActionButton action={startRepair.bind(null, id)} variant="primary" size="md" pendingText="Saving…" title="The unit goes off the road and the downtime clock starts">Into the shop</ActionButton>}
-            <LinkButton href={`${path}/edit`} variant="secondary"><Pencil />Edit</LinkButton>
+            {canWork && scheduled && <ActionButton action={startRepair.bind(null, id)} variant="primary" size="md" pendingText="Saving…" title="The unit goes off the road and the downtime clock starts">Into the shop</ActionButton>}
+            {canWork && <LinkButton href={`${path}/edit`} variant="secondary"><Pencil />Edit</LinkButton>}
+            <DeleteButton action={deleteRepair.bind(null, id)} redirectTo={workOrdersHref({})}
+              confirm={`Delete ${roLabel(wo.number)} for good? Its lines, history and files go with it.${inShop ? ` ${unitNumber ?? "The unit"} goes back in service.` : ""}${done ? " Service dates it already moved on the truck stay as they are." : ""} This can't be undone; Void keeps it on record instead.`} />
           </>
         )}
       />

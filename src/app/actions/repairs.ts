@@ -12,8 +12,9 @@ import { PAYERS, PAYMENT_STATUSES, PAYMENT_STATUS_LABELS, REPAIR_STAGES, REPAIR_
 import { makeFormat, normalizeLocale } from "@/lib/locale";
 import { roLabel } from "@/lib/service";
 import {
-  applyWorkOrderSideEffects, costOf, createWorkOrder, logEvent, readLines, replaceLines, revalidateRepair, stampedDate, vendorFromForm, type Unit,
+  applyWorkOrderSideEffects, costOf, createWorkOrder, logEvent, readLines, releaseUnit, replaceLines, revalidateRepair, stampedDate, vendorFromForm, type Unit,
 } from "@/lib/work-orders";
+import { deleteFile } from "@/lib/storage";
 import { SYSTEM_FOR_TYPE, categoryForRepairType, repairTypeForCategory, repairTypeLabel } from "@/components/shop/shared";
 
 /*
@@ -341,6 +342,28 @@ export async function voidRepair(id: string, _: ActionState, fd: FormData): Prom
     await logEvent(id, "VOID", me.id, { body: reason });
     revalidateRepair(id, wo);
     return { ok: `${roLabel(wo.number)} is void` };
+  });
+}
+
+/**
+ * Delete a repair order for good, with its lines, history and files (opened by mistake, or twice). A unit it held in the
+ * shop is released first. Defects tied to it keep their state and lose the link; the audit log keeps a line. Changes
+ * the order already made to the truck (a reset oil interval, a new inspection date) stay: fix those on the truck.
+ */
+export async function deleteRepair(id: string): Promise<ActionState> {
+  const me = await requireUser("fleet.edit");
+  return attempt(async () => {
+    const wo = await db.workOrder.findUnique({
+      where: { id },
+      select: { number: true, title: true, status: true, truckId: true, trailerId: true, documents: { select: { storageKey: true } } },
+    });
+    if (!wo) throw new FormError("This repair order no longer exists. It may have been deleted already.");
+    if (wo.status === "IN_PROGRESS") await releaseUnit(wo, id, new Date());
+    await db.workOrder.delete({ where: { id } }); // lines, events and documents go with it
+    await Promise.all(wo.documents.map((d) => deleteFile(d.storageKey).catch(() => undefined)));
+    await audit(me.id, "delete", "work_order", null, `${roLabel(wo.number)} ${wo.title}`);
+    revalidateRepair(null, wo);
+    return { ok: `${roLabel(wo.number)} deleted` };
   });
 }
 

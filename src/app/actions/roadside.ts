@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { audit } from "@/lib/audit";
+import { deleteFile } from "@/lib/storage";
 import { attempt, fields, FormError, type ActionState } from "@/lib/action";
 import { INSPECTION_LEVELS, ROADSIDE_STATUSES } from "@/lib/constants";
 import { VIOLATION_UNITS, roadsideResult } from "@/lib/pti-shared";
@@ -143,5 +144,23 @@ export async function setRoadsideStatus(id: string, status: string): Promise<Act
     await audit(me.id, "status", "roadside", id, `${insp.reportNumber ?? "Inspection"} → ${status}`);
     revalidateRoadside(insp);
     return { ok: status === "CORRECTED" ? "Marked corrected." : status === "CLOSED" ? "Closed." : "Reopened." };
+  });
+}
+
+/** Delete an inspection with its violations and attached files (entered by mistake, or twice). The audit log keeps a line. */
+export async function deleteRoadside(id: string): Promise<ActionState> {
+  const me = await requireUser("fleet.edit");
+  return attempt(async () => {
+    const insp = await db.roadsideInspection.findUnique({
+      where: { id },
+      select: { id: true, inspectedAt: true, reportNumber: true, state: true, driverId: true, truckId: true, trailerId: true, documents: { select: { storageKey: true } } },
+    });
+    if (!insp) throw new FormError("This inspection no longer exists. It may have been deleted already.");
+    await db.roadsideInspection.delete({ where: { id } }); // violations and documents go with it
+    await Promise.all(insp.documents.map((d) => deleteFile(d.storageKey).catch(() => undefined)));
+    const label = insp.reportNumber ? `Report ${insp.reportNumber}` : `Inspection of ${insp.inspectedAt.toISOString().slice(0, 10)}`;
+    await audit(me.id, "delete", "roadside", null, `${label}${insp.state ? ` (${insp.state})` : ""}`);
+    revalidateRoadside({ ...insp, id: null });
+    return { ok: `${label} deleted` };
   });
 }

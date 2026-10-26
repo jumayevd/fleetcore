@@ -5,10 +5,11 @@ import { db } from "@/lib/db";
 import { getFormat } from "@/lib/format-server";
 import { roLabel } from "@/lib/service";
 import { Badge, PageHeader } from "@/components/ui";
-import { saveWorkOrder } from "@/app/actions/repairs";
+import { deleteRepair, saveWorkOrder } from "@/app/actions/repairs";
+import { DeleteButton } from "@/components/delete-button";
 import { SYSTEM_FOR_TYPE, repairStatusLabel, repairStatusTone } from "@/components/shop/shared";
 import { workOrderFormOptions } from "../../../_lib/data";
-import { workOrderHref } from "../../../_lib/links";
+import { workOrderHref, workOrdersHref } from "../../../_lib/links";
 import { vendorOptions } from "../../../_lib/repairs";
 import { RepairForm } from "../../../_components/repair-form";
 
@@ -38,6 +39,10 @@ export default async function EditRepair({ params }: PageProps<"/maintenance/wor
       <PageHeader
         title={<><span className="num text-fg-muted">{roLabel(wo.number)}</span> {wo.title}</>}
         subtitle={<span className="inline-flex flex-wrap items-center gap-2"><Badge value={wo.status} tone={repairStatusTone(wo)} label={repairStatusLabel(wo)} dot />{unit && <span className="num">{unit}</span>}</span>}
+        actions={
+          <DeleteButton action={deleteRepair.bind(null, id)} redirectTo={workOrdersHref({})}
+            confirm={`Delete ${roLabel(wo.number)} for good? Its lines, history and files go with it.${wo.status === "IN_PROGRESS" ? ` ${unit ?? "The unit"} goes back in service.` : ""}${wo.status === "DONE" ? " Service dates it already moved on the truck stay as they are." : ""} This can't be undone.`} />
+        }
       />
       <RepairForm
         action={saveWorkOrder.bind(null, id)}

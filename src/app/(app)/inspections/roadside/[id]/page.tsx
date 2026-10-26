@@ -12,6 +12,8 @@ import {
 import { Badge, Card, Chip, DL, EmptyState, LinkButton, PageHeader, StatusDot, Table, cn } from "@/components/ui";
 import { DocumentsPanel } from "@/components/documents/panel";
 import { RoadsideStatusButtons, ViolationToggle } from "@/components/inspections/roadside-actions";
+import { DeleteButton } from "@/components/delete-button";
+import { deleteRoadside } from "@/app/actions/roadside";
 
 export async function generateMetadata({ params }: PageProps<"/inspections/roadside/[id]">) {
   if (!(await getCurrentUser())) return {};
@@ -57,6 +59,8 @@ export default async function RoadsideDetail({ params }: PageProps<"/inspections
           <>
             <RoadsideStatusButtons id={r.id} status={r.status} uncorrected={uncorrected} />
             <LinkButton href={`/inspections/roadside/${r.id}/edit`} variant="secondary"><Pencil />Edit</LinkButton>
+            <DeleteButton action={deleteRoadside.bind(null, r.id)} redirectTo="/inspections/roadside"
+              confirm={`Delete ${r.reportNumber ? `report ${r.reportNumber}` : "this roadside inspection"} for good? ${r.violations.length ? `Its ${r.violations.length} violation${r.violations.length === 1 ? "" : "s"} and attached files go with it. ` : "Attached files go with it. "}This can't be undone.`} />
           </>
         )}
       />
