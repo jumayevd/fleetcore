@@ -11,7 +11,7 @@ import { dateOnly, makeFormat, normalizeLocale } from "@/lib/locale";
 import { defectLabel, roLabel } from "@/lib/service";
 import { companyMembers, createDefect, dueFor, resolveWeek, syncUnitHold, type HoldChange, type UnitRef } from "@/lib/pti";
 import {
-  BOARD_FILTERS, DEFECT_COMPONENTS, RATING_SEVERITY, SEVERITY_RANK, VERDICTS, boardHref, componentLabel, type Verdict,
+  BOARD_FILTERS, DEFECT_COMPONENTS, RATING_SEVERITY, SEVERITY_RANK, VERDICTS, WITHDRAWN_NOTE, boardHref, componentLabel, type Verdict,
 } from "@/lib/pti-shared";
 
 /*
@@ -85,13 +85,34 @@ export async function saveWalkAroundReview(_: ActionState, fd: FormData): Promis
     const back = { week: week.isCurrent ? undefined : week.key, show: show && (BOARD_FILTERS as readonly string[]).includes(show) ? show : undefined };
 
     if (video === "MISSING") {
-      if (existing?.reviewedAt) throw new FormError(`${truck.unitNumber}'s video for this week is already reviewed. It can't be marked missing now.`);
+      // Also after a review (it was marked received by mistake): the review is withdrawn. Defects it raised close with
+      // WITHDRAWN_NOTE (and release the truck if they held it); the marks stay, so switching back to received and
+      // saving restores the review and reopens those same defects.
+      let withdrawn: number[] = [];
+      let hold: HoldChange = { held: [], released: [] };
+      if (existing) {
+        const raised = await db.defect.findMany({ where: { walkAroundId: existing.id, status: { in: ["OPEN", "REPAIRED"] } }, select: { id: true, number: true, holdsUnit: true } });
+        if (raised.length) {
+          await db.defect.updateMany({
+            where: { id: { in: raised.map((d) => d.id) } },
+            data: { status: "CLOSED", holdsUnit: false, closedAt: now, closedById: me.id, closeNote: `${WITHDRAWN_NOTE} (week of ${f.day(week.at)})` },
+          });
+          for (const d of raised) await audit(me.id, "close", "defect", d.id, `${defectLabel(d.number)} withdrawn: ${truck.unitNumber}'s video marked missing`);
+          withdrawn = raised.map((d) => d.number);
+          hold = await syncUnitHold({ truckId }, { released: raised.some((d) => d.holdsUnit) });
+        }
+      }
       const wa = await db.walkAround.upsert({
         where,
         create: { truckId, weekStart, driverId: truck.driverId, video: "MISSING", notes },
-        update: { video: "MISSING", receivedAt: null, notes },
+        update: { video: "MISSING", receivedAt: null, result: null, reviewedAt: null, reviewedById: null, notes },
       });
-      await audit(me.id, "video_missing", "walk_around", wa.id, `${truck.unitNumber} · week of ${week.key}`);
+      await audit(me.id, "video_missing", "walk_around", wa.id, [
+        `${truck.unitNumber} · week of ${week.key}`,
+        existing?.reviewedAt ? "review withdrawn" : null,
+        withdrawn.length ? `closed ${withdrawn.map(defectLabel).join(", ")}` : null,
+        hold.released.length ? "back in service" : null,
+      ].filter(Boolean).join(" · "));
       target = boardHref({ ...back, review: nextTruck ?? undefined, saved: truckId });
       return;
     }
@@ -104,7 +125,11 @@ export async function saveWalkAroundReview(_: ActionState, fd: FormData): Promis
       ratings[c] = r;
     }
     const open = await db.defect.findMany({ where: { truckId, status: { in: ["OPEN", "REPAIRED"] } }, orderBy: { number: "asc" } });
-    const mine = open.filter((d) => existing && d.walkAroundId === existing.id);
+    // This walk-around's own defects, including those a "missing" mark withdrew (saving again reopens them).
+    const withdrawnOwn = existing
+      ? await db.defect.findMany({ where: { walkAroundId: existing.id, status: "CLOSED", closeNote: { startsWith: WITHDRAWN_NOTE } }, orderBy: { number: "asc" } })
+      : [];
+    const mine = [...open.filter((d) => existing && d.walkAroundId === existing.id), ...withdrawnOwn];
     const earlier = open.filter((d) => !existing || d.walkAroundId !== existing.id);
     const verdicts = new Map<string, Verdict>();
     for (const d of earlier) {
@@ -168,7 +193,7 @@ export async function saveWalkAroundReview(_: ActionState, fd: FormData): Promis
       const own = mine.find((d) => d.component === c);
       if (!severity) {
         // Re-review: something this walk-around had flagged is now rated good (or not seen).
-        if (own) {
+        if (own && own.status !== "CLOSED") {
           await db.defect.update({
             where: { id: own.id },
             data: { status: "CLOSED", holdsUnit: false, closedAt: now, closedById: me.id, closeNote: `Rated ${ratings[c] === "GOOD" ? "good" : "not seen"} when the review was saved again` },
@@ -180,11 +205,16 @@ export async function saveWalkAroundReview(_: ActionState, fd: FormData): Promis
       }
       if (own) {
         if (own.holdsUnit && severity !== "NOW") released = true;
+        const reopen = own.status === "CLOSED"; // withdrawn by a "missing" mark, now back
         await db.defect.update({
           where: { id: own.id },
-          data: { severity, holdsUnit: severity === "NOW", description: desc ?? own.description, dueAt: dueFor(severity, own.foundAt), status: "OPEN", repairedAt: null },
+          data: {
+            severity, holdsUnit: severity === "NOW", description: desc ?? own.description, dueAt: dueFor(severity, own.foundAt), status: "OPEN", repairedAt: null,
+            ...(reopen ? { closedAt: null, closedById: null, closeNote: null } : {}),
+          },
         });
-        if (own.severity !== severity || (desc && desc !== own.description)) await audit(me.id, "update", "defect", own.id, `${defectLabel(own.number)} → ${severity}`);
+        if (reopen) await audit(me.id, "reopen", "defect", own.id, `${defectLabel(own.number)} restored: ${truck.unitNumber}'s video marked received again`);
+        else if (own.severity !== severity || (desc && desc !== own.description)) await audit(me.id, "update", "defect", own.id, `${defectLabel(own.number)} → ${severity}`);
         continue;
       }
       const tracked = stillTracked(c);

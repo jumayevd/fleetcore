@@ -5,7 +5,7 @@ import { DEFECT_DUE_DAYS } from "./constants";
 import { dateOnly, type Formatter } from "./locale";
 import { roLabel } from "./service";
 import {
-  BOARD_STATE_RANK, DAY_MS, NEEDS_STATES, byUnit, categorize, countMarks, daysBetween,
+  BOARD_STATE_RANK, DAY_MS, NEEDS_STATES, WITHDRAWN_NOTE, byUnit, categorize, countMarks, daysBetween,
   type BoardAction, type BoardCategories, type BoardMarks, type BoardState,
 } from "./pti-shared";
 
@@ -323,7 +323,11 @@ export async function loadReview(truckId: string, week: Week, f: Formatter, now 
       include: {
         ratings: { select: { component: true, rating: true } },
         reviewedBy: { select: { name: true } },
-        defects: { where: { status: { not: "CLOSED" } }, select: { id: true, number: true, component: true, description: true, severity: true, status: true } },
+        // Including the ones a "missing" mark withdrew: saving the review again reopens them.
+        defects: {
+          where: { OR: [{ status: { not: "CLOSED" } }, { closeNote: { startsWith: WITHDRAWN_NOTE } }] },
+          select: { id: true, number: true, component: true, description: true, severity: true, status: true },
+        },
       },
     }),
     db.defect.findMany({
@@ -339,7 +343,7 @@ export async function loadReview(truckId: string, week: Week, f: Formatter, now 
       select: {
         weekStart: true, video: true, result: true, reviewedAt: true, reviewedBy: { select: { name: true } },
         ratings: { where: { rating: { in: ["SOON", "NOW", "UNSEEN"] } }, select: { component: true, rating: true } },
-        _count: { select: { defects: true } },
+        _count: { select: { defects: true, ratings: true } },
       },
     }),
   ]);

@@ -221,6 +221,7 @@ export default async function PreTripBoard({ searchParams }: PageProps<"/inspect
           soon: h.walk?.ratings.filter((x) => x.rating === "SOON").length ?? 0,
           now: h.walk?.ratings.filter((x) => x.rating === "NOW").length ?? 0,
           unseen: h.walk?.ratings.filter((x) => x.rating === "UNSEEN").length ?? 0,
+          total: h.walk?._count.ratings ?? 0,
           found: h.walk?._count.defects ?? 0,
         })),
         next: next ? { truckId: next.truck.id, unitNumber: next.truck.unitNumber } : null,

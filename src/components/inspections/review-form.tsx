@@ -20,7 +20,8 @@ export type ReviewEarlierDefect = {
 export type ReviewHistoryWeek = {
   key: string; label: string; current: boolean;
   video: string | null; result: string | null; reviewer: string | null; reviewedOn: string | null;
-  soon: number; now: number; unseen: number; found: number;
+  /** Marks by kind and how many components were marked at all. */
+  soon: number; now: number; unseen: number; total: number; found: number;
 };
 export type ReviewFormProps = {
   truckId: string; unitNumber: string;
@@ -120,6 +121,13 @@ export function ReviewForm(p: ReviewFormProps) {
             {video === "RECEIVED" ? (p.receivedLabel ? `In since ${p.receivedLabel}` : "Recorded as received now") : "Nothing else is saved until the video comes in"}
           </span>
         </div>
+        {video === "MISSING" && p.reviewed && (
+          <p className="mt-2 rounded-md bg-warn-soft px-3 py-2 text-[12px] text-warn">
+            This withdraws the review of {p.reviewed.on}
+            {Object.keys(p.thisWeek).length ? ` and closes ${Object.values(p.thisWeek).map((d) => defectLabel(d.number)).join(", ")}, which it raised` : ""}.
+            {" "}The marks are kept: switch back to Received and save to restore it.
+          </p>
+        )}
       </Section>
 
       {video === "RECEIVED" && p.earlier.length > 0 && (
@@ -202,15 +210,24 @@ export function ReviewForm(p: ReviewFormProps) {
         <Section title="Last 4 weeks">
           <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {p.history.map((h) => {
-              const tone: Tone = !h.video || h.video !== "RECEIVED" ? "neutral" : !h.result ? "progress" : h.result === "CLEAN" && !h.unseen ? "ok" : h.result === "CLEAN" ? "neutral" : "warn";
+              // Same words as the board's counters: all good is clean, all not seen is nothing seen.
+              const received = h.video === "RECEIVED";
+              const reviewed = received && Boolean(h.result) && h.total > 0;
+              const label = !received ? (h.video === "MISSING" ? "Missing" : "Nothing sent")
+                : !reviewed ? "Not reviewed"
+                  : h.unseen === h.total ? "Nothing seen"
+                    : h.soon + h.now > 0 ? (h.unseen ? "Issues · to review" : "Issues")
+                      : h.unseen ? "To review"
+                        : "Clean";
+              const tone: Tone = !received || label === "Nothing seen" ? "neutral" : !reviewed || label === "To review" ? "progress" : label === "Clean" ? "ok" : "warn";
               return (
                 <li key={h.key} className={cn("rounded-md border px-2.5 py-2", h.current ? "border-accent/50 bg-accent-soft/40" : "border-line")}>
                   <p className="num text-[11px] text-fg-subtle">Week of {h.label}</p>
                   <p className={cn("mt-0.5 text-[12px] font-medium", tone === "ok" ? "text-ok" : tone === "warn" ? "text-warn" : tone === "progress" ? "text-progress" : "text-fg-muted")}>
-                    {h.video !== "RECEIVED" ? (h.video === "MISSING" ? "Missing" : "Nothing sent") : !h.result ? "Not reviewed" : h.result === "CLEAN" ? "Clean" : "Issues"}
+                    {label}
                   </p>
                   <p className="truncate text-[11px] text-fg-subtle" title={h.reviewer ?? undefined}>
-                    {h.result
+                    {reviewed
                       ? [h.now ? `${h.now} now` : null, h.soon ? `${h.soon} soon` : null, h.unseen ? `${h.unseen} not seen` : null].filter(Boolean).join(" · ") || (h.reviewer ? `by ${h.reviewer}` : "all good")
                       : "—"}
                   </p>

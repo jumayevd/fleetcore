@@ -76,6 +76,12 @@ export const NEEDS_STATES: readonly BoardState[] = ["out_of_service", "review", 
 /** The one thing to do on a board row. */
 export type BoardAction = "review" | "confirm" | "chase" | null;
 
+/**
+ * Close note of a defect closed because its walk-around was switched to "missing" after it was reviewed. Marking the
+ * video received again and saving reopens those same defects instead of raising new ones.
+ */
+export const WITHDRAWN_NOTE = "Review withdrawn: video marked missing";
+
 /** How this week's components were marked on the review (GOOD / SOON / NOW / UNSEEN). */
 export type BoardMarks = { good: number; soon: number; now: number; unseen: number; total: number };
 
