@@ -4,6 +4,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { cache } from "react";
 import { rootDb } from "./db-root";
 import { isRole, type Role } from "./constants";
+import { isProfileComplete } from "./profile";
 import { ACTIVE_COOKIE, parseWorkspaceKey, workspaceKey, type WorkspaceAccount } from "./workspace-shared";
 
 /*
@@ -102,7 +103,8 @@ export async function writeActive(userId: string, companyId: string | null) {
 /* ------------------------------------------------------------------ */
 
 export type ActiveContext = {
-  user: { id: string; name: string; email: string; phone: string | null; lastLoginAt: Date | null };
+  /** profileComplete: first and last name, ID number and date of birth are on file (src/lib/profile.ts). */
+  user: { id: string; name: string; email: string; phone: string | null; lastLoginAt: Date | null; profileComplete: boolean };
   company: { id: string; name: string; color: string | null; units: string; timezone: string; currency: string };
   role: Role;
   membershipId: string;
@@ -118,12 +120,12 @@ async function resolve(token: string | undefined, activeRaw: string | undefined)
     where: { userId_companyId: { userId: ref.userId, companyId: ref.companyId } },
     select: {
       id: true, role: true, active: true,
-      user: { select: { id: true, name: true, email: true, phone: true, lastLoginAt: true, active: true } },
+      user: { select: { id: true, name: true, email: true, phone: true, lastLoginAt: true, active: true, firstName: true, lastName: true, idNumber: true, birthDate: true } },
       company: { select: { id: true, name: true, color: true, units: true, timezone: true, currency: true } },
     },
   });
   if (!m || !m.active || !m.user.active || !isRole(m.role)) return { accounts, active: null };
-  const user = { id: m.user.id, name: m.user.name, email: m.user.email, phone: m.user.phone, lastLoginAt: m.user.lastLoginAt };
+  const user = { id: m.user.id, name: m.user.name, email: m.user.email, phone: m.user.phone, lastLoginAt: m.user.lastLoginAt, profileComplete: isProfileComplete(m.user) };
   return { accounts, active: { user, company: m.company, role: m.role, membershipId: m.id } };
 }
 

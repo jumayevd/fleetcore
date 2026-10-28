@@ -30,10 +30,17 @@ datasource db {
 
 model User {
   id            String               @id @default(cuid())
+  /// Display name: first and last name together.
   name          String
   email         String               @unique
   passwordHash  String
   phone         String?
+  /// Personal details, asked of everyone who joins a company by invitation (src/lib/profile.ts).
+  firstName     String?
+  lastName      String?
+  /// Passport, national ID or employee number, as written.
+  idNumber      String?
+  birthDate     DateTime?            @db.Date
   active        Boolean              @default(true)
   lastLoginAt   DateTime?
   createdAt     DateTime             @default(now())

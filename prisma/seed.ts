@@ -675,8 +675,16 @@ async function main() {
   await db.user.deleteMany();
 
   const hash = await bcrypt.hash(DEMO_PASSWORD, 10);
-  const user = (name: string, email: string, lastLoginDays: number) =>
-    db.user.create({ data: { name, email, passwordHash: hash, phone: `+998 90 ${int(100, 999)} ${int(10, 99)} ${int(10, 99)}`, lastLoginAt: ago(lastLoginDays), createdAt: ago(int(200, 420)) } });
+  // Every demo person has their details on file (made-up ID numbers), as an invited member would.
+  const user = (name: string, email: string, lastLoginDays: number) => {
+    const [firstName, ...rest] = name.split(" ");
+    return db.user.create({
+      data: {
+        name, firstName, lastName: rest.join(" "), idNumber: `DM${int(1000000, 9999999)}`, birthDate: new Date(Date.UTC(int(1972, 1999), int(0, 11), int(1, 28))),
+        email, passwordHash: hash, phone: `+998 90 ${int(100, 999)} ${int(10, 99)} ${int(10, 99)}`, lastLoginAt: ago(lastLoginDays), createdAt: ago(int(200, 420)),
+      },
+    });
+  };
   reseed(7);
   // Aziza is the fleet specialist. Her own account works for two companies; Nomad Trucking gave her a separate login.
   const aziza = await user("Aziza Karimova", "aziza@demo.local", 0.1);

@@ -15,6 +15,8 @@ export type CurrentUser = {
   email: string;
   phone: string | null;
   lastLoginAt: Date | null;
+  /** First and last name, ID number and date of birth are on file (src/lib/profile.ts). */
+  profileComplete: boolean;
   role: Role;
   membershipId: string;
   /** units / timezone / currency: see src/lib/locale.ts (use getFormat() rather than reading them directly). */

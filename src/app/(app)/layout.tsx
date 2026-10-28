@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { syncCompanyEld } from "@/lib/eld/sync";
 import { requireUser } from "@/lib/auth";
@@ -11,6 +12,8 @@ import { AssistantLauncher } from "@/components/assistant/launcher";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
+  // Members who aren't owners give their personal details once before they work here.
+  if (user.role !== "OWNER" && !user.profileComplete) redirect("/profile");
   const [{ accounts }, jar] = await Promise.all([getSessionContext(), cookies()]);
   const workspaces = await listWorkspaces(accounts);
   const navOpen = jar.get(NAV_COOKIE)?.value !== "rail";

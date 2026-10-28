@@ -28,7 +28,10 @@ companies** added so one specialist can work for several fleets — each in its 
 - **Platform owners** (`PLATFORM_OWNER_IDS`) run FleetCore itself: they are an owner of every company, are added to
   each new company, and show as "Platform owner" in its member list, where nobody can change or remove them.
 - People join by **invitation link** (Settings → Members → Invite). The link works once, for the invited email; an
-  existing account just signs in and accepts. Nobody in a company can see or reset another person's password
+  existing account just signs in and accepts. Joining by invitation asks for **first and last name, ID number
+  (passport, national ID or employee number) and date of birth**; a member who isn't an owner and has none on file is
+  asked once (`/profile`) before working. They are the same in every company, editable in My account, and shown to
+  owners and admins under Members (`src/lib/profile.ts`). Nobody in a company can see or reset another person's password
   (`npm run user:reset-password -- <email> <password>` for operators).
 - New here? `/signup` creates the account and its first company; the overview then shows a set-up checklist.
 

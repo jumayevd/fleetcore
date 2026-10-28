@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { rootDb } from "@/lib/db-root";
 import { assignableRoles } from "@/lib/permissions";
 import { isPlatformOwner } from "@/lib/platform";
+import { birthDateLabel } from "@/lib/profile";
 import { ROLES, ROLE_HINTS, ROLE_LABELS, isRole } from "@/lib/constants";
 import { ago, daysAgo } from "@/lib/format";
 import { getFormat } from "@/lib/format-server";
@@ -30,7 +31,7 @@ export default async function MembersPage() {
   const [members, invites, base, { date }] = await Promise.all([
     rootDb.membership.findMany({
       where: { companyId, active: true },
-      include: { user: { select: { id: true, name: true, email: true, phone: true, lastLoginAt: true } } },
+      include: { user: { select: { id: true, name: true, email: true, phone: true, lastLoginAt: true, idNumber: true, birthDate: true } } },
     }),
     rootDb.invite.findMany({ where: { companyId, acceptedAt: null }, orderBy: { createdAt: "desc" }, include: { invitedBy: { select: { name: true } } } }),
     origin(),
@@ -58,7 +59,7 @@ export default async function MembersPage() {
       <div className="grid gap-4 xl:grid-cols-3">
         <div className="space-y-4 xl:col-span-2">
           <Card flush>
-            <Table head={["Name", "Role", "Joined", "Last here", ""]}>
+            <Table head={["Name", "ID · Date of birth", "Role", "Joined", "Last here", ""]}>
               {rows.map((m) => {
                 const role = isRole(m.role) ? m.role : "SPECIALIST";
                 const self = m.id === me.membershipId;
@@ -73,6 +74,14 @@ export default async function MembersPage() {
                         {platform && <Chip tone="info" title="Runs FleetCore: an owner of every company, can't be changed or removed here">Platform owner</Chip>}
                       </div>
                       <div className="truncate text-[12px] text-fg-subtle" title={m.user.phone ?? undefined}>{m.user.email}</div>
+                    </td>
+                    <td className="whitespace-nowrap text-[12px]">
+                      {m.user.idNumber || m.user.birthDate ? (
+                        <>
+                          <div className="num text-fg">{m.user.idNumber ?? <span className="text-fg-faint">No ID number</span>}</div>
+                          <div className="num text-fg-subtle">{m.user.birthDate ? birthDateLabel(m.user.birthDate) : "No date of birth"}</div>
+                        </>
+                      ) : <span className="text-fg-faint">{role === "OWNER" ? "—" : "Not given yet"}</span>}
                     </td>
                     <td>
                       {editable

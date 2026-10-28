@@ -6,15 +6,18 @@ import { signup } from "@/app/actions/auth";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Field, Input } from "@/components/ui";
 import { RegionPicker } from "@/components/region-picker";
+import { ProfileFields } from "@/components/profile-fields";
 
 export function SignupForm({ invite }: { invite: { token: string; email: string } | null }) {
   const [show, setShow] = useState(false);
   return (
     <ActionForm action={signup} className="mt-6 space-y-4">
       {invite && <input type="hidden" name="invite" value={invite.token} />}
-      <Field label="Your name" required>
-        <Input name="name" required autoComplete="name" placeholder="First and last name" autoFocus />
-      </Field>
+      {invite ? <ProfileFields autoFocus /> : (
+        <Field label="Your name" required>
+          <Input name="name" required autoComplete="name" placeholder="First and last name" autoFocus />
+        </Field>
+      )}
       <Field label="Email" required>
         <Input name="email" type="email" required autoComplete="email" placeholder="you@company.com" defaultValue={invite?.email} readOnly={Boolean(invite)} />
       </Field>

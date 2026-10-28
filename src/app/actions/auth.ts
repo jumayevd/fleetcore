@@ -12,6 +12,7 @@ import { landingAfterSwitch } from "@/lib/nav";
 import { HOME } from "@/lib/permissions";
 import { guessLocale, isUnitSystem } from "@/lib/locale";
 import { ensurePlatformOwner, platformOwnerSeats } from "@/lib/platform";
+import { readProfile } from "@/lib/profile";
 
 // bcrypt hash of a random string; only used to equalise timing for unknown emails.
 const DUMMY_HASH = "$2b$10$Dfob35lSw0BVw8zEqfQSY.8DFhc6CSl6DeU4B3W3T1BW03c0vUecO";
@@ -112,10 +113,11 @@ export async function signup(_: ActionState, fd: FormData): Promise<ActionState>
   let dest = HOME;
   const res = await attempt(async () => {
     const f = fields(fd);
-    const name = f.req("name", "Your name");
+    const inviteToken = f.str("invite");
+    // Joining by invitation: the person's details are part of signing up. Starting a company: just a name.
+    const profile = inviteToken ? readProfile(f, true) : { name: f.req("name", "Your name") };
     const email = f.req("email", "Email").toLowerCase();
     const password = f.req("password", "Password");
-    const inviteToken = f.str("invite");
     if (!EMAIL.test(email)) throw new FormError("Enter a valid email address.");
     if (password.length < 8) throw new FormError("Use at least 8 characters for the password.");
     const invite = inviteToken ? await usableInvite(inviteToken, email) : null;
@@ -124,7 +126,7 @@ export async function signup(_: ActionState, fd: FormData): Promise<ActionState>
       throw new FormError("An account with this email already exists. Sign in instead — you can add more companies to it.");
     }
 
-    const user = await rootDb.user.create({ data: { name, email, passwordHash: await bcrypt.hash(password, 10), lastLoginAt: new Date() } });
+    const user = await rootDb.user.create({ data: { ...profile, email, passwordHash: await bcrypt.hash(password, 10), lastLoginAt: new Date() } });
     let companyId: string;
     if (invite) {
       await joinWithInvite(user.id, invite);
@@ -249,15 +251,33 @@ export async function signOutAll() {
 /* My account                                                          */
 /* ------------------------------------------------------------------ */
 
+/** My account → Profile. Members who aren't owners can't empty their ID number or date of birth. */
 export async function updateProfile(_: ActionState, fd: FormData): Promise<ActionState> {
   const me = await requireUser();
   return attempt(async () => {
     const f = fields(fd);
-    await rootDb.user.update({ where: { id: me.id }, data: { name: f.req("name", "Name"), phone: f.str("phone") } });
+    const profile = readProfile(f, me.role !== "OWNER");
+    await rootDb.user.update({ where: { id: me.id }, data: { ...profile, phone: f.str("phone") } });
     forgetSessions();
     revalidatePath("/", "layout");
     return { ok: "Profile saved. It shows in every company you work for." };
   });
+}
+
+/** The one-time details page (/profile): all four details, then on into the company. */
+export async function completeProfile(_: ActionState, fd: FormData): Promise<ActionState> {
+  const ctx = await getSessionContext();
+  if (!ctx.active) redirect("/select");
+  const userId = ctx.active.user.id;
+  const res = await attempt(async () => {
+    const f = fields(fd);
+    const profile = readProfile(f, true);
+    await rootDb.user.update({ where: { id: userId }, data: { ...profile, phone: f.str("phone") ?? undefined } });
+    await rootDb.auditLog.create({ data: { companyId: ctx.active!.company.id, userId, action: "update", entity: "user", entityId: userId, details: "Personal details added" } });
+    forgetSessions();
+  });
+  if (res?.error) return res;
+  redirect(HOME);
 }
 
 export async function changePassword(_: ActionState, fd: FormData): Promise<ActionState> {

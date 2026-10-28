@@ -14,6 +14,8 @@ import { CompanyBadge } from "@/components/workspace-switcher";
 import { Avatar, Badge, Card, Chip, DL, Disclosure, Field, InfoTip, Input, Kbd, LinkButton, PageHeader, cardClass, cn } from "@/components/ui";
 import { ROLE_TONE } from "../admin/shared";
 import { LeaveCompanyButton } from "./leave";
+import { ProfileFields } from "@/components/profile-fields";
+import { birthDateValue, nameParts } from "@/lib/profile";
 
 export const metadata = { title: "My account" };
 
@@ -22,7 +24,7 @@ export default async function AccountPage() {
   const user = await rootDb.user.findUniqueOrThrow({
     where: { id: me.id },
     select: {
-      name: true, email: true, phone: true, createdAt: true, lastLoginAt: true,
+      name: true, email: true, phone: true, createdAt: true, lastLoginAt: true, firstName: true, lastName: true, idNumber: true, birthDate: true,
       memberships: { where: { active: true }, orderBy: { company: { name: "asc" } }, select: { id: true, role: true, createdAt: true, company: { select: { id: true, name: true, color: true } } } },
     },
   });
@@ -35,7 +37,7 @@ export default async function AccountPage() {
 
       <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
         <div className="space-y-4">
-          <Card title={<span className="flex items-center gap-1.5">Profile<InfoTip>Your name and phone are the same in every company you work for.</InfoTip></span>}>
+          <Card title={<span className="flex items-center gap-1.5">Profile<InfoTip>Your details are the same in every company you work for. Owners and admins of those companies see your ID number and date of birth.</InfoTip></span>}>
             <div className="mb-4 flex items-center gap-3">
               <Avatar name={user.name} size={40} />
               <div className="min-w-0">
@@ -45,10 +47,9 @@ export default async function AccountPage() {
               <Badge value={me.role} tone={ROLE_TONE[me.role]} label={`${ROLE_LABELS[me.role]} here`} className="ml-auto" />
             </div>
             <ActionForm action={updateProfile} className="space-y-3">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Name" required><Input name="name" required defaultValue={user.name} autoComplete="name" /></Field>
-                <Field label="Phone"><Input name="phone" type="tel" defaultValue={user.phone ?? ""} placeholder="+998 90 000 00 00" className="num" autoComplete="tel" /></Field>
-              </div>
+              <ProfileFields required={me.role !== "OWNER"}
+                defaults={{ ...nameParts(user), idNumber: user.idNumber, birthDate: birthDateValue(user.birthDate) }} />
+              <Field label="Phone"><Input name="phone" type="tel" defaultValue={user.phone ?? ""} placeholder="+998 90 000 00 00" className="num" autoComplete="tel" /></Field>
               <div className="flex items-center justify-between gap-3">
                 <DL cols={2} items={[
                   ["Member since", date(user.createdAt)],
