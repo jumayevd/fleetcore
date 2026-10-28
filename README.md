@@ -25,14 +25,22 @@ companies** added so one specialist can work for several fleets — each in its 
   a time: if another tab switches, the stale tab stops and asks before anything can be saved to the wrong company.
 - Roles are per company: **Owner** (everything, incl. owners and deleting the company), **Admin** (everything except
   owners), **Fleet specialist** (all fleet work), **View only**.
-- **Platform owners** (`PLATFORM_OWNER_IDS`) run FleetCore itself: they are an owner of every company, are added to
-  each new company, and show as "Platform owner" in its member list, where nobody can change or remove them.
+- **Platform owners** run FleetCore itself (`User.platformRole = "OWNER"`, set by an operator only). They belong to no
+  company: the **Platform console** (`/platform`) lists every company (size, TrackPro, last activity), every account
+  and every open invitation. They can **open** any company and work in it with an owner's rights without being a
+  member, so they don't show in its member list; what they do is in its audit log under their name
+  (`src/lib/platform.ts`, `resolve()` in `src/lib/session.ts`).
+- **Password links** stand in for email resets: the console's "Password link" (or
+  `npm run user:password-link -- <email>`) makes a one-time link, valid 3 days, to `/reset/<token>`, where the person
+  sets their own password. Only a hash of the token is stored. Making a platform owner:
+  `npm run user:password-link -- <email> --create "Full name" --platform-owner` (production: the production
+  `DATABASE_URL`, `CONFIRM=yes`, `APP_URL`).
 - People join by **invitation link** (Settings → Members → Invite). The link works once, for the invited email; an
   existing account just signs in and accepts. Joining by invitation asks for **first and last name, ID number
   (passport, national ID or employee number) and date of birth**; a member who isn't an owner and has none on file is
   asked once (`/profile`) before working. They are the same in every company, editable in My account, and shown to
   owners and admins under Members (`src/lib/profile.ts`). Nobody in a company can see or reset another person's password
-  (`npm run user:reset-password -- <email> <password>` for operators).
+  (platform owners can send a password link, below).
 - New here? `/signup` creates the account and its first company; the overview then shows a set-up checklist.
 
 ### How data is kept apart
@@ -158,9 +166,7 @@ it elsewhere):
 | `DATABASE_URL`, `DATABASE_URL_UNPOOLED` | Neon integration of this project; local cluster (`.env.local`) |
 | `BLOB_READ_WRITE_TOKEN` | Blob store of this project |
 | `AUTH_SECRET` | Random 32-byte hex (also keys the encrypted ELD tokens: changing it means pasting them again) |
-| `CRON_SECRET` | Random; Vercel Cron sends it to `/api/cron/eld` |
-| `PLATFORM_OWNER_IDS` | Account ids (comma-separated) of the people who run FleetCore: owner of every company, added to new ones automatically, can't be demoted or removed by a company (`src/lib/platform.ts`). Ids, not emails, since sign-up doesn't verify email |
-| `DEMO_MODE` | `true` locally, `false` in production |
+| `CRON_SECRET` | Random; Vercel Cron sends it to `/api/cron/eld` || `DEMO_MODE` | `true` locally, `false` in production |
 | `APP_URL` | Optional, base URL for invitation links |
 | `AI_GATEWAY_API_KEY`, `ASSISTANT_MODEL` | Optional locally; OIDC on Vercel |
 | `NEXT_PUBLIC_MAP_TILE_URL` | Optional |

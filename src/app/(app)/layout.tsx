@@ -1,5 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { after } from "next/server";
 import { syncCompanyEld } from "@/lib/eld/sync";
 import { requireUser } from "@/lib/auth";
@@ -27,6 +29,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // The bell and nav counts load in the browser (GET /api/shell), so they never hold up or race the page.
     <AppShell key={active.companyId + active.userId} user={{ name: user.name, email: user.email, role: user.role }} active={active} accounts={workspaces} locale={normalizeLocale(user.company)}
       navOpen={navOpen}>
+      {user.platform && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-accent-soft px-3 py-2 text-[12.5px] text-accent-text">
+          <span>You&apos;re in {user.company.name} as platform owner, with an owner&apos;s rights. You aren&apos;t a member, and what you change is in its audit log.</span>
+          <Link href="/platform" className="inline-flex items-center gap-1 font-medium hover:underline"><ArrowLeft className="h-3.5 w-3.5" />Platform console</Link>
+        </div>
+      )}
       {children}
       {/* One conversation per account × company: switching company never shows another company's chat. */}
       <AssistantLauncher enabled={can(user.role, "assistant.use")} companyId={user.company.id} userId={user.id} />

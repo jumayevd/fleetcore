@@ -106,10 +106,13 @@ export default async function SelectCompanyPage({ searchParams }: PageProps<"/se
                     <p className="truncate text-[12px] text-fg-subtle">{a.email}{ctx.active?.user.id === a.userId && " · working now"}</p>
                   </div>
                 </div>
-                <form action={signOut}>
-                  <input type="hidden" name="userId" value={a.userId} />
-                  <button className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-[12px] font-medium text-fg-muted hover:bg-raised hover:text-fg"><LogOut className="h-3.5 w-3.5" />Sign out of this account</button>
-                </form>
+                <div className="flex items-center gap-1">
+                  {a.platform && <LinkButton href="/platform" variant="secondary" size="sm">Platform console</LinkButton>}
+                  <form action={signOut}>
+                    <input type="hidden" name="userId" value={a.userId} />
+                    <button className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-[12px] font-medium text-fg-muted hover:bg-raised hover:text-fg"><LogOut className="h-3.5 w-3.5" />Sign out of this account</button>
+                  </form>
+                </div>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -127,7 +130,7 @@ export default async function SelectCompanyPage({ searchParams }: PageProps<"/se
                           <CompanyBadge name={c.name} color={c.color} size={40} />
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-[14px] font-semibold text-fg">{c.name}</span>
-                            <span className="block truncate text-[12px] text-fg-subtle">{ROLE_LABELS[c.role]}</span>
+                            <span className="block truncate text-[12px] text-fg-subtle">{a.platform ? "Open as platform owner" : ROLE_LABELS[c.role]}</span>
                           </span>
                           {current ? <Chip tone="accent">Current</Chip> : <ArrowRight className="h-4 w-4 shrink-0 text-fg-faint transition-transform group-hover:translate-x-0.5 group-hover:text-fg-muted" />}
                         </span>
@@ -143,9 +146,11 @@ export default async function SelectCompanyPage({ searchParams }: PageProps<"/se
                     </form>
                   );
                 })}
-                <div id={a.userId === (ctx.active?.user.id ?? accounts[0].userId) ? "new" : undefined} className="scroll-mt-20">
-                  <NewCompanyForm userId={a.userId} first={a.companies.length === 0} />
-                </div>
+                {!a.platform && (
+                  <div id={a.userId === (ctx.active?.user.id ?? accounts[0].userId) ? "new" : undefined} className="scroll-mt-20">
+                    <NewCompanyForm userId={a.userId} first={a.companies.length === 0} />
+                  </div>
+                )}
               </div>
             </section>
           ))}

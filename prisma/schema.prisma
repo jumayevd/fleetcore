@@ -41,6 +41,10 @@ model User {
   /// Passport, national ID or employee number, as written.
   idNumber      String?
   birthDate     DateTime?            @db.Date
+  /// "OWNER": runs FleetCore itself (the Platform console, every company), without being a member of any. Set by an
+  /// operator only (src/lib/platform.ts).
+  platformRole  String?
+  passwordLinks PasswordLink[]
   active        Boolean              @default(true)
   lastLoginAt   DateTime?
   createdAt     DateTime             @default(now())
@@ -106,6 +110,22 @@ model Membership {
 
   @@unique([userId, companyId])
   @@index([companyId])
+}
+
+/// A one-time link to set an account's password: a new account made by an operator, or a forgotten password (there is
+/// no email). Only a hash of the token is kept.
+model PasswordLink {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash   String    @unique
+  /// Who made it (a platform owner), or null for an operator script.
+  createdById String?
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
 }
 
 /// A link that lets someone join a company. Accepted by a signed-in account with the same email.

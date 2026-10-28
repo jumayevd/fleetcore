@@ -11,7 +11,7 @@ import { COMPANY_COLORS, isRole } from "@/lib/constants";
 import { landingAfterSwitch } from "@/lib/nav";
 import { HOME } from "@/lib/permissions";
 import { guessLocale, isUnitSystem } from "@/lib/locale";
-import { ensurePlatformOwner, platformOwnerSeats } from "@/lib/platform";
+import { isPlatformOwner, usablePasswordLink } from "@/lib/platform";
 import { readProfile } from "@/lib/profile";
 
 // bcrypt hash of a random string; only used to equalise timing for unknown emails.
@@ -25,7 +25,8 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** Work in `companyId` as `userId` from now on (this browser). */
 async function activate(userId: string, companyId: string) {
   await writeActive(userId, companyId);
-  await rootDb.membership.update({ where: { userId_companyId: { userId, companyId } }, data: { lastActiveAt: new Date() } });
+  // updateMany: a platform owner has no membership to touch.
+  await rootDb.membership.updateMany({ where: { userId, companyId }, data: { lastActiveAt: new Date() } });
 }
 
 async function signedIn(userId: string) {
@@ -92,7 +93,10 @@ export async function login(_: ActionState, fd: FormData): Promise<ActionState> 
   await addAccount(user.id);
   await rootDb.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
   if (invite) await joinWithInvite(user.id, invite);
-  await ensurePlatformOwner(user.id);
+  if (!invite && isPlatformOwner(user)) {
+    await rootDb.auditLog.create({ data: { companyId: null, userId: user.id, action: "login", entity: "user", entityId: user.id } });
+    redirect("/platform");
+  }
 
   const memberships = await rootDb.membership.findMany({
     where: { userId: user.id, active: true },
@@ -133,13 +137,12 @@ export async function signup(_: ActionState, fd: FormData): Promise<ActionState>
       companyId = invite.companyId;
     } else {
       const company = await rootDb.company.create({
-        data: { name: companyName!, color: pickColor(), ...regionOf(f), memberships: { create: [{ userId: user.id, role: "OWNER" }, ...(await platformOwnerSeats(user.id))] } },
+        data: { name: companyName!, color: pickColor(), ...regionOf(f), memberships: { create: { userId: user.id, role: "OWNER" } } },
       });
       companyId = company.id;
       await rootDb.auditLog.create({ data: { companyId, userId: user.id, action: "create", entity: "company", entityId: companyId, details: company.name } });
       dest = `${HOME}?welcome=1`;
     }
-    await ensurePlatformOwner(user.id);
     await addAccount(user.id);
     await activate(user.id, companyId);
   });
@@ -157,8 +160,13 @@ export async function switchCompany(fd: FormData) {
   const companyId = String(fd.get("companyId") ?? "");
   const path = String(fd.get("path") ?? "");
   if (!(await signedIn(userId))) redirect("/login?add=1");
-  const m = await rootDb.membership.findUnique({ where: { userId_companyId: { userId, companyId } }, select: { active: true } });
-  if (!m?.active) redirect("/select");
+  const [m, u] = await Promise.all([
+    rootDb.membership.findUnique({ where: { userId_companyId: { userId, companyId } }, select: { active: true } }),
+    rootDb.user.findUnique({ where: { id: userId }, select: { platformRole: true } }),
+  ]);
+  // A platform owner opens any company that exists; everyone else needs a membership.
+  const allowed = m?.active || (isPlatformOwner(u) && (await rootDb.company.count({ where: { id: companyId } })) > 0);
+  if (!allowed) redirect("/select");
   await activate(userId, companyId);
   redirect(landingAfterSwitch(path));
 }
@@ -173,7 +181,7 @@ export async function createCompany(_: ActionState, fd: FormData): Promise<Actio
     const userId = f.str("userId") ?? ctx.active?.user.id ?? ctx.accounts[0]?.userId;
     if (!userId || !(await signedIn(userId))) throw new FormError("Sign in first.");
     const company = await rootDb.company.create({
-      data: { name, color: f.str("color") ?? pickColor(), ...regionOf(f), memberships: { create: [{ userId, role: "OWNER" }, ...(await platformOwnerSeats(userId))] } },
+      data: { name, color: f.str("color") ?? pickColor(), ...regionOf(f), memberships: { create: { userId, role: "OWNER" } } },
     });
     await rootDb.auditLog.create({ data: { companyId: company.id, userId, action: "create", entity: "company", entityId: company.id, details: name } });
     await activate(userId, company.id);
@@ -201,6 +209,7 @@ export async function acceptInvite(_: ActionState, fd: FormData): Promise<Action
 export async function leaveCompany(): Promise<ActionState> {
   const me = await requireUser();
   const res = await attempt(async () => {
+    if (me.platform) throw new FormError("You're here as platform owner, not as a member, so there is nothing to leave.");
     if (me.role === "OWNER") {
       const owners = await rootDb.membership.count({ where: { companyId: me.company.id, role: "OWNER", active: true } });
       if (owners <= 1) throw new FormError("You are the only owner. Make another member an owner first, or delete the company.");
@@ -278,6 +287,29 @@ export async function completeProfile(_: ActionState, fd: FormData): Promise<Act
   });
   if (res?.error) return res;
   redirect(HOME);
+}
+
+/** /reset/[token]: set a password with a one-time link, then go in signed in (platform owners to the console). */
+export async function setPasswordWithLink(token: string, _: ActionState, fd: FormData): Promise<ActionState> {
+  let dest = "/select";
+  const res = await attempt(async () => {
+    const link = await usablePasswordLink(token);
+    if (!link) throw new FormError("This link has expired or was already used. Ask for a new one.");
+    const f = fields(fd);
+    const next = f.req("password", "New password");
+    if (next.length < 8) throw new FormError("Use at least 8 characters for the password.");
+    if (next !== f.str("confirm")) throw new FormError("The two passwords don't match.");
+    await rootDb.$transaction([
+      rootDb.user.update({ where: { id: link.userId }, data: { passwordHash: await bcrypt.hash(next, 10), lastLoginAt: new Date() } }),
+      rootDb.passwordLink.update({ where: { id: link.id }, data: { usedAt: new Date() } }),
+      rootDb.passwordLink.deleteMany({ where: { userId: link.userId, usedAt: null, id: { not: link.id } } }),
+      rootDb.auditLog.create({ data: { companyId: null, userId: link.userId, action: "change_password", entity: "user", entityId: link.userId, details: "Password set with a one-time link" } }),
+    ]);
+    await addAccount(link.userId);
+    if (isPlatformOwner(link.user)) dest = "/platform";
+  });
+  if (res?.error) return res;
+  redirect(dest);
 }
 
 export async function changePassword(_: ActionState, fd: FormData): Promise<ActionState> {

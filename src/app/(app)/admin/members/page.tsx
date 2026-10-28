@@ -3,7 +3,6 @@ import { KeyRound, LogIn, MailPlus, ShieldCheck, UserCheck } from "lucide-react"
 import { requireUser } from "@/lib/auth";
 import { rootDb } from "@/lib/db-root";
 import { assignableRoles } from "@/lib/permissions";
-import { isPlatformOwner } from "@/lib/platform";
 import { birthDateLabel } from "@/lib/profile";
 import { ROLES, ROLE_HINTS, ROLE_LABELS, isRole } from "@/lib/constants";
 import { ago, daysAgo } from "@/lib/format";
@@ -63,16 +62,13 @@ export default async function MembersPage() {
               {rows.map((m) => {
                 const role = isRole(m.role) ? m.role : "SPECIALIST";
                 const self = m.id === me.membershipId;
-                const platform = isPlatformOwner(m.userId);
-                const editable = !self && !platform && (role !== "OWNER" || me.role === "OWNER");
+                const editable = !self && (role !== "OWNER" || me.role === "OWNER");
                 return (
                   <tr key={m.id}>
                     <td className="min-w-56">
                       <div className="flex items-center gap-1.5">
                         <span className="font-medium text-fg">{m.user.name}</span>
-                        {self && <Chip>You</Chip>}
-                        {platform && <Chip tone="info" title="Runs FleetCore: an owner of every company, can't be changed or removed here">Platform owner</Chip>}
-                      </div>
+                        {self && <Chip>You</Chip>}                      </div>
                       <div className="truncate text-[12px] text-fg-subtle" title={m.user.phone ?? undefined}>{m.user.email}</div>
                     </td>
                     <td className="whitespace-nowrap text-[12px]">

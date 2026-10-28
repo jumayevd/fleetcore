@@ -107,8 +107,13 @@ export type ActiveContext = {
   user: { id: string; name: string; email: string; phone: string | null; lastLoginAt: Date | null; profileComplete: boolean };
   company: { id: string; name: string; color: string | null; units: string; timezone: string; currency: string };
   role: Role;
+  /** "" when a platform owner works here without being a member (platform: true). */
   membershipId: string;
+  platform: boolean;
 };
+
+/** Platform owners (src/lib/platform.ts) open every company as an owner without a membership. */
+const PLATFORM_OWNER = "OWNER";
 export type SessionContext = { accounts: SessionAccount[]; active: ActiveContext | null };
 
 async function resolve(token: string | undefined, activeRaw: string | undefined): Promise<SessionContext> {
@@ -124,9 +129,15 @@ async function resolve(token: string | undefined, activeRaw: string | undefined)
       company: { select: { id: true, name: true, color: true, units: true, timezone: true, currency: true } },
     },
   });
-  if (!m || !m.active || !m.user.active || !isRole(m.role)) return { accounts, active: null };
-  const user = { id: m.user.id, name: m.user.name, email: m.user.email, phone: m.user.phone, lastLoginAt: m.user.lastLoginAt, profileComplete: isProfileComplete(m.user) };
-  return { accounts, active: { user, company: m.company, role: m.role, membershipId: m.id } };
+  const asUser = (u: NonNullable<typeof m>["user"]) => ({ id: u.id, name: u.name, email: u.email, phone: u.phone, lastLoginAt: u.lastLoginAt, profileComplete: isProfileComplete(u) });
+  if (m && m.active && m.user.active && isRole(m.role)) return { accounts, active: { user: asUser(m.user), company: m.company, role: m.role, membershipId: m.id, platform: false } };
+  // Not a member: only a platform owner may work here, as an owner.
+  const [u, company] = await Promise.all([
+    rootDb.user.findUnique({ where: { id: ref.userId }, select: { id: true, name: true, email: true, phone: true, lastLoginAt: true, active: true, firstName: true, lastName: true, idNumber: true, birthDate: true, platformRole: true } }),
+    rootDb.company.findUnique({ where: { id: ref.companyId }, select: { id: true, name: true, color: true, units: true, timezone: true, currency: true } }),
+  ]);
+  if (!u?.active || u.platformRole !== PLATFORM_OWNER || !company) return { accounts, active: null };
+  return { accounts, active: { user: asUser(u), company, role: "OWNER", membershipId: "", platform: true } };
 }
 
 // Server actions and route handlers do not share React's per-request cache, and the company scope resolves the session
@@ -165,7 +176,7 @@ export async function listWorkspaces(accounts: SessionAccount[]): Promise<Worksp
   const users = await rootDb.user.findMany({
     where: { id: { in: accounts.map((a) => a.userId) }, active: true },
     select: {
-      id: true, name: true, email: true,
+      id: true, name: true, email: true, platformRole: true,
       memberships: {
         where: { active: true },
         orderBy: { company: { name: "asc" } },
@@ -173,12 +184,19 @@ export async function listWorkspaces(accounts: SessionAccount[]): Promise<Worksp
       },
     },
   });
+  // A platform owner can open every company (as an owner), member or not.
+  const everyCompany = users.some((u) => u.platformRole === PLATFORM_OWNER)
+    ? await rootDb.company.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, color: true } })
+    : [];
   return accounts.flatMap((a) => {
     const u = users.find((x) => x.id === a.userId);
     if (!u) return [];
+    const platform = u.platformRole === PLATFORM_OWNER;
     return [{
-      userId: u.id, name: u.name, email: u.email,
-      companies: u.memberships.filter((m) => isRole(m.role)).map((m) => ({ ...m.company, role: m.role as Role })),
+      userId: u.id, name: u.name, email: u.email, platform,
+      companies: platform
+        ? everyCompany.map((c) => ({ ...c, role: "OWNER" as Role }))
+        : u.memberships.filter((m) => isRole(m.role)).map((m) => ({ ...m.company, role: m.role as Role })),
     }];
   });
 }

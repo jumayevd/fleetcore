@@ -1,43 +1,54 @@
 import "server-only";
+import { createHash, randomBytes } from "node:crypto";
+import { redirect } from "next/navigation";
 import { rootDb } from "@/lib/db-root";
+import { getSessionContext } from "@/lib/session";
 
 /*
- * Platform owners: the people who run FleetCore itself, named by account id in PLATFORM_OWNER_IDS (comma-separated;
- * ids, not emails, because nobody verifies an email at sign-up). Each is an owner of every company: added when a
- * company is created and, for companies made before, when they sign in. Nobody inside a company can change their
- * role or remove them. They show in each company's member list like any other owner, so everyone sees who has access.
+ * Platform owners run FleetCore itself (User.platformRole = "OWNER", set by an operator only). They belong to no
+ * company: the Platform console (/platform) lists every company and account, and they can open any company with an
+ * owner's rights without being a member of it (src/lib/session.ts), so they never show in a company's member list.
+ * What they do inside a company is in that company's audit log, under their name.
  */
 
-export function platformOwnerIds(): string[] {
-  return (process.env.PLATFORM_OWNER_IDS ?? "").split(",").map((id) => id.trim()).filter(Boolean);
+export const PLATFORM_OWNER = "OWNER";
+
+export const isPlatformOwner = (u: { platformRole?: string | null } | null | undefined) => u?.platformRole === PLATFORM_OWNER;
+
+/** The signed-in platform owner (the account working now if it is one, else any signed-in one). */
+export async function requirePlatformOwner() {
+  const ctx = await getSessionContext();
+  if (!ctx.accounts.length) redirect("/login");
+  const owners = await rootDb.user.findMany({
+    where: { id: { in: ctx.accounts.map((a) => a.userId) }, active: true, platformRole: PLATFORM_OWNER },
+    select: { id: true, name: true, email: true },
+  });
+  const me = owners.find((o) => o.id === ctx.active?.user.id) ?? owners[0];
+  if (!me) redirect("/select");
+  return me;
 }
 
-export const isPlatformOwner = (userId: string | null | undefined) => !!userId && platformOwnerIds().includes(userId);
+/* ------------------------------------------------------------------ */
+/* One-time links to set a password                                    */
+/* ------------------------------------------------------------------ */
 
-/** Owner seats for the platform owners in a company being created (the creator is seated already). */
-export async function platformOwnerSeats(creatorId: string) {
-  const ids = platformOwnerIds().filter((id) => id !== creatorId);
-  if (!ids.length) return [];
-  const users = await rootDb.user.findMany({ where: { id: { in: ids }, active: true }, select: { id: true } });
-  return users.map((u) => ({ userId: u.id, role: "OWNER" }));
-}
+const hash = (token: string) => createHash("sha256").update(token).digest("hex");
 
-/** A platform owner becomes (again) an owner of every company. Called on sign-in and sign-up. */
-export async function ensurePlatformOwner(userId: string) {
-  if (!isPlatformOwner(userId)) return;
-  const [companies, seats] = await Promise.all([
-    rootDb.company.findMany({ select: { id: true } }),
-    rootDb.membership.findMany({ where: { userId }, select: { companyId: true, role: true, active: true } }),
-  ]);
-  const held = new Set(seats.map((s) => s.companyId));
-  const missing = companies.filter((c) => !held.has(c.id)).map((c) => c.id);
-  const lower = seats.filter((s) => s.role !== "OWNER" || !s.active).map((s) => s.companyId);
-  if (!missing.length && !lower.length) return;
+/** A new link for `userId` (older unused ones stop working). Returns the token: it is shown once, never stored. */
+export async function createPasswordLink(userId: string, createdById: string | null, days = 3) {
+  const token = randomBytes(24).toString("base64url");
   await rootDb.$transaction([
-    rootDb.membership.createMany({ data: missing.map((companyId) => ({ userId, companyId, role: "OWNER" })), skipDuplicates: true }),
-    rootDb.membership.updateMany({ where: { userId, companyId: { in: lower } }, data: { role: "OWNER", active: true } }),
-    rootDb.auditLog.createMany({
-      data: [...missing, ...lower].map((companyId) => ({ companyId, userId, action: "join", entity: "member", entityId: userId, details: "Owner of every company as platform owner" })),
-    }),
+    rootDb.passwordLink.deleteMany({ where: { userId, usedAt: null } }),
+    rootDb.passwordLink.create({ data: { userId, createdById, tokenHash: hash(token), expiresAt: new Date(Date.now() + days * 86_400_000) } }),
   ]);
+  return token;
+}
+
+/** The link for `token` if it can still be used, with its account. */
+export async function usablePasswordLink(token: string) {
+  const link = await rootDb.passwordLink.findUnique({
+    where: { tokenHash: hash(token) },
+    include: { user: { select: { id: true, name: true, email: true, active: true, platformRole: true } } },
+  });
+  return link && !link.usedAt && link.expiresAt > new Date() && link.user.active ? link : null;
 }

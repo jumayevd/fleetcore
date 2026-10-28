@@ -14,7 +14,8 @@
     "db:migrate:dev": "dotenv -e .env.local -- prisma migrate dev",
     "db:stop": "node scripts/dev-db.mjs stop",
     "env:pull": "vercel env pull .env.vercel --yes",
-    "user:reset-password": "dotenv -e .env.local -- node scripts/reset-password.mjs"
+    "user:reset-password": "dotenv -e .env.local -- node scripts/reset-password.mjs",
+    "user:password-link": "dotenv -e .env.local -- node scripts/password-link.mjs"
   },
   "dependencies": {
     "@ai-sdk/react": "^4.0.130",

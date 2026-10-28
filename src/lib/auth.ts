@@ -18,12 +18,15 @@ export type CurrentUser = {
   /** First and last name, ID number and date of birth are on file (src/lib/profile.ts). */
   profileComplete: boolean;
   role: Role;
+  /** "" for a platform owner working here without being a member. */
   membershipId: string;
+  /** A platform owner (src/lib/platform.ts) working in a company they are not a member of, as an owner. */
+  platform: boolean;
   /** units / timezone / currency: see src/lib/locale.ts (use getFormat() rather than reading them directly). */
   company: { id: string; name: string; color: string | null; units: string; timezone: string; currency: string };
 };
 
-const toUser = (a: ActiveContext): CurrentUser => ({ ...a.user, role: a.role, membershipId: a.membershipId, company: a.company });
+const toUser = (a: ActiveContext): CurrentUser => ({ ...a.user, role: a.role, membershipId: a.membershipId, platform: a.platform, company: a.company });
 
 export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const { active } = await getSessionContext();
