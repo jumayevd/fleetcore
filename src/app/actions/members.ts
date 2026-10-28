@@ -9,6 +9,7 @@ import { forgetSessions } from "@/lib/session";
 import { attempt, fields, FormError, type ActionState } from "@/lib/action";
 import { assignableRoles } from "@/lib/permissions";
 import { ROLE_LABELS, isRole } from "@/lib/constants";
+import { isPlatformOwner } from "@/lib/platform";
 
 /*
  * Members of the active company. Memberships live outside the company scope (one person can belong to many
@@ -64,6 +65,7 @@ export async function setMemberRole(membershipId: string, role: string): Promise
     if (!m) throw new FormError("This member is no longer in the company.");
     if (!isRole(role)) throw new FormError("Pick a valid role.");
     if (m.role === role) return { ok: "No change" };
+    if (isPlatformOwner(m.userId)) throw new FormError(`${m.user.email} runs FleetCore and stays an owner of every company.`);
     if ((m.role === "OWNER" || role === "OWNER") && me.role !== "OWNER") throw new FormError("Only an owner can change owner roles.");
     if (!assignableRoles(me.role).includes(role)) throw new FormError("You can't give that role.");
     if (m.role === "OWNER" && (await ownerCount(me.company.id)) <= 1) throw new FormError("A company needs at least one owner. Make someone else an owner first.");
@@ -82,6 +84,7 @@ export async function removeMember(membershipId: string): Promise<ActionState> {
     const m = await rootDb.membership.findFirst({ where: { id: membershipId, companyId: me.company.id }, include: { user: { select: { email: true } } } });
     if (!m) throw new FormError("This member is no longer in the company.");
     if (m.id === me.membershipId) throw new FormError("To leave the company yourself, use My account → Leave company.");
+    if (isPlatformOwner(m.userId)) throw new FormError(`${m.user.email} runs FleetCore and keeps access to every company.`);
     if (m.role === "OWNER" && me.role !== "OWNER") throw new FormError("Only an owner can remove an owner.");
     if (m.role === "OWNER" && (await ownerCount(me.company.id)) <= 1) throw new FormError("A company needs at least one owner.");
     await rootDb.membership.delete({ where: { id: m.id } });

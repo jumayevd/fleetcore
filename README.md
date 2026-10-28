@@ -25,6 +25,8 @@ companies** added so one specialist can work for several fleets — each in its 
   a time: if another tab switches, the stale tab stops and asks before anything can be saved to the wrong company.
 - Roles are per company: **Owner** (everything, incl. owners and deleting the company), **Admin** (everything except
   owners), **Fleet specialist** (all fleet work), **View only**.
+- **Platform owners** (`PLATFORM_OWNER_IDS`) run FleetCore itself: they are an owner of every company, are added to
+  each new company, and show as "Platform owner" in its member list, where nobody can change or remove them.
 - People join by **invitation link** (Settings → Members → Invite). The link works once, for the invited email; an
   existing account just signs in and accepts. Nobody in a company can see or reset another person's password
   (`npm run user:reset-password -- <email> <password>` for operators).
@@ -154,6 +156,7 @@ it elsewhere):
 | `BLOB_READ_WRITE_TOKEN` | Blob store of this project |
 | `AUTH_SECRET` | Random 32-byte hex (also keys the encrypted ELD tokens: changing it means pasting them again) |
 | `CRON_SECRET` | Random; Vercel Cron sends it to `/api/cron/eld` |
+| `PLATFORM_OWNER_IDS` | Account ids (comma-separated) of the people who run FleetCore: owner of every company, added to new ones automatically, can't be demoted or removed by a company (`src/lib/platform.ts`). Ids, not emails, since sign-up doesn't verify email |
 | `DEMO_MODE` | `true` locally, `false` in production |
 | `APP_URL` | Optional, base URL for invitation links |
 | `AI_GATEWAY_API_KEY`, `ASSISTANT_MODEL` | Optional locally; OIDC on Vercel |
