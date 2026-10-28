@@ -93,7 +93,7 @@ export default async function TruckDetail({ params, searchParams }: PageProps<"/
   // What the rest of the app needs from this record, each with its one-click fix.
   const prompts: Prompt[] = [];
   if (!have.has("REGISTRATION")) {
-    prompts.push({ key: "reg", text: "No registration on file", hint: "Roadside and the paperwork alerts look for it.",
+    prompts.push({ key: "reg", text: "No registration on file", hint: "DOT inspectors and the paperwork alerts look for it.",
       fix: editable ? <FixLink href={`${docsHref}#doc-REGISTRATION`}>Attach</FixLink> : <FixNote href={docsHref}>See documents</FixNote> });
   }
   if (!truck.plate.trim()) {

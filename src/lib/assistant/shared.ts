@@ -44,7 +44,7 @@ const SUGGESTED_PROMPTS: readonly { text: (units: "imperial" | "metric") => stri
   { text: () => "What's in the shop right now, and at what stage?", perm: "fleet.view" },
   { text: (u) => `Cost per ${u === "metric" ? "km" : "mile"} by truck last quarter`, perm: "money.view" },
   { text: () => "Open defects holding a truck out of service", perm: "fleet.view" },
-  { text: () => "Roadside inspections and violations this year", perm: "fleet.view" },
+  { text: () => "DOT inspections and violations this year", perm: "fleet.view" },
 ];
 const MAX_PROMPTS = 6;
 export const promptsFor = (role: string, units?: string | null) =>
@@ -52,7 +52,7 @@ export const promptsFor = (role: string, units?: string | null) =>
 
 const TOPICS: [Permission, string][] = [
   ["fleet.view", "trucks"], ["fleet.view", "repairs and vendors"], ["fleet.view", "oil and PM"], ["fleet.view", "walk-arounds and defects"],
-  ["fleet.view", "roadside inspections"], ["fleet.view", "paperwork"], ["drivers.view", "drivers"], ["money.view", "costs"],
+  ["fleet.view", "DOT inspections"], ["fleet.view", "paperwork"], ["drivers.view", "drivers"], ["money.view", "costs"],
 ];
 const GENERIC_INTRO = "Answers from live fleet data, with read-only lookups.";
 /** "Trucks, trailers, … and costs in Silk Road Freight — …": only what this role can actually ask about. */
@@ -94,7 +94,7 @@ const TOOL_LABELS: Record<string, { doing: string; done: string; fail: string }>
   vendors: { doing: "Looking up vendors", done: "Looked up vendors", fail: "Couldn't look up vendors" },
   walkArounds: { doing: "Checking walk-arounds", done: "Checked walk-arounds", fail: "Couldn't check walk-arounds" },
   defects: { doing: "Looking up defects", done: "Looked up defects", fail: "Couldn't look up defects" },
-  roadsideInspections: { doing: "Looking up roadside inspections", done: "Looked up roadside inspections", fail: "Couldn't look up roadside inspections" },
+  roadsideInspections: { doing: "Looking up DOT inspections", done: "Looked up DOT inspections", fail: "Couldn't look up DOT inspections" },
   expiringPaperwork: { doing: "Checking expiry dates", done: "Checked expiry dates", fail: "Couldn't check expiry dates" },
   complianceGaps: { doing: "Checking paperwork gaps", done: "Checked paperwork gaps", fail: "Couldn't check paperwork gaps" },
   fleetCosts: { doing: "Adding up costs", done: "Added up costs", fail: "Couldn't add up costs" },

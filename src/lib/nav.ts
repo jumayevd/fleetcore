@@ -41,7 +41,7 @@ export const NAV: NavSection[] = [
     items: [
       { href: "/inspections", label: "Pre-trip board", icon: "ClipboardCheck", perm: "fleet.view", shortcut: "g i", description: "Weekly walk-around videos and what they showed" },
       { href: "/inspections/defects", label: "Defects", icon: "TriangleAlert", perm: "fleet.view", description: "Everything found wrong, until it is fixed and confirmed" },
-      { href: "/inspections/roadside", label: "Roadside", icon: "ShieldAlert", perm: "fleet.view", description: "DOT roadside inspections and violations" },
+      { href: "/inspections/roadside", label: "DOT inspections", icon: "ShieldAlert", perm: "fleet.view", description: "DOT inspections at the roadside, violations and corrections" },
     ],
   },
   {
@@ -74,7 +74,7 @@ export const NAV: NavSection[] = [
 export const SEGMENT_LABELS: Record<string, string> = {
   new: "New", edit: "Edit", "work-orders": "Repairs", trailers: "Trailers", account: "My account", admin: "Company",
   company: "Company profile", members: "Members", audit: "Audit log", integrations: "Integrations", alerts: "Needs attention", oil: "Oil & PM",
-  defects: "Defects", roadside: "Roadside", vendors: "Vendors", inspections: "Pre-trip board",
+  defects: "Defects", roadside: "DOT inspections", vendors: "Vendors", inspections: "Pre-trip board",
 };
 
 export function allNavItems() {

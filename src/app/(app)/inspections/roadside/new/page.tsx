@@ -6,7 +6,7 @@ import { RoadsideForm } from "@/components/inspections/roadside-form";
 import { saveRoadside } from "@/app/actions/roadside";
 import { roadsideFormOptions } from "../data";
 
-export const metadata = { title: "Log a roadside inspection" };
+export const metadata = { title: "Log a DOT inspection" };
 
 export default async function NewRoadside({ searchParams }: PageProps<"/inspections/roadside/new">) {
   await requireUser("fleet.edit");
@@ -20,7 +20,7 @@ export default async function NewRoadside({ searchParams }: PageProps<"/inspecti
 
   return (
     <>
-      <PageHeader title="Log a roadside inspection" subtitle="Copy it from the inspection report the driver got. Clean inspections count too." />
+      <PageHeader title="Log a DOT inspection" subtitle="Copy it from the inspection report the driver got. Clean inspections count too." />
       <RoadsideForm
         action={saveRoadside.bind(null, null)}
         {...options}

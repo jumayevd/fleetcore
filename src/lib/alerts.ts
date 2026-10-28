@@ -641,7 +641,7 @@ export const getToday = cache(async (): Promise<Today> => {
     push({
       key: `roadside:${r.id}`, category: "drivers", priority: overdue ? "urgent" : "high",
       unit: r.truck ? truckUnit(r.truck) : r.trailer ? trailerUnit(r.trailer) : null, driver: driverLink(r.driver),
-      issue: overdue ? "Roadside correction overdue" : "Roadside out-of-service order",
+      issue: overdue ? "DOT inspection correction overdue" : "DOT out-of-service order",
       detail: join(`${r.reportNumber ? `Report ${r.reportNumber}` : "Inspection"} ${f.day(r.inspectedAt)}${r.state ? ` (${r.state})` : ""}`,
         openViolations ? plural(openViolations, "violation") + " open" : null, r.correctionDueAt ? `correction due ${f.day(r.correctionDueAt)}` : null),
       action: { label: "Record correction", href }, view: { label: "Open inspection", href },

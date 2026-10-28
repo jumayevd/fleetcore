@@ -359,7 +359,7 @@ export function WarrantyTable({ f, money, rows, limit = LIST_LIMIT }: Common & {
 export function RoadsideLevelTable({ f, rows }: { f: Formatter; rows: LevelRow[] }) {
   return (
     <Table dense stickyHead={false} head={["Level", R("n", "Inspections"), R("v", "Violations"), RT("oos", "Out of service", "Inspections that put the driver or a unit out of service.")]}
-      empty={rows.length === 0} emptyTitle="No roadside inspections in this period" emptyDescription="Record each roadside inspection report with its violations; levels, violations and out-of-service orders add up here.">
+      empty={rows.length === 0} emptyTitle="No DOT inspections in this period" emptyDescription="Record each DOT inspection report with its violations; levels, violations and out-of-service orders add up here.">
       {rows.map((r) => (
         <tr key={r.level}>
           <td className="whitespace-nowrap text-fg">{r.label}</td>
@@ -379,7 +379,7 @@ export function RoadsideList({ f, rows, now, limit = LIST_LIMIT }: { f: Formatte
   const shown = [...rows].sort((a, b) => Number(b.oos) - Number(a.oos) || b.violations - a.violations || b.at.getTime() - a.at.getTime()).slice(0, limit);
   return (
     <Table dense stickyHead={false} head={["Inspection", "Driver", "Unit", "Result", "Correction"]}
-      empty={rows.length === 0} emptyTitle="No roadside inspections in this period" emptyDescription="Record the next roadside report; it lists here with its result and what has to be corrected.">
+      empty={rows.length === 0} emptyTitle="No DOT inspections in this period" emptyDescription="Record the next DOT inspection report; it lists here with its result and what has to be corrected.">
       {shown.map((r) => (
         <tr key={r.id}>
           <td className="whitespace-nowrap">

@@ -42,12 +42,12 @@ invites and companies. Raw SQL is not scoped — don't use it for company data.
 
 | Module | Highlights |
 |---|---|
-| **Today** | Eight tiles that each open the filtered page where you act (oil overdue / due, walk-around issues, videos missing, waiting on parts, papers holding dispatch, in the shop, DOT inspections due); one "needs a decision" list with a single action per row; who is in the shop; this month's spend |
+| **Today** | Eight tiles that each open the filtered page where you act (oil overdue / due, walk-around issues, videos missing, waiting on parts, papers holding dispatch, in the shop, annual DOT inspections due); one "needs a decision" list with a single action per row; who is in the shop; this month's spend |
 | **Trucks & trailers** | Status counters, column chooser, next service in distance and ≈days, completeness prompts with one-click fixes, document slots (issued / expires), maintenance, expenses (fuel economy, fuel cost per distance, driver charges), history, readings with "as of" |
 | **Repairs** | Repair orders (RO-0001…): stage pipeline with history, downtime clock, job lines by system, who pays (company / driver / investigation / warranty) and "driver told", invoice, void, notes, CSV |
 | **Oil & PM** | Truck types with their own oil interval, the board (overdue / due / on schedule / no recent reading), book a shop, log an oil change |
 | **Vendors** | Shops, dealers, tire and road service, with their repairs and spend; tidy up free-text shop names |
-| **Inspections** | Weekly walk-around board (videos in, to review, nothing sent), component-by-component review, defects with owner and due date — a "fix before next load" defect takes the truck out of service until someone confirms the repair; roadside inspections with violations and corrections |
+| **Inspections** | Weekly walk-around board (videos in, to review, nothing sent), component-by-component review, defects with owner and due date — a "fix before next load" defect takes the truck out of service until someone confirms the repair; **DOT inspections** (roadside) with violations and corrections |
 | **Drivers** | Cleared to drive, assigned truck, dispatcher, licence and medical expiry, hold, safety score, documents |
 | **Live map** | Rolling / idle / stopped / in shop / out of service / no signal, filters, truck details |
 | **Reports** | Spend, distance, cost per distance, downtime, repairs by type and system, repeat repairs, driver charges, defects, walk-around compliance, roadside; CSV export |

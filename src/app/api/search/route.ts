@@ -101,7 +101,7 @@ export async function GET(req: Request) {
     })),
   });
   if (roadside.length) groups.push({
-    label: "Roadside inspections",
+    label: "DOT inspections",
     hits: roadside.map((r) => ({
       id: r.id, title: r.reportNumber ? `Report ${r.reportNumber}` : `Inspection ${f.day(r.inspectedAt)}`, mono: Boolean(r.reportNumber),
       subtitle: [f.date(r.inspectedAt), r.driver?.name, r.truck?.unitNumber, [r.location, r.state].filter(Boolean).join(", "), r._count.violations ? `${r._count.violations} violation${r._count.violations === 1 ? "" : "s"}` : null].filter(Boolean).join(" · "),

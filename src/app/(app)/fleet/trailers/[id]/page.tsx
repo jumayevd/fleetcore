@@ -63,7 +63,7 @@ export default async function TrailerDetail({ params, searchParams }: PageProps<
 
   const prompts: Prompt[] = [];
   if (!have.has("REGISTRATION")) {
-    prompts.push({ key: "reg", text: "No registration on file", hint: "Roadside and the paperwork alerts look for it.",
+    prompts.push({ key: "reg", text: "No registration on file", hint: "DOT inspectors and the paperwork alerts look for it.",
       fix: editable ? <FixLink href="#doc-REGISTRATION">Attach</FixLink> : <FixNote href="#documents">See documents</FixNote> });
   }
   if (!trailer.plate?.trim()) prompts.push({ key: "plate", text: "Add the plate", fix: editable ? <TrailerFix trailerId={id} field="plate" /> : undefined });

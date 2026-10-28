@@ -112,7 +112,7 @@ export default async function TodayPage({ searchParams }: PageProps<"/dashboard"
       alert: t.inShopLate > 0,
     },
     {
-      key: "dot", label: "DOT inspections in 30 days", value: t.dotSoon, href: to("/maintenance?tab=compliance"), icon: ShieldCheck, hue: "hue-1",
+      key: "dot", label: "Annual DOT due in 30 days", value: t.dotSoon, href: to("/maintenance?tab=compliance"), icon: ShieldCheck, hue: "hue-1",
       sub: t.dotExpired
         ? <Flag tone="danger">{t.dotExpired} already expired</Flag>
         : t.dotSoon ? "Annual inspections expiring: book them" : "No annual inspection expires in the next 30 days",

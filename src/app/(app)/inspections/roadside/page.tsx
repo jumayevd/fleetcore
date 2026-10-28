@@ -12,7 +12,7 @@ import {
 import { Badge, Card, Chip, LinkButton, PageHeader, Stat, Table, cn } from "@/components/ui";
 import { ListFilters } from "@/components/inspections/list-filters";
 
-export const metadata = { title: "Roadside inspections" };
+export const metadata = { title: "DOT inspections" };
 
 const PAGE = 300;
 
@@ -70,8 +70,8 @@ export default async function RoadsidePage({ searchParams }: PageProps<"/inspect
   return (
     <>
       <PageHeader
-        title="Roadside inspections"
-        subtitle="DOT roadside inspections, their violations and the corrections they need"
+        title="DOT inspections"
+        subtitle="Roadside DOT inspections, their violations and the corrections they need"
         actions={editable && <LinkButton href="/inspections/roadside/new"><Plus />Log an inspection</LinkButton>}
       />
 
@@ -103,8 +103,8 @@ export default async function RoadsidePage({ searchParams }: PageProps<"/inspect
             ]} />
         </div>
         <Table head={["Inspection", "Driver", "Truck / trailer", "Level", "Violations", "OOS", "Correction due", "Status", ""]} empty={rows.length === 0}
-          emptyTitle={filtered ? "Nothing matches" : "No roadside inspections yet"}
-          emptyDescription={filtered ? "Clear a filter or the search." : editable ? "Log each DOT roadside inspection here, clean ones too: they count toward the fleet's record." : "Roadside inspections will show here once someone logs them."}>
+          emptyTitle={filtered ? "Nothing matches" : "No DOT inspections yet"}
+          emptyDescription={filtered ? "Clear a filter or the search." : editable ? "Log each DOT inspection here, clean ones too: they count toward the fleet's record." : "DOT inspections will show here once someone logs them."}>
           {rows.map((r) => {
             const oos = r.violations.filter((v) => v.oos).length;
             const left = r.violations.filter((v) => !v.correctedAt).length;

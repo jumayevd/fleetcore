@@ -35,7 +35,7 @@ export function CommandPalette({ onClose, role, active, accounts, onSwitch }: {
       a.push({ key: "log-oil", title: "Log an oil change", subtitle: "Resets the truck's oil interval", href: "/maintenance/oil?log=1", group: "Actions", icon: "action" });
       a.push({ key: "review-pti", title: "Review walk-arounds", subtitle: "This week's pre-trip board", href: "/inspections", group: "Actions", icon: "action" });
       a.push({ key: "new-defect", title: "Report a defect", subtitle: "Something wrong with a truck or trailer", href: "/inspections/defects?new=1", group: "Actions", icon: "action" });
-      a.push({ key: "new-roadside", title: "Record a roadside inspection", subtitle: "Report, violations and corrections", href: "/inspections/roadside/new", group: "Actions", icon: "action" });
+      a.push({ key: "new-roadside", title: "Record a DOT inspection", subtitle: "Report, violations and corrections", href: "/inspections/roadside/new", group: "Actions", icon: "action" });
       a.push({ key: "new-truck", title: "Add truck", href: "/fleet/new", group: "Actions", icon: "action" });
       a.push({ key: "new-trailer", title: "Add trailer", href: "/fleet/trailers/new", group: "Actions", icon: "action" });
       a.push({ key: "new-vendor", title: "Add vendor", subtitle: "Shop, dealer, tire or road service", href: "/vendors/new", group: "Actions", icon: "action" });

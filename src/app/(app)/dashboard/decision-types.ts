@@ -14,7 +14,7 @@ export const DECISION_CATEGORY_HINTS: Record<DecisionCategory, string> = {
   shop: "Repairs past their promised date, waiting for approval, without an update, or booked and never started",
   documents: "Registration, annual inspection and insurance expired or missing, and other papers about to expire",
   pti: "Defects found on walk-arounds, trucks held out of service, videos missing or waiting for review",
-  drivers: "Licences and medicals, drivers on hold, repair charges the driver has not been told about, roadside corrections",
+  drivers: "Licences and medicals, drivers on hold, repair charges the driver has not been told about, DOT inspection corrections",
   fleet: "Trucks without a driver, lease mileage caps, trackers that went quiet",
 };
 export const isDecisionCategory = (v: unknown): v is DecisionCategory =>

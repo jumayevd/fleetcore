@@ -18,7 +18,7 @@ import { deleteRoadside } from "@/app/actions/roadside";
 export async function generateMetadata({ params }: PageProps<"/inspections/roadside/[id]">) {
   if (!(await getCurrentUser())) return {};
   const r = await db.roadsideInspection.findUnique({ where: { id: (await params).id }, select: { reportNumber: true } });
-  return { title: r ? (r.reportNumber ? `Roadside ${r.reportNumber}` : "Roadside inspection") : "Not found" };
+  return { title: r ? (r.reportNumber ? `DOT inspection ${r.reportNumber}` : "DOT inspection") : "Not found" };
 }
 
 export default async function RoadsideDetail({ params }: PageProps<"/inspections/roadside/[id]">) {
@@ -45,7 +45,7 @@ export default async function RoadsideDetail({ params }: PageProps<"/inspections
   return (
     <>
       <PageHeader
-        title={r.reportNumber ? <span className="num">Report {r.reportNumber}</span> : `Roadside inspection, ${f.date(r.inspectedAt)}`}
+        title={r.reportNumber ? <span className="num">Report {r.reportNumber}</span> : `DOT inspection, ${f.date(r.inspectedAt)}`}
         subtitle={
           <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
             <Badge value={r.result} label={roadsideResultLabel(r.result)} tone={ROADSIDE_RESULT_TONE[r.result]} dot />
@@ -60,7 +60,7 @@ export default async function RoadsideDetail({ params }: PageProps<"/inspections
             <RoadsideStatusButtons id={r.id} status={r.status} uncorrected={uncorrected} />
             <LinkButton href={`/inspections/roadside/${r.id}/edit`} variant="secondary"><Pencil />Edit</LinkButton>
             <DeleteButton action={deleteRoadside.bind(null, r.id)} redirectTo="/inspections/roadside"
-              confirm={`Delete ${r.reportNumber ? `report ${r.reportNumber}` : "this roadside inspection"} for good? ${r.violations.length ? `Its ${r.violations.length} violation${r.violations.length === 1 ? "" : "s"} and attached files go with it. ` : "Attached files go with it. "}This can't be undone.`} />
+              confirm={`Delete ${r.reportNumber ? `report ${r.reportNumber}` : "this DOT inspection"} for good? ${r.violations.length ? `Its ${r.violations.length} violation${r.violations.length === 1 ? "" : "s"} and attached files go with it. ` : "Attached files go with it. "}This can't be undone.`} />
           </>
         )}
       />

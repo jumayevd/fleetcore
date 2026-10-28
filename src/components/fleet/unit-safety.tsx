@@ -32,7 +32,7 @@ export async function UnitSafetyHistory({ unit }: { unit: { type: "truck" | "tra
   return (
     <Card flush title={
       <span className="flex items-center gap-2">
-        Roadside inspections
+        DOT inspections
         {total > 0 && <span className="num rounded bg-neutral-soft px-1.5 text-[11px] leading-5 text-fg-subtle">{total}</span>}
       </span>
     } actions={
@@ -42,7 +42,7 @@ export async function UnitSafetyHistory({ unit }: { unit: { type: "truck" | "tra
       </span>
     }>
       {rows.length === 0 ? (
-        <p className="px-4 pb-3 pt-1 text-[13px] text-fg-muted">No roadside inspections on record for this {unit.type}.{editable ? " Log one from the report the driver brings back, clean ones too." : ""}</p>
+        <p className="px-4 pb-3 pt-1 text-[13px] text-fg-muted">No DOT inspections on record for this {unit.type}.{editable ? " Log one from the report the driver brings back, clean ones too." : ""}</p>
       ) : (
         <>
           <p className="px-4 pb-2 text-[12px] text-fg-subtle">

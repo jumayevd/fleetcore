@@ -3,7 +3,7 @@
  * ones the first overview used, so choices people already made carry over.
  */
 export const OVERVIEW_SECTIONS = [
-  { key: "numbers", label: "Fleet today", hint: "Oil, walk-arounds, defects, parts, papers, the shop, DOT inspections" },
+  { key: "numbers", label: "Fleet today", hint: "Oil, walk-arounds, defects, parts, papers, the shop, annual DOT inspections" },
   { key: "attention", label: "Needs a decision today", hint: "Every open item with the one button that sorts it" },
   { key: "today", label: "In the shop", hint: "Units at a shop: stage, promised date, downtime" },
   { key: "costs", label: "This month's spend", hint: "Maintenance and fuel, this month against last" },

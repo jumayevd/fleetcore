@@ -34,7 +34,7 @@ const ENTITY_LABELS: Record<string, string> = {
   truck: "Truck", trailer: "Trailer", driver: "Driver", user: "Account", member: "Member", company: "Company",
   workOrder: "Repair", work_order: "Repair", repair: "Repair", document: "Document", setting: "Setting", fuel: "Fuel",
   vendor: "Vendor", truck_type: "Truck type", truckType: "Truck type", walk_around: "Walk-around", walkAround: "Walk-around",
-  defect: "Defect", roadside: "Roadside inspection", roadside_inspection: "Roadside inspection",
+  defect: "Defect", roadside: "DOT inspection", roadside_inspection: "DOT inspection",
 };
 export const entityLabel = (e: string) => ENTITY_LABELS[e] ?? e.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 

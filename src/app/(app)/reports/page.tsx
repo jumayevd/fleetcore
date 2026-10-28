@@ -51,7 +51,7 @@ function Section({ id, title, hint, children }: { id: string; title: string; hin
   );
 }
 
-const JUMPS = [["costs", "Costs"], ["repairs", "Repairs"], ["charges", "Driver charges"], ["inspections", "Inspections"], ["roadside", "Roadside"]] as const;
+const JUMPS = [["costs", "Costs"], ["repairs", "Repairs"], ["charges", "Driver charges"], ["inspections", "Inspections"], ["roadside", "DOT inspections"]] as const;
 
 export default async function ReportsPage({ searchParams }: PageProps<"/reports">) {
   const me = await requireUser("reports.view");
@@ -276,10 +276,10 @@ export default async function ReportsPage({ searchParams }: PageProps<"/reports"
         </div>
       </Section>
 
-      {/* Roadside */}
-      <Section id="roadside" title="Roadside inspections" hint="DOT roadside inspections in the period: how many, what they found and how often a unit or driver was put out of service.">
-        <Card flush title={titled("Roadside inspections", "Out-of-service rate: inspections with an out-of-service order (the result, or any violation marked out of service) divided by all inspections.")}
-          actions={<><HeaderLink href={ROADSIDE_HREF}>Roadside</HeaderLink><ExportLink type="roadside" period={period} /></>}>
+      {/* DOT (roadside) inspections */}
+      <Section id="roadside" title="DOT inspections" hint="Roadside DOT inspections in the period: how many, what they found and how often a unit or driver was put out of service.">
+        <Card flush title={titled("DOT inspections", "Out-of-service rate: inspections with an out-of-service order (the result, or any violation marked out of service) divided by all inspections.")}
+          actions={<><HeaderLink href={ROADSIDE_HREF}>DOT inspections</HeaderLink><ExportLink type="roadside" period={period} /></>}>
           <div className="grid grid-cols-2 gap-3 px-4 pb-3 pt-1 sm:grid-cols-5">
             <MiniStat label="Inspections" value={f.number(rs.inspections)} note={deltaPct(rs.inspections, rs.prevInspections) != null ? `${fmtDelta(deltaPct(rs.inspections, rs.prevInspections))} on the ${days} days before` : undefined} />
             <MiniStat label="Clean" value={f.number(rs.clean)} note={rs.inspections ? `${Math.round((rs.clean / rs.inspections) * 100)}% of inspections` : undefined} tone={rs.inspections && rs.clean === rs.inspections ? "ok" : undefined} />
