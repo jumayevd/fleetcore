@@ -141,6 +141,10 @@ it elsewhere):
 - **Vercel Blob (private)** for documents (keys prefixed by company); local `./storage` fallback; seeded documents render a placeholder PDF
 - **AI SDK 7** for the assistant; **Leaflet + OpenStreetMap**; **Recharts**
 - "Graphite" design system with Day/Night themes: `docs/design-system.md`, kit in `src/components/ui.tsx`
+- Brand: the "fleetcore" wordmark (the "o" is a wheel with a purple nut) and the wheel app icon, purple #801AB8 —
+  `<Wordmark />` and `<BrandIcon />` in `src/components/brand.tsx`; files for use elsewhere in `public/brand/`
+  (wordmark on light and on dark, icon SVG and PNGs); favicon, `icon.svg`, `apple-icon.png` and `manifest.ts` in
+  `src/app/`
 
 ## Environment variables
 

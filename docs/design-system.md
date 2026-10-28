@@ -1,8 +1,9 @@
 # FleetCore design system — "Graphite"
 
 A calm, modern control room that works in daylight and at night: white cards floating on a soft graphite
-canvas, one confident **accent** (blue by default) for actions, selection, focus and live state, an amber brand
-mark, semantic status colours, a small set of categorical hues for icons and avatars, and tabular numerals.
+canvas, one confident **accent** (blue by default) for actions, selection, focus and live state, the purple brand
+mark (`--mark` #801AB8: the wheel icon and the nut in the "fleetcore" wordmark, `src/components/brand.tsx`), semantic
+status colours, a small set of categorical hues for icons and avatars, and tabular numerals.
 Every page must look right in **both** themes.
 
 ## Principles

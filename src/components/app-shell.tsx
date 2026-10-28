@@ -11,6 +11,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn, Avatar, Kbd, StatusDot } from "./ui";
+import { BrandIcon, Wordmark } from "./brand";
 // Opened on demand, so they download on first use instead of with every page.
 const CommandPalette = dynamic(() => import("./command-palette").then((m) => m.CommandPalette), { ssr: false });
 const AppearanceControls = dynamic(() => import("./appearance").then((m) => m.AppearanceControls), {
@@ -216,8 +217,8 @@ function SideNav({ user, active, accounts, path, data, expanded, pinned, onToggl
       <div className="flex items-center gap-1 p-2">
         <Link href="/select" onClick={onNavigate} title="FleetCore · all companies"
           className={cn("flex h-8 min-w-0 items-center gap-2 rounded-[9px] text-[12px] text-fg-subtle transition-colors hover:bg-surface/60 hover:text-fg", expanded ? "flex-1 px-2.5" : "w-full justify-center")}>
-          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] bg-mark text-on-mark"><Truck className="h-3 w-3" /></span>
-          {expanded && <span className="truncate font-medium">FleetCore</span>}
+          <BrandIcon />
+          {expanded && <Wordmark className="h-3.5 text-current" />}
         </Link>
         {expanded && (
           <button type="button" onClick={onTogglePin} title={pinned ? "Collapse sidebar" : "Keep sidebar open"}

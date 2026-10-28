@@ -1,18 +1,9 @@
 import type { ReactNode } from "react";
-import { Truck } from "lucide-react";
+import { Wordmark } from "@/components/brand";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Signal, SignalGrid } from "./signal";
 
-export function Wordmark() {
-  return (
-    <div className="flex items-center gap-2.5">
-      <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-mark bg-linear-to-br from-white/25 to-white/0 text-on-mark shadow-card">
-        <Truck className="h-4 w-4" />
-      </span>
-      <span className="text-[15px] font-semibold tracking-tight text-fg">FleetCore</span>
-    </div>
-  );
-}
+export { Wordmark };
 
 /** The two-panel frame shared by sign in, add account, sign up and invitations. */
 export function AuthFrame({ children }: { children: ReactNode }) {
@@ -28,7 +19,7 @@ export function AuthFrame({ children }: { children: ReactNode }) {
         <SignalGrid />
         {/* A soft wash of the accent behind the headline: colour without a picture. */}
         <div aria-hidden className="pointer-events-none absolute inset-0 bg-[radial-gradient(55%_45%_at_18%_42%,var(--accent-soft),transparent_70%)]" />
-        <div className="relative z-10"><Wordmark /></div>
+        <div className="relative z-10"><Wordmark className="h-7" /></div>
         <div className="relative z-10 max-w-xl">
           <p className="eyebrow mb-3">Trucks · Trailers · Maintenance · Compliance</p>
           {/* Marketing line, not the page heading: this panel is hidden below lg. */}

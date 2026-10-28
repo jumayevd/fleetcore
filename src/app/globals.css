@@ -28,8 +28,8 @@
   --primary-hover: #1d4ed8;
   --on-primary: #ffffff;
   /* Brand mark (logo tile) */
-  --mark: #f5a524;
-  --on-mark: #1c1400;
+  --mark: #801ab8;
+  --on-mark: #ffffff;
   /* Status */
   --ok: #067647;
   --ok-soft: #ecfdf3;
@@ -78,8 +78,8 @@
   --primary: #3b82f6;
   --primary-hover: #4f91f8;
   --on-primary: #ffffff;
-  --mark: #f5a524;
-  --on-mark: #1c1400;
+  --mark: #801ab8;
+  --on-mark: #ffffff;
   --ok: #47cd89;
   --ok-soft: rgba(71, 205, 137, 0.14);
   --warn: #fd853a;
