@@ -10,8 +10,9 @@ companies** added so one specialist can work for several fleets — each in its 
 
 - Production: **https://fleetcore-uz.vercel.app** (Vercel project `fleetcore`, region `fra1`). Every push to `main` deploys.
 - Its own Neon database (`fleetcore-db`) and private Blob store (`fleetcore-docs`); nothing is shared with FleetOps.
-- Production holds the demo companies; their shared password is in `DEMO-CREDENTIALS.local.txt` (git-ignored, never
-  deployed). Demo logins are hidden on the sign-in page (`DEMO_MODE=false`).
+- Production holds real companies only (the demo companies and sign-ins were removed on 2026-10-28), so **never run
+  the seed against it**. Demo logins are hidden on the sign-in page (`DEMO_MODE=false`); the demo data lives in the
+  local database.
 
 ## Accounts and companies
 
