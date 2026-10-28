@@ -62,9 +62,12 @@ lower bound and shows "no recent reading" rather than "on schedule".
 
 Settings → Integrations (owners and admins). Paste the carrier's TrackPro integration API token; FleetCore checks it
 against TrackPro, stores it encrypted (AES-GCM keyed from `AUTH_SECRET`, `src/lib/secret-box.ts`) and shows only its
-last characters. TrackPro's API (`GET https://api.trackproeld.com/logger/integrations/access/trucks`, version 2 of
-https://trackproeld.com/docs) gives each truck's position, place, direction, time of the fix, fuel and DEF level and the
-driver logged in, but **no speed and no odometer**. So `src/lib/eld/sync.ts`:
+last characters. TrackPro's API (https://trackproeld.com/docs) has two versions, and a token may answer on either:
+version 2 (`GET https://api.trackproeld.com/logger/integrations/access/trucks`) is asked first, version 1
+(`/logger/external/vehicles/current`) when version 2 refuses the token or lists no trucks (`src/lib/eld/trackpro.ts`).
+They give each truck's position, place, direction, time of the fix, the driver logged in and (version 2) fuel and DEF
+level, but **no speed and no odometer**. A sync that works but finds no trucks says why on the Integrations page (no
+trucks for the token, or a layout FleetCore can't read, with its field names). So `src/lib/eld/sync.ts`:
 
 - matches ELD vehicles to trucks by VIN, then unit number (leading zeros ignored); a match can be picked by hand;
 - writes position, place, heading, fuel and the fix time onto the truck (`pingSource = TRACKPRO`, so the live map treats
@@ -76,8 +79,8 @@ driver logged in, but **no speed and no odometer**. So `src/lib/eld/sync.ts`:
 
 A sync runs at most once a minute per company: after any page view (`after()` in the app layout), on each live-map poll
 (`/api/fleet`), from "Sync now", and from `/api/cron/eld` (Vercel Cron once a day on the Hobby plan; it needs
-`Authorization: Bearer $CRON_SECRET`, so an outside scheduler can call it more often). `TRACKPRO_API_BASE` points the
-client at a stand-in server for local testing.
+`Authorization: Bearer $CRON_SECRET`, so an outside scheduler can call it more often). `TRACKPRO_API_BASE` (default
+`https://api.trackproeld.com/logger`) points the client at a stand-in server for local testing.
 
 ### Units, time zone and currency
 

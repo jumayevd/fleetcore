@@ -1,17 +1,26 @@
 import "server-only";
 
 /*
- * TrackPro ELD integration API, version 2 (https://trackproeld.com/docs):
- *   GET https://api.trackproeld.com/logger/integrations/access/trucks?page=0&size=10
- *   Authorization: Bearer <token the carrier issues in TrackPro>
- * Each truck: unit (unit_id, make, model, vin_number, unit_number), driver_info (driver_id, driver_name), location
- * (unit_coordinates, nearby_coordinates, distance from the nearby place, state, city, date_time without a zone,
- * direction like "sw"), usdot, fuel_percentage, def_percentage. There is no speed, odometer or engine data.
+ * TrackPro ELD's API (https://trackproeld.com/docs) comes in two versions, and a carrier's token may answer on either:
+ *   v2  GET https://api.trackproeld.com/logger/integrations/access/trucks?page=0&size=10
+ *       { status, data: [{ unit: { unit_id, make, model, vin_number, unit_number }, driver_info: { driver_id,
+ *         driver_name }, location: { unit_coordinates: { unit_latitude, unit_longitude }, distance, state, city,
+ *         date_time, direction }, usdot, fuel_percentage, def_percentage }], metadata: { total, prev, next, current } }
+ *   v1  GET https://api.trackproeld.com/logger/external/vehicles/current?page=0&size=10
+ *       { result, content: [{ vehicle: { id, make, model, vin, unit_number }, driver: { id, name }, location: {
+ *         vehicle_coordinates: { latitude, longitude }, distance, state, location, time, direction }, dot }],
+ *         pageable: { total, prev, next, current } }
+ * Both: Authorization: Bearer <token the carrier issues in TrackPro>; times have no zone; no speed, odometer or
+ * engine data. v2 is asked first; v1 when v2 refuses the token or lists no trucks.
  */
 
 /** TRACKPRO_API_BASE points the client at a stand-in server for local testing; production uses TrackPro's own. */
-const BASE = process.env.TRACKPRO_API_BASE || "https://api.trackproeld.com/logger/integrations/access";
+const ROOT = process.env.TRACKPRO_API_BASE || "https://api.trackproeld.com/logger";
+const APIS = { v2: "/integrations/access/trucks", v1: "/external/vehicles/current" } as const;
+type Api = keyof typeof APIS;
 const PAGE_SIZE = 50;
+/** TrackPro's own default page size: asked for when a bigger page comes back empty. */
+const DOC_PAGE_SIZE = 10;
 const MAX_PAGES = 40;
 const TIMEOUT_MS = 12_000;
 
@@ -42,6 +51,18 @@ export type EldVehicle = {
   defPct: number | null;
 };
 
+/** What TrackPro answered, so an empty list can be explained on the Integrations page. */
+export type EldFetch = {
+  vehicles: EldVehicle[];
+  api: Api;
+  /** The total TrackPro reports for the token, when it says. */
+  total: number | null;
+  /** Items in the list, readable or not. */
+  received: number;
+  /** Field names of the first item FleetCore couldn't read (names only, never values). */
+  unreadableFields: string[];
+};
+
 const HEADINGS: Record<string, number> = { n: 0, nne: 22.5, ne: 45, ene: 67.5, e: 90, ese: 112.5, se: 135, sse: 157.5, s: 180, ssw: 202.5, sw: 225, wsw: 247.5, w: 270, wnw: 292.5, nw: 315, nnw: 337.5 };
 
 const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : typeof v === "number" ? String(v) : null);
@@ -49,31 +70,36 @@ const num = (v: unknown) => {
   const n = typeof v === "number" ? v : typeof v === "string" && v.trim() ? Number(v) : NaN;
   return Number.isFinite(n) ? n : null;
 };
-const obj = (v: unknown) => (v && typeof v === "object" ? (v as Record<string, unknown>) : {});
+const obj = (v: unknown) => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+const first = (...vs: unknown[]) => vs.find((v) => v != null && v !== "");
 
+/** One truck in either version's layout. */
 function toVehicle(raw: unknown): EldVehicle | null {
   const r = obj(raw);
-  const unit = obj(r.unit);
-  const driver = obj(r.driver_info);
+  const unit = obj(r.unit ?? r.vehicle);
+  const driver = obj(r.driver_info ?? r.driver);
   const loc = obj(r.location);
-  const coords = obj(loc.unit_coordinates);
-  const externalId = str(unit.unit_id);
+  const coords = obj(loc.unit_coordinates ?? loc.vehicle_coordinates ?? loc.coordinates);
+  const unitNumber = str(unit.unit_number);
+  const vin = str(first(unit.vin_number, unit.vin))?.toUpperCase() ?? null;
+  // The provider's id; failing that the VIN or unit number still tells trucks apart.
+  const externalId = str(first(unit.unit_id, unit.id)) ?? (vin ? `vin:${vin}` : unitNumber ? `unit:${unitNumber}` : null);
   if (!externalId) return null;
-  const lat = num(coords.unit_latitude);
-  const lng = num(coords.unit_longitude);
+  const lat = num(first(coords.unit_latitude, coords.latitude, coords.lat));
+  const lng = num(first(coords.unit_longitude, coords.longitude, coords.lng));
   const valid = lat != null && lng != null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && !(lat === 0 && lng === 0);
   return {
     externalId,
-    unitNumber: str(unit.unit_number),
-    vin: str(unit.vin_number)?.toUpperCase() ?? null,
+    unitNumber,
+    vin,
     make: str(unit.make),
     model: str(unit.model),
-    driverName: str(driver.driver_name),
+    driverName: str(first(driver.driver_name, driver.name)),
     lat: valid ? lat : null,
     lng: valid ? lng : null,
-    time: str(loc.date_time),
+    time: str(first(loc.date_time, loc.time)),
     heading: HEADINGS[str(loc.direction)?.toLowerCase() ?? ""] ?? null,
-    city: str(loc.city),
+    city: str(first(loc.city, typeof loc.location === "string" ? loc.location : null)),
     state: str(loc.state),
     nearbyDistance: num(loc.distance),
     fuelPct: num(r.fuel_percentage),
@@ -81,10 +107,19 @@ function toVehicle(raw: unknown): EldVehicle | null {
   };
 }
 
-async function page(token: string, n: number) {
+/** "unit.unit_id, location.city, …": the shape of an item, for the page to show when it can't be read. */
+function fieldNames(raw: unknown, prefix = "", depth = 0): string[] {
+  const r = obj(raw);
+  return Object.keys(r).flatMap((k) => {
+    const sub = r[k];
+    return sub && typeof sub === "object" && !Array.isArray(sub) && depth < 1 ? fieldNames(sub, `${prefix}${k}.`, depth + 1) : [`${prefix}${k}`];
+  }).slice(0, 24);
+}
+
+async function page(api: Api, token: string, n: number, size: number) {
   let res: Response;
   try {
-    res = await fetch(`${BASE}/trucks?page=${n}&size=${PAGE_SIZE}`, {
+    res = await fetch(`${ROOT}${APIS[api]}?page=${n}&size=${size}`, {
       headers: { accept: "application/json", authorization: `Bearer ${token}` },
       cache: "no-store",
       signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -101,21 +136,63 @@ async function page(token: string, n: number) {
   } catch {
     throw new EldError("TrackPro sent something that isn't the truck list.", "format");
   }
-  const data = Array.isArray(body.data) ? body.data : null;
-  if (!data) throw new EldError("TrackPro sent something that isn't the truck list.", "format");
-  const next = num(obj(body.metadata).next);
-  return { vehicles: data.map(toVehicle).filter((v): v is EldVehicle => v != null), next };
+  const list = Array.isArray(body.data) ? body.data : Array.isArray(body.content) ? body.content : null;
+  if (!list) {
+    const keys = Object.keys(body).slice(0, 8).join(", ");
+    throw new EldError(`TrackPro sent something that isn't the truck list${keys ? ` (it has: ${keys})` : ""}.`, "format");
+  }
+  const meta = obj(body.metadata ?? body.pageable);
+  const vehicles = list.map(toVehicle).filter((v): v is EldVehicle => v != null);
+  const bad = list.find((item) => toVehicle(item) == null);
+  return { vehicles, received: list.length, total: num(meta.total), next: num(meta.next), unreadableFields: bad === undefined ? [] : fieldNames(bad) };
 }
 
-/** Every truck the token can see, page by page. */
-export async function fetchTrackProVehicles(token: string): Promise<EldVehicle[]> {
-  const all: EldVehicle[] = [];
+/** Every truck one version of the API shows for the token, page by page. */
+async function listAll(api: Api, token: string): Promise<EldFetch> {
+  let size = PAGE_SIZE;
+  let p = await page(api, token, 0, size);
+  // An empty first page: ask again exactly the way TrackPro's docs do, in case the bigger page isn't allowed.
+  if (p.received === 0) { size = DOC_PAGE_SIZE; p = await page(api, token, 0, size); }
+  const out: EldFetch = { vehicles: [...p.vehicles], api, total: p.total, received: p.received, unreadableFields: p.unreadableFields };
   let n = 0;
-  for (let i = 0; i < MAX_PAGES; i++) {
-    const p = await page(token, n);
-    all.push(...p.vehicles);
-    if (p.next == null || p.next <= n || p.vehicles.length === 0) break;
+  for (let i = 1; i < MAX_PAGES && p.next != null && p.next > n && p.received > 0; i++) {
     n = p.next;
+    p = await page(api, token, n, size);
+    out.vehicles.push(...p.vehicles);
+    out.received += p.received;
+    if (!out.unreadableFields.length) out.unreadableFields = p.unreadableFields;
   }
-  return all;
+  // The same truck on two pages (the list moved while paging) counts once.
+  out.vehicles = [...new Map(out.vehicles.map((v) => [v.externalId, v])).values()];
+  return out;
+}
+
+/** Every truck the token can see: version 2 of the API, else version 1. Throws EldError when neither answers. */
+export async function fetchTrackProVehicles(token: string): Promise<EldFetch> {
+  let v2: EldFetch | null = null;
+  let v2Error: EldError | null = null;
+  try {
+    v2 = await listAll("v2", token);
+    if (v2.received > 0) return v2;
+  } catch (e) {
+    if (!(e instanceof EldError) || e.kind === "network") throw e;
+    v2Error = e;
+  }
+  try {
+    const v1 = await listAll("v1", token);
+    if (v1.received > 0 || !v2) return v1;
+  } catch (e) {
+    if (!v2) throw v2Error ?? e;
+  }
+  return v2!;
+}
+
+/** Why a sync that worked found no trucks to show, in words for the Integrations page; null when it found some. */
+export function emptyReason(r: EldFetch): string | null {
+  if (r.vehicles.length > 0) return null;
+  if (r.received > 0) {
+    return `TrackPro sent ${r.received} ${r.received === 1 ? "truck" : "trucks"}, but in a layout FleetCore doesn't read yet (fields: ${r.unreadableFields.join(", ") || "none"}). Nothing was imported.`;
+  }
+  if (r.total != null && r.total > 0) return `TrackPro says this token has ${r.total} trucks but sent an empty list. Try Sync now; if it stays empty, tell TrackPro support.`;
+  return "TrackPro accepted the token but shows no trucks for it. Ask TrackPro support to give this token access to your company's trucks, or check it was issued for the right carrier.";
 }

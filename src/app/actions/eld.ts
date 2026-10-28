@@ -23,7 +23,8 @@ function refresh() {
 }
 
 const syncText = (r: SyncResult) =>
-  r.status === "ok" ? `${r.vehicles} ${r.vehicles === 1 ? "truck" : "trucks"} in TrackPro, ${r.matched} matched, ${r.updated} updated`
+  r.status === "ok" && r.note ? "Synced, but no trucks came in (the message above says why)"
+    : r.status === "ok" ? `${r.vehicles} ${r.vehicles === 1 ? "truck" : "trucks"} in TrackPro, ${r.matched} matched, ${r.updated} updated`
     : r.status === "error" ? r.message
       : r.status === "skipped" ? "A sync ran a moment ago; the next one starts within a minute."
         : "Not connected.";
@@ -36,7 +37,7 @@ export async function connectEld(_: ActionState, fd: FormData): Promise<ActionSt
     if (token.length < 12 || /\s/.test(token)) throw new FormError("That doesn't look like a TrackPro API token. Paste the whole token, without spaces.");
     let found: number;
     try {
-      found = (await fetchTrackProVehicles(token)).length;
+      found = (await fetchTrackProVehicles(token)).vehicles.length;
     } catch (e) {
       throw new FormError(e instanceof EldError ? e.message : "Couldn't reach TrackPro. Try again in a minute.");
     }

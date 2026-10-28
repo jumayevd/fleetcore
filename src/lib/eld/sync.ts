@@ -4,7 +4,7 @@ import { rootDb } from "@/lib/db-root";
 import { withCompany } from "@/lib/tenant";
 import { open } from "@/lib/secret-box";
 import { fromZoned, normalizeLocale, type CompanyLocale } from "@/lib/locale";
-import { EldError, fetchTrackProVehicles, type EldVehicle } from "./trackpro";
+import { EldError, emptyReason, fetchTrackProVehicles, type EldVehicle } from "./trackpro";
 
 /*
  * Pull the company's trucks from its ELD and write what it knows onto the FleetCore trucks: position, place, heading,
@@ -33,7 +33,7 @@ export type SyncResult =
   | { status: "none" }
   | { status: "skipped" }
   | { status: "error"; message: string }
-  | { status: "ok"; vehicles: number; matched: number; updated: number };
+  | { status: "ok"; vehicles: number; matched: number; updated: number; note: string | null };
 
 function distanceKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
   const rad = (d: number) => (d * Math.PI) / 180;
@@ -106,8 +106,11 @@ export async function syncCompanyEld(companyId: string, opts: { force?: boolean 
     if (!token) return fail("The saved token can't be read any more. Paste it again under Settings → Integrations.");
 
     let vehicles: EldVehicle[];
+    let empty: string | null;
     try {
-      vehicles = await fetchTrackProVehicles(token);
+      const fetched = await fetchTrackProVehicles(token);
+      vehicles = fetched.vehicles;
+      empty = emptyReason(fetched);
     } catch (e) {
       return fail(e instanceof EldError ? e.message : "The sync failed. Try again in a minute.");
     }
@@ -195,8 +198,9 @@ export async function syncCompanyEld(companyId: string, opts: { force?: boolean 
       }
     }
 
-    await db.eldConnection.update({ where: { id: conn.id }, data: { lastSuccessAt: now, lastError: null, vehicles: vehicles.length } });
-    return { status: "ok", vehicles: vehicles.length, matched, updated } as const;
+    // TrackPro answered; an empty list still needs someone to act, so it shows as the connection's problem.
+    await db.eldConnection.update({ where: { id: conn.id }, data: { lastSuccessAt: now, lastError: empty, vehicles: vehicles.length } });
+    return { status: "ok", vehicles: vehicles.length, matched, updated, note: empty } as const;
   });
 }
 
