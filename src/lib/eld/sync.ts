@@ -137,6 +137,7 @@ export async function syncCompanyEld(companyId: string, opts: { force?: boolean 
 
     let matched = 0;
     let updated = 0;
+    const claimedNow = new Set<string>();
     for (const v of vehicles) {
       const prev = knownBy.get(v.externalId);
       let truckId: string | null;
@@ -145,7 +146,7 @@ export async function syncCompanyEld(companyId: string, opts: { force?: boolean 
         const hit = byVin.get(vinKey(v.vin)) ?? byUnit.get(unitKey(v.unitNumber));
         truckId = hit && !taken.has(hit.id) ? hit.id : null;
       }
-      if (truckId) { taken.add(truckId); matched++; }
+      if (truckId) { taken.add(truckId); claimedNow.add(truckId); matched++; }
       const truck = truckId ? truckById.get(truckId) ?? null : null;
 
       let fixAt = parseEldTime(v.time, basis === "AUTO" ? "UTC" : basis, locale.timezone);
@@ -197,6 +198,14 @@ export async function syncCompanyEld(companyId: string, opts: { force?: boolean 
         await db.truck.update({ where: { id: truck.id }, data: { speedKmh: 0 } });
       }
     }
+
+    // A unit TrackPro no longer lists (or lists under another id, as its two API versions do) lets go of a truck
+    // that a listed unit has now, so the truck page never reads the old one.
+    const seen = new Set(vehicles.map((v) => v.externalId));
+    const stale = known.filter((u) => !seen.has(u.externalId) && u.truckId && claimedNow.has(u.truckId)).map((u) => u.id);
+    if (stale.length) await db.eldUnit.updateMany({ where: { id: { in: stale } }, data: { truckId: null } });
+    // Gone from TrackPro for a week: off the list.
+    if (vehicles.length) await db.eldUnit.deleteMany({ where: { connectionId: conn.id, seenAt: { lt: new Date(now.getTime() - 7 * 86_400_000) } } });
 
     // TrackPro answered; an empty list still needs someone to act, so it shows as the connection's problem.
     await db.eldConnection.update({ where: { id: conn.id }, data: { lastSuccessAt: now, lastError: empty, vehicles: vehicles.length } });

@@ -23,7 +23,7 @@ function refresh() {
 }
 
 const syncText = (r: SyncResult) =>
-  r.status === "ok" && r.note ? "Synced, but no trucks came in (the message above says why)"
+  r.status === "ok" && r.note ? (r.vehicles ? `${r.vehicles} trucks in TrackPro, ${r.matched} matched, but no positions (the message above says why)` : "Synced, but no trucks came in (the message above says why)")
     : r.status === "ok" ? `${r.vehicles} ${r.vehicles === 1 ? "truck" : "trucks"} in TrackPro, ${r.matched} matched, ${r.updated} updated`
     : r.status === "error" ? r.message
       : r.status === "skipped" ? "A sync ran a moment ago; the next one starts within a minute."

@@ -65,9 +65,11 @@ against TrackPro, stores it encrypted (AES-GCM keyed from `AUTH_SECRET`, `src/li
 last characters. TrackPro's API (https://trackproeld.com/docs) has two versions, and a token may answer on either:
 version 2 (`GET https://api.trackproeld.com/logger/integrations/access/trucks`) is asked first, version 1
 (`/logger/external/vehicles/current`) when version 2 refuses the token or lists no trucks (`src/lib/eld/trackpro.ts`).
-They give each truck's position, place, direction, time of the fix, the driver logged in and (version 2) fuel and DEF
-level, but **no speed and no odometer**. A sync that works but finds no trucks says why on the Integrations page (no
-trucks for the token, or a layout FleetCore can't read, with its field names). So `src/lib/eld/sync.ts`:
+Live tokens answer in a third layout (`truck`, `driver`, `location.vehicle_coordinates`, `fuel_level`, `def_level`),
+read as well. They give each truck's position, place, direction, time of the fix, the driver logged in and (not version
+1) fuel and DEF level, but **no speed and no odometer**. A sync that works but brings in no trucks, or trucks without a
+single position, says why on the Integrations page, with the field names TrackPro sent (never values). So
+`src/lib/eld/sync.ts`:
 
 - matches ELD vehicles to trucks by VIN, then unit number (leading zeros ignored); a match can be picked by hand;
 - writes position, place, heading, fuel and the fix time onto the truck (`pingSource = TRACKPRO`, so the live map treats

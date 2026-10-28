@@ -35,7 +35,9 @@ export default async function IntegrationsPage() {
     }),
     db.truck.findMany({ orderBy: { unitNumber: "asc" }, select: { id: true, unitNumber: true } }),
   ]);
-  const units = conn?.units ?? [];
+  // What the last good sync listed: a unit TrackPro dropped (kept a week for its match) isn't shown.
+  const listedAt = conn?.lastSuccessAt?.getTime();
+  const units = (conn?.units ?? []).filter((u) => listedAt == null || (u.seenAt?.getTime() ?? 0) >= listedAt);
   const matched = units.filter((u) => u.truckId).length;
   const linked = new Set(units.map((u) => u.truckId).filter(Boolean));
   const truckOptions = trucks.map((t) => ({ ...t, taken: linked.has(t.id) }));
