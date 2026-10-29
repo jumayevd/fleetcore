@@ -29,37 +29,39 @@ datasource db {
  */
 
 model User {
-  id            String               @id @default(cuid())
+  id                String               @id @default(cuid())
   /// Display name: first and last name together.
-  name          String
-  email         String               @unique
-  passwordHash  String
-  phone         String?
+  name              String
+  email             String               @unique
+  passwordHash      String
+  phone             String?
   /// Personal details, asked of everyone who joins a company by invitation (src/lib/profile.ts).
-  firstName     String?
-  lastName      String?
+  firstName         String?
+  lastName          String?
   /// Passport, national ID or employee number, as written.
-  idNumber      String?
-  birthDate     DateTime?            @db.Date
+  idNumber          String?
+  birthDate         DateTime?            @db.Date
   /// "OWNER": runs FleetCore itself (the Platform console, every company), without being a member of any. Set by an
   /// operator only (src/lib/platform.ts).
-  platformRole  String?
-  passwordLinks PasswordLink[]
-  active        Boolean              @default(true)
+  platformRole      String?
+  passwordLinks     PasswordLink[]
+  active            Boolean              @default(true)
   /// Sign-ins older than this no longer count (set when the password changes, so other browsers are signed out).
   sessionsValidFrom DateTime?
-  lastLoginAt   DateTime?
-  createdAt     DateTime             @default(now())
-  memberships   Membership[]
-  invitesSent   Invite[]
-  workOrders    WorkOrder[]
-  documents     Document[]
-  audits        AuditLog[]
-  woEvents      WorkOrderEvent[]
-  walkReviews   WalkAround[]
-  defectsOwned  Defect[]             @relation("DefectOwner")
-  defectsClosed Defect[]             @relation("DefectCloser")
-  roadside      RoadsideInspection[]
+  lastLoginAt       DateTime?
+  createdAt         DateTime             @default(now())
+  memberships       Membership[]
+  invitesSent       Invite[]
+  workOrders        WorkOrder[]
+  documents         Document[]
+  audits            AuditLog[]
+  woEvents          WorkOrderEvent[]
+  walkReviews       WalkAround[]
+  defectsOwned      Defect[]             @relation("DefectOwner")
+  defectsClosed     Defect[]             @relation("DefectCloser")
+  roadside          RoadsideInspection[]
+  assignmentsMade   DriverAssignment[]   @relation("AssignmentCreator")
+  assignmentsEnded  DriverAssignment[]   @relation("AssignmentEnder")
 }
 
 /// One fleet's workspace. Everything a fleet specialist works with belongs to exactly one company.
@@ -86,6 +88,7 @@ model Company {
   violations  RoadsideViolation[]
   eldLinks    EldConnection[]
   eldUnits    EldUnit[]
+  assignments DriverAssignment[]
   memberships Membership[]
   invites     Invite[]
   drivers     Driver[]
@@ -200,6 +203,7 @@ model Driver {
   charges       WorkOrder[]          @relation("WorkOrderDriverCharge")
   walkArounds   WalkAround[]
   roadside      RoadsideInspection[]
+  assignments   DriverAssignment[]
 
   @@index([companyId])
 }
@@ -268,6 +272,7 @@ model Truck {
   defects            Defect[]
   roadside           RoadsideInspection[]
   eldUnits           EldUnit[]
+  assignments        DriverAssignment[]
 
   @@unique([companyId, unitNumber])
   @@index([companyId, status])
@@ -412,6 +417,9 @@ model Document {
   workOrder    WorkOrder?          @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
   roadsideId   String?
   roadside     RoadsideInspection? @relation(fields: [roadsideId], references: [id], onDelete: Cascade)
+  /// Pickup photos of a driver assignment (the unit as the driver took it).
+  assignmentId String?
+  assignment   DriverAssignment?   @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   /// When the paper was issued (annual inspection, registration…), next to expiresAt.
   issuedAt     DateTime?
   uploadedById String?
@@ -424,6 +432,41 @@ model Document {
   @@index([driverId])
   @@index([workOrderId])
   @@index([roadsideId])
+  @@index([assignmentId])
+}
+
+/// Who drove a truck, from when to when (src/lib/assignments.ts). The open row (endedAt null) is the current driver and
+/// matches Truck.driverId; every change of driver closes it and opens the next, so a truck keeps its whole history.
+/// Days are company calendar days (midnight in the company's time zone), like the other date fields.
+model DriverAssignment {
+  id          String     @id @default(cuid())
+  companyId   String     @default("") // set by the company scope (src/lib/db.ts); "" fails the foreign key
+  company     Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  truckId     String
+  truck       Truck      @relation(fields: [truckId], references: [id], onDelete: Cascade)
+  driverId    String
+  driver      Driver     @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  /// The day the driver took the unit.
+  startedAt   DateTime
+  /// The day the driver gave it back (or moved to another truck); null while they still drive it.
+  endedAt     DateTime?
+  /// Made from an assignment that existed before history was kept: the start is the best guess (last assign, or the
+  /// truck's creation).
+  backfilled  Boolean    @default(false)
+  /// What went with the unit: [{ item: "TABLET" | … | "OTHER", label?: "Jack", ref?: "SN 12345" }] (src/lib/handover.ts).
+  handover    Json       @default("[]")
+  note        String?
+  /// Why or how it ended (returned keys, damage found…).
+  endNote     String?
+  createdById String?
+  createdBy   User?      @relation("AssignmentCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  endedById   String?
+  endedBy     User?      @relation("AssignmentEnder", fields: [endedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime   @default(now())
+  documents   Document[]
+
+  @@index([companyId, truckId])
+  @@index([driverId])
 }
 
 model AuditLog {

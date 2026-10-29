@@ -18,7 +18,7 @@ import { currentCompanyId } from "./tenant";
 const SCOPED = new Set([
   "Driver", "Truck", "Trailer", "WorkOrder", "FuelLog", "Document", "AuditLog", "AppSetting",
   "TruckType", "Vendor", "WorkOrderLine", "WorkOrderEvent", "WalkAround", "WalkAroundRating", "Defect",
-  "RoadsideInspection", "RoadsideViolation", "EldConnection", "EldUnit",
+  "RoadsideInspection", "RoadsideViolation", "EldConnection", "EldUnit", "DriverAssignment",
 ]);
 
 const WHERE_OPS = new Set([
@@ -26,7 +26,7 @@ const WHERE_OPS = new Set([
   "update", "updateMany", "updateManyAndReturn", "delete", "deleteMany", "upsert",
 ]);
 
-type Ref = "driver" | "truck" | "trailer" | "workOrder" | "truckType" | "vendor" | "walkAround" | "roadside" | "eldConnection";
+type Ref = "driver" | "truck" | "trailer" | "workOrder" | "truckType" | "vendor" | "walkAround" | "roadside" | "eldConnection" | "assignment";
 /** Foreign keys per model that must stay inside the company. */
 const REFS: Record<string, Record<string, Ref>> = {
   Truck: { driverId: "driver", truckTypeId: "truckType" },
@@ -35,13 +35,14 @@ const REFS: Record<string, Record<string, Ref>> = {
   WorkOrderLine: { workOrderId: "workOrder" },
   WorkOrderEvent: { workOrderId: "workOrder" },
   FuelLog: { truckId: "truck", driverId: "driver" },
-  Document: { truckId: "truck", trailerId: "trailer", driverId: "driver", workOrderId: "workOrder", roadsideId: "roadside" },
+  Document: { truckId: "truck", trailerId: "trailer", driverId: "driver", workOrderId: "workOrder", roadsideId: "roadside", assignmentId: "assignment" },
   WalkAround: { truckId: "truck", driverId: "driver" },
   WalkAroundRating: { walkAroundId: "walkAround" },
   Defect: { truckId: "truck", trailerId: "trailer", walkAroundId: "walkAround", workOrderId: "workOrder" },
   RoadsideInspection: { driverId: "driver", truckId: "truck", trailerId: "trailer" },
   RoadsideViolation: { inspectionId: "roadside" },
   EldUnit: { connectionId: "eldConnection", truckId: "truck" },
+  DriverAssignment: { truckId: "truck", driverId: "driver" },
 };
 
 function countIn(ref: Ref, id: string, companyId: string) {
@@ -56,6 +57,7 @@ function countIn(ref: Ref, id: string, companyId: string) {
     case "walkAround": return rootDb.walkAround.count({ where });
     case "roadside": return rootDb.roadsideInspection.count({ where });
     case "eldConnection": return rootDb.eldConnection.count({ where });
+    case "assignment": return rootDb.driverAssignment.count({ where });
   }
 }
 

@@ -23,13 +23,14 @@ async function compressImage(file: File): Promise<File> {
   return new File([blob], file.name.replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" });
 }
 
-type Status = { tone: "ok" | "err" | "busy"; text: string };
+export type UploadStatus = { tone: "ok" | "err" | "busy"; text: string };
+type Status = UploadStatus;
 type Target = { type: string; id: string };
 /** Dates as typed in <input type="date"> (company time; the upload API reads them that way). */
 type Dates = { issuedAt?: string; expiresAt?: string };
 
 /** POST each file to /api/documents. Reports progress through `onStatus`; resolves to how many were uploaded. */
-async function sendFiles(list: File[], target: Target, kind: string, dates: Dates, onStatus: (s: Status) => void) {
+export async function sendFiles(list: File[], target: Target, kind: string, dates: Dates, onStatus: (s: Status) => void) {
   let done = 0;
   const failed: string[] = [];
   for (const original of list) {

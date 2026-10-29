@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronRight, EyeOff, FileText, Fuel, Headset, Mail, Pencil, Phone, Truck as TruckIcon } from "lucide-react";
+import { ChevronRight, EyeOff, FileText, Fuel, Headset, History, Mail, Pencil, Phone, Truck as TruckIcon } from "lucide-react";
 import { getCurrentUser, requireUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { db } from "@/lib/db";
@@ -47,9 +47,13 @@ export default async function DriverDetail({ params, searchParams }: PageProps<"
   });
   if (!driver) notFound();
 
-  const [docRows, options] = await Promise.all([
+  const [docRows, options, stints] = await Promise.all([
     db.document.findMany({ where: { driverId: id, kind: { in: [...REQUIRED_DRIVER_DOCS] } }, orderBy: { createdAt: "desc" }, select: { id: true, kind: true, name: true, expiresAt: true } }),
     canAssign && driver.status !== "INACTIVE" ? truckOptions(id) : Promise.resolve([]),
+    db.driverAssignment.findMany({
+      where: { driverId: id }, orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }], take: 25,
+      select: { id: true, startedAt: true, endedAt: true, backfilled: true, truck: { select: { id: true, unitNumber: true } } },
+    }),
   ]);
   const have = new Set(docRows.map((d) => d.kind));
   const missingDocs = REQUIRED_DRIVER_DOCS.filter((k) => !have.has(k));
@@ -160,6 +164,24 @@ export default async function DriverDetail({ params, searchParams }: PageProps<"
                 <p className="text-[13px] text-fg-muted">No truck assigned.</p>
               )}
             </Card>
+
+            {stints.length > 0 && (
+              <Card title="Truck history" icon={<History />} flush>
+                <Table dense stickyHead={false} head={["Truck", "From", "To", "Days"]}>
+                  {stints.map((s) => (
+                    <tr key={s.id}>
+                      <td>
+                        <Link href={`/fleet/${s.truck.id}?tab=driver`} className="num font-medium text-fg hover:underline">{s.truck.unitNumber}</Link>
+                        {!s.endedAt && <Badge value="ACTIVE" label="Now" className="ml-2" />}
+                      </td>
+                      <td className="num text-fg-muted">{s.backfilled ? "about " : ""}{f.date(s.startedAt)}</td>
+                      <td className="num text-fg-muted">{s.endedAt ? f.date(s.endedAt) : <span className="text-fg-subtle">still driving</span>}</td>
+                      <td className="num text-fg-muted">{Math.max(1, Math.round(((s.endedAt ?? new Date()).getTime() - s.startedAt.getTime()) / 86_400_000))}</td>
+                    </tr>
+                  ))}
+                </Table>
+              </Card>
+            )}
 
             <Card title={<span className="flex items-center gap-1.5">Licence &amp; medical<InfoTip>Expired papers mean the driver is not cleared to drive; papers expiring within 30 days mark them at risk. Dates come from the driver record; edit the driver to change them.</InfoTip></span>}
               icon={<FileText />} flush

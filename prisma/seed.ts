@@ -229,6 +229,30 @@ async function seedCompany(spec: CompanySpec, people: { owner: string; members: 
     });
     trucks.push({ ...truck, daily, interval });
   }
+  // ---------- Driver history ----------
+  // Every truck with a driver has the stint that began when the driver took it; every third truck had someone before.
+  for (const [i, t] of trucks.entries()) {
+    if (!t.driverId) continue;
+    const start = ago(int(12, 160));
+    const before = drivers[(i + 5) % drivers.length];
+    if (i % 3 === 0 && before.id !== t.driverId) {
+      const from = new Date(start.getTime() - int(60, 300) * DAY);
+      await db.driverAssignment.create({
+        data: {
+          companyId, truckId: t.id, driverId: before.id, startedAt: from, endedAt: start, createdById: specialist, endedById: specialist, createdAt: from,
+          handover: [{ item: "KEYS" }, { item: "FUEL_CARD", ref: `FC-${int(1000, 9999)}` }], endNote: "Keys and fuel card back",
+        },
+      });
+    }
+    await db.driverAssignment.create({
+      data: {
+        companyId, truckId: t.id, driverId: t.driverId, startedAt: start, createdById: specialist, createdAt: start,
+        handover: [{ item: "KEYS" }, { item: "ELD", ref: `ELD-${int(10000, 99999)}` }, ...(i % 2 ? [{ item: "TOLL_TAG", ref: `TT${int(100000, 999999)}` }] : [])],
+        note: i % 4 === 0 ? "Small dent on the right step, noted at pickup" : null,
+      },
+    });
+  }
+
   const odoAt = (t: T, daysAgo: number) => Math.max(0, Math.round(t.odometerKm - t.daily * daysAgo - between(0, 40)));
   const truckAt = (i: number) => trucks[i] as T | undefined;
 

@@ -11,6 +11,8 @@ export const DOC_KINDS = {
   workOrder: ["INVOICE", "ESTIMATE", "VENDOR_INVOICE", "PHOTO", "OTHER"],
   roadside: ["INSPECTION_REPORT", "CORRECTION", "PHOTO", "OTHER"],
   company: ["COMPANY_LICENSE", "COMPANY_INSURANCE", "TAX_CERT", "BANK_LETTER", "SOP", "OTHER"],
+  /** Pickup photos of a driver's stint on a truck (DriverAssignment). */
+  assignment: ["PHOTO"],
 } as const;
 
 /** The slots a unit page shows, in order, even when empty (anything else is listed under "Other files"). */
@@ -29,7 +31,8 @@ export type DocTarget = { type: DocOwner; id: string };
 export const REQUIRED_UNIT_DOCS = ["REGISTRATION", "INSURANCE", "INSPECTION"] as const;
 export const REQUIRED_DRIVER_DOCS = ["LICENSE", "MEDICAL"] as const;
 
-export function targetOf(doc: Pick<Document, "truckId" | "trailerId" | "driverId" | "workOrderId" | "roadsideId" | "isCompany">): DocTarget | null {
+export function targetOf(doc: Pick<Document, "truckId" | "trailerId" | "driverId" | "workOrderId" | "roadsideId" | "assignmentId" | "isCompany">): DocTarget | null {
+  if (doc.assignmentId) return { type: "assignment", id: doc.assignmentId };
   if (doc.truckId) return { type: "truck", id: doc.truckId };
   if (doc.trailerId) return { type: "trailer", id: doc.trailerId };
   if (doc.driverId) return { type: "driver", id: doc.driverId };
@@ -46,7 +49,8 @@ export async function canViewDocs(user: CurrentUser, t: DocTarget) {
     case "truck":
     case "trailer":
     case "workOrder":
-    case "roadside": return can(user.role, "fleet.view");
+    case "roadside":
+    case "assignment": return can(user.role, "fleet.view");
     case "driver": return can(user.role, "drivers.view");
     case "company": return true;
   }
@@ -58,7 +62,8 @@ export async function canUploadDoc(user: CurrentUser, t: DocTarget, kind: string
     case "truck":
     case "trailer":
     case "workOrder":
-    case "roadside": return can(user.role, "fleet.edit");
+    case "roadside":
+    case "assignment": return can(user.role, "fleet.edit");
     case "driver": return can(user.role, "drivers.edit");
     case "company": return can(user.role, "company.manage");
   }
@@ -70,7 +75,7 @@ export async function canDeleteDoc(user: CurrentUser, doc: Document) {
   const t = targetOf(doc);
   if (!t) return false;
   switch (t.type) {
-    case "truck": case "trailer": case "workOrder": case "roadside": return can(user.role, "fleet.edit");
+    case "truck": case "trailer": case "workOrder": case "roadside": case "assignment": return can(user.role, "fleet.edit");
     case "driver": return can(user.role, "drivers.edit");
     case "company": return can(user.role, "company.manage");
   }
@@ -84,6 +89,7 @@ export function ownerData(t: DocTarget): Record<string, string | boolean> {
     case "driver": return { driverId: t.id };
     case "workOrder": return { workOrderId: t.id };
     case "roadside": return { roadsideId: t.id };
+    case "assignment": return { assignmentId: t.id };
     case "company": return { isCompany: true };
   }
 }

@@ -6,7 +6,7 @@ import { ALLOWED_TYPES, MAX_UPLOAD_BYTES, makeKey, saveFile } from "@/lib/storag
 import { canUploadDoc, ownerData, DOC_KIND_LABELS, type DocOwner, type DocTarget } from "@/lib/documents";
 import { parseDateInput } from "@/lib/locale";
 
-const OWNERS: DocOwner[] = ["truck", "trailer", "driver", "workOrder", "roadside", "company"];
+const OWNERS: DocOwner[] = ["truck", "trailer", "driver", "workOrder", "roadside", "assignment", "company"];
 
 /** Does the parent record exist in the active company? (The scope makes another company's id "not found".) */
 async function parentExists(t: DocTarget) {
@@ -16,11 +16,12 @@ async function parentExists(t: DocTarget) {
     case "driver": return (await db.driver.count({ where: { id: t.id } })) > 0;
     case "workOrder": return (await db.workOrder.count({ where: { id: t.id } })) > 0;
     case "roadside": return (await db.roadsideInspection.count({ where: { id: t.id } })) > 0;
+    case "assignment": return (await db.driverAssignment.count({ where: { id: t.id } })) > 0;
     case "company": return true;
   }
 }
 
-/** Multipart upload: file, kind, one of truckId/trailerId/driverId/workOrderId/roadsideId (or company=1), optional issuedAt/expiresAt/notes. */
+/** Multipart upload: file, kind, one of truckId/trailerId/driverId/workOrderId/roadsideId/assignmentId (or company=1), optional issuedAt/expiresAt/notes. */
 export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Sign in required" }, { status: 401 });

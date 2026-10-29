@@ -11,7 +11,8 @@ import { put, get, del, list } from "@vercel/blob";
  * permission check.
  */
 const blobEnabled = () => Boolean(process.env.BLOB_READ_WRITE_TOKEN);
-const LOCAL_DIR = path.join(process.cwd(), "storage");
+// LOCAL_STORAGE_DIR pins the folder when the dev server is started from another directory.
+const LOCAL_DIR = path.resolve(process.env.LOCAL_STORAGE_DIR || path.join(process.cwd(), "storage"));
 
 export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024; // Vercel function body limit is 4.5 MB
 export const ALLOWED_TYPES = [

@@ -9,7 +9,8 @@ import { audit } from "@/lib/audit";
 import { attempt, fields, FormError, type ActionState } from "@/lib/action";
 import { OWNERSHIP, TRUCK_STATUSES } from "@/lib/constants";
 import { getFormat } from "@/lib/format-server";
-import { dayKey, parseDateInput } from "@/lib/locale";
+import { dayKey, parseDateInput, startOfDayIn } from "@/lib/locale";
+import { setTruckDriver } from "@/lib/assignments";
 import { serviceStatus } from "@/lib/service";
 import { ODOMETER_JUMP_KM, placeFromText } from "@/app/(app)/fleet/lib";
 
@@ -96,11 +97,12 @@ export async function saveTruck(truckId: string | null, _: ActionState, fd: Form
       inspectionExpiry: f.date("inspectionExpiry"),
       registrationExpiry: f.date("registrationExpiry"),
       notes: f.str("notes"),
-      driverId,
     };
+    let driverBefore: string | null = null;
     if (truckId) {
-      const before = await db.truck.findUnique({ where: { id: truckId }, select: { odometerKm: true } });
+      const before = await db.truck.findUnique({ where: { id: truckId }, select: { odometerKm: true, driverId: true } });
       if (!before) throw new FormError("This truck no longer exists.");
+      driverBefore = before.driverId;
       const read = before.odometerKm !== data.odometerKm;
       await db.truck.update({ where: { id: truckId }, data: { ...data, ...(read ? { odometerAt: new Date() } : {}) } });
       await audit(me.id, "update", "truck", truckId, data.unitNumber);
@@ -113,6 +115,11 @@ export async function saveTruck(truckId: string | null, _: ActionState, fd: Form
       const t = await db.truck.create({ data: { ...data, ...where, ...(data.odometerKm > 0 ? { odometerAt: new Date() } : {}) } });
       id = t.id;
       await audit(me.id, "create", "truck", t.id, data.unitNumber);
+    }
+    // The driver picked on the form starts (or ends) a stint today, so the truck's driver history stays whole.
+    if (id && driverId !== driverBefore) {
+      await setTruckDriver({ truckId: id, driverId, day: startOfDayIn(new Date(), me.company.timezone), userId: me.id });
+      await audit(me.id, driverId ? "assign driver" : "unassign driver", "truck", id, driverId ? `from ${fmt.date(new Date())} (truck form)` : "driver taken off (truck form)");
     }
   });
   if (res?.error) return res;

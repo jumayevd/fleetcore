@@ -8,10 +8,13 @@ import { can } from "@/lib/permissions";
 import { audit } from "@/lib/audit";
 import { attempt, fields, FormError, type ActionState } from "@/lib/action";
 import { DRIVER_STATUSES, DRIVER_TYPES } from "@/lib/constants";
+import { setTruckDriver } from "@/lib/assignments";
+import { startOfDayIn } from "@/lib/locale";
 
 /* ------------------------------------------------------------------ */
-/* Driver actions. Truck assignment writes Truck.driverId (a truck has  */
-/* at most one driver and a driver at most one truck).                  */
+/* Driver actions. Truck assignment goes through the truck's driver     */
+/* history (src/lib/assignments.ts): a truck has at most one driver and */
+/* a driver at most one truck.                                          */
 /* ------------------------------------------------------------------ */
 
 const EMPLOYMENT: Record<string, string> = { ACTIVE: "active", ON_LEAVE: "on leave", INACTIVE: "inactive" };
@@ -47,14 +50,22 @@ async function checkTruck(truckId: string, driverId: string | null) {
   return truck;
 }
 
-/** Point `driverId` at `truckId` (or at no truck). Returns the units that changed, for messages and the audit log. */
-async function linkTruck(driverId: string, truckId: string | null) {
+/**
+ * Point `driverId` at `truckId` (or at no truck), from today, through the truck's driver history
+ * (src/lib/assignments.ts). Returns the units that changed, for messages and the audit log.
+ */
+async function linkTruck(me: CurrentUser, driverId: string, truckId: string | null) {
   const current = await db.truck.findFirst({ where: { driverId }, select: { id: true, unitNumber: true } });
   if ((current?.id ?? null) === truckId) return { changed: false, from: current, to: current };
-  // One truck per driver: free the old one before the new one takes the driver (Truck.driverId is unique).
-  if (current) await db.truck.update({ where: { id: current.id }, data: { driverId: null } });
+  const day = startOfDayIn(new Date(), me.company.timezone);
   let to: { id: string; unitNumber: string } | null = null;
-  if (truckId) to = await db.truck.update({ where: { id: truckId }, data: { driverId }, select: { id: true, unitNumber: true } });
+  if (truckId) {
+    // Takes the driver off their old truck too (Truck.driverId is unique).
+    const r = await setTruckDriver({ truckId, driverId, day, userId: me.id });
+    to = { id: truckId, unitNumber: r.unitNumber };
+  } else if (current) {
+    await setTruckDriver({ truckId: current.id, driverId: null, day, userId: me.id });
+  }
   return { changed: true, from: current, to };
 }
 
@@ -124,7 +135,7 @@ export async function saveDriver(driverId: string | null, _: ActionState, fd: Fo
       await audit(me.id, "create", "driver", d.id, data.name);
     }
     if (truckId !== undefined && id) {
-      const link = await linkTruck(id, truckId);
+      const link = await linkTruck(me, id, truckId);
       if (link.changed) {
         fleetChanged = true;
         await auditTruckChange(me, id, data.name, link.from, link.to);
@@ -171,7 +182,7 @@ export async function setDriverEmployment(driverId: string, status: string): Pro
     await db.driver.update({ where: { id: driverId }, data: { status } });
     await audit(me.id, "status", "driver", driverId, `${prev.name}: ${EMPLOYMENT[prev.status] ?? prev.status} → ${EMPLOYMENT[status]}`);
     if (status === "INACTIVE") {
-      const link = await linkTruck(driverId, null);
+      const link = await linkTruck(me, driverId, null);
       if (link.changed) {
         fleetChanged = true;
         await auditTruckChange(me, driverId, prev.name, link.from, null);
@@ -199,7 +210,7 @@ export async function assignTruck(driverId: string, truckId: string | null): Pro
       if (driver.status === "INACTIVE") throw new FormError(`${driver.name} is inactive. Set them back to active before giving them a truck.`);
       await checkTruck(truckId, driverId);
     }
-    const link = await linkTruck(driverId, truckId || null);
+    const link = await linkTruck(me, driverId, truckId || null);
     if (!link.changed) return { ok: "No change" };
     changed = true;
     await auditTruckChange(me, driverId, driver.name, link.from, link.to);

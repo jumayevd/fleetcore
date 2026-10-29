@@ -25,6 +25,7 @@ import { UnitSafetyHistory } from "@/components/fleet/unit-safety";
 import { TruckStatusMenu } from "./status-menu";
 import { CompletenessCard, FixLink, FixNote, TruckFix, type Prompt } from "./complete";
 import { ExpensesTab } from "./expenses";
+import { DriverTab } from "./driver-tab";
 import { CompletedRepairs } from "../repair-history";
 import { openDefects, openRepairs, truckTypeOptions, type OpenRepair } from "../data";
 import {
@@ -32,10 +33,10 @@ import {
   ODOMETER_JUMP_KM, OWNERSHIP_TONE, parseNotes, pingSourceLabel, pingStale, recordedExpiry, serviceSummary, TRUCK_STATUS_LABELS, type ServiceSummary,
 } from "../lib";
 
-const TABS = ["overview", "maintenance", "expenses", "history", "documents", "specs", "notes"] as const;
+const TABS = ["overview", "driver", "maintenance", "expenses", "history", "documents", "specs", "notes"] as const;
 type Tab = (typeof TABS)[number];
 const TAB_LABELS: Record<Tab, string> = {
-  overview: "Overview", maintenance: "Maintenance", expenses: "Expenses", history: "History", documents: "Documents", specs: "Specs", notes: "Notes",
+  overview: "Overview", driver: "Driver", maintenance: "Maintenance", expenses: "Expenses", history: "History", documents: "Documents", specs: "Specs", notes: "Notes",
 };
 /** Links made before the tabs were renamed still land on the right tab. */
 const TAB_ALIASES: Record<string, Tab> = { financial: "expenses", costs: "expenses", compliance: "documents" };
@@ -136,7 +137,7 @@ export default async function TruckDetail({ params, searchParams }: PageProps<"/
   }
   const missingOther = missing.filter((k) => k !== "REGISTRATION"); // registration is in the prompts above
   if (missingOther.length) attention.push({ tone: "warn", text: `Not on file: ${missingOther.map((m) => DOC_KIND_LABELS[m].toLowerCase()).join(", ")}`, href: docsHref });
-  if (truck.status === "ACTIVE" && !truck.driver) attention.push({ tone: "info", text: "No driver assigned", href: editable ? `/fleet/${id}/edit#driver` : "/drivers" });
+  if (truck.status === "ACTIVE" && !truck.driver) attention.push({ tone: "info", text: "No driver assigned", href: `/fleet/${id}?tab=driver` });
   if (truck.driver?.hold) attention.push({ tone: "warn", text: `${truck.driver.name} is on hold${truck.driver.holdReason ? `: ${truck.driver.holdReason}` : ""}`, href: `/drivers/${truck.driver.id}` });
   if (truck.status === "MAINTENANCE" && !repair) attention.push({ tone: "info", text: "In shop with no open repair order", href: editable ? `/maintenance/work-orders/new?truck=${id}` : maintHref });
 
@@ -175,6 +176,8 @@ export default async function TruckDetail({ params, searchParams }: PageProps<"/
       {tab === "overview" && (
         <OverviewTab truck={truck} now={now} editable={editable} showMoney={showMoney} prompts={prompts} attention={attention} svc={svc} s={s} days={days} repair={repair} />
       )}
+
+      {tab === "driver" && <DriverTab truckId={id} unit={truck.unitNumber} editable={editable} />}
 
       {tab === "maintenance" && (
         <div className="space-y-4">
@@ -443,7 +446,7 @@ async function OverviewTab({ truck, now, editable, showMoney, prompts, attention
           </Card>
         )}
 
-        <Card title="Assignment">
+        <Card title="Assignment" actions={<Link href={`/fleet/${id}?tab=driver`} className="text-[11px] font-medium text-fg-muted hover:text-fg">Driver history →</Link>}>
           <div className="space-y-4">
             <div>
               <p className="eyebrow mb-1">Driver</p>
@@ -461,7 +464,7 @@ async function OverviewTab({ truck, now, editable, showMoney, prompts, attention
                   {truck.driver.phone && <a href={`tel:${truck.driver.phone}`} className="inline-flex h-7 items-center gap-1 rounded-md border border-line px-2 text-[12px] text-fg-muted hover:bg-raised hover:text-fg"><Phone className="h-3.5 w-3.5" />Call</a>}
                 </div>
               ) : (
-                <p className="text-[13px] text-fg-muted">No driver{editable && <> · <Link href={`/fleet/${id}/edit#driver`} className="font-medium text-fg hover:underline">Assign a driver</Link></>}</p>
+                <p className="text-[13px] text-fg-muted">No driver{editable && <> · <Link href={`/fleet/${id}?tab=driver`} className="font-medium text-fg hover:underline">Assign a driver</Link></>}</p>
               )}
             </div>
             <div>

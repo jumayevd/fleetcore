@@ -78,16 +78,22 @@ invites and companies. Raw SQL is not scoped — don't use it for company data.
 | Module | Highlights |
 |---|---|
 | **Today** | Eight tiles that each open the filtered page where you act (oil overdue / due, walk-around issues, videos missing, waiting on parts, papers holding dispatch, in the shop, annual DOT inspections due); one "needs a decision" list with a single action per row; who is in the shop; this month's spend |
-| **Trucks & trailers** | Status counters, column chooser, next service in distance and ≈days, completeness prompts with one-click fixes, document slots (issued / expires), maintenance, expenses (fuel economy, fuel cost per distance, driver charges), history, readings with "as of" |
+| **Trucks & trailers** | Status counters, column chooser, next service in distance and ≈days, completeness prompts with one-click fixes, **Driver** tab (current driver, what went with the unit, pickup photos, every earlier driver with their days), document slots (issued / expires), maintenance, expenses (fuel economy, fuel cost per distance, driver charges), history, readings with "as of" |
 | **Repairs** | Repair orders (RO-0001…): stage pipeline with history, downtime clock, job lines by system, who pays (company / driver / investigation / warranty) and "driver told", invoice, void, notes, CSV |
 | **Oil & PM** | Truck types with their own oil interval, the board (overdue / due / on schedule / no recent reading), book a shop, log an oil change |
 | **Vendors** | Shops, dealers, tire and road service, with their repairs and spend; tidy up free-text shop names |
 | **Inspections** | Weekly walk-around board (videos in, to review, nothing sent), component-by-component review, defects with owner and due date — a "fix before next load" defect takes the truck out of service until someone confirms the repair; **DOT inspections** (roadside) with violations and corrections |
-| **Drivers** | Cleared to drive, assigned truck, dispatcher, licence and medical expiry, hold, safety score, documents |
+| **Drivers** | Cleared to drive, assigned truck and truck history, dispatcher, licence and medical expiry, hold, safety score, documents |
 | **Live map** | Rolling / idle / stopped / in shop / out of service / no signal, filters, truck details |
 | **Reports** | Spend, distance, cost per distance, downtime, repairs by type and system, repeat repairs, driver charges, defects, walk-around compliance, roadside; CSV export |
 | **Settings** | Company profile, **region & units**, company documents, members and invitations, audit log, **integrations** (TrackPro ELD) |
 | **Fleet assistant** | Ask about the active company's fleet in plain language (Vercel AI Gateway) |
+
+Who drives a truck goes through `setTruckDriver()` (`src/lib/assignments.ts`) from every screen that changes it (the
+Driver tab, the truck form, the driver page): it closes the truck's open `DriverAssignment`, moves a driver off another
+truck the same day, and opens the next stint, so `Truck.driverId` and the history never disagree. Pickup photos are
+documents of the stint (`assignmentId`). Trucks that had a driver before history existed start with a stint marked
+"about <date>" (migration `7_driver_history`).
 
 Distances come from odometer readings (fuel fills, repairs, manual readings) — `src/lib/mileage.ts` — since there are
 no loads in this product. The oil-change rule is in `src/lib/service.ts`: a reading older than 14 days makes "used" a
