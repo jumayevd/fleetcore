@@ -8,9 +8,11 @@ import { OWNERSHIP, OWNERSHIP_LABELS, REPAIR_STAGE_LABELS, TRUCK_STATUSES } from
 import { DOC_KIND_LABELS, REQUIRED_UNIT_DOCS, UNIT_DOC_SLOTS } from "@/lib/documents";
 import { ago, daysUntil } from "@/lib/format";
 import { getFormat } from "@/lib/format-server";
+import type { Formatter } from "@/lib/locale";
 import { daysToCover, distancePerDay } from "@/lib/mileage";
 import { OIL_DUE_SOON, roLabel, serviceStatus, type ServiceState } from "@/lib/service";
 import { Badge, Card, Cell, Chip, EmptyState, ExpiryBadge, InfoTip, LinkButton, PageHeader, Progress, Segmented, Stat, Table, cn, type Tone } from "@/components/ui";
+import { isTrackerSource, LIVE_FIX_MS, ROLLING_KMH } from "@/components/map/fleet-status";
 import { ListFilters } from "./filters";
 import { LinkRow } from "./link-row";
 import { ColumnChooser, type ColumnDef } from "./column-chooser";
@@ -39,6 +41,7 @@ const COLUMNS: ColumnDef[] = [
   { key: "status", label: "Status" },
   { key: "driver", label: "Driver" },
   { key: "location", label: "Location" },
+  { key: "speed", label: "Speed" },
   { key: "odometer", label: "Odometer" },
   { key: "service", label: "Next service" },
   { key: "repair", label: "Repair" },
@@ -267,6 +270,7 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
             col("status", "Status"),
             col("driver", "Driver"),
             col("location", "Location"),
+            col("speed", <>Speed<InfoTip>From the truck&apos;s tracker. TrackPro sends no speed, so it is worked out from the last two GPS positions (≈). With no position in the last 30 minutes it is the last known speed.</InfoTip></>),
             col("odometer", <>Odometer<InfoTip>The last reading and how old it is. Older than two weeks, the service countdown is a lower bound.</InfoTip></>),
             col("service", <>Next service<InfoTip>Distance to the next oil change, and roughly how many days that is at this truck&apos;s recent driving. No estimate without two dated readings.</InfoTip></>),
             col("repair", "Repair"),
@@ -311,6 +315,7 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
                     <Cell primary={t.locationName ?? <span className="text-fg-faint">Unknown</span>}
                       secondary={t.lastPingAt && pingStale(t.lastPingAt, 24) ? ago(t.lastPingAt) : undefined} />
                   </td>
+                  <td data-col="speed" className="whitespace-nowrap"><SpeedCell speed={t.speedKmh} source={t.pingSource} at={t.lastPingAt} now={now} f={f} /></td>
                   <td data-col="odometer" className="whitespace-nowrap">
                     <Cell mono primary={f.dist(t.odometerKm)}
                       secondary={<span className={cn(stale && "text-warn")}>{t.odometerAt ? `read ${sinceShort(t.odometerAt)} ago` : "reading not dated"}</span>} />
@@ -382,6 +387,17 @@ function ServiceCell({ tone, text, state, pct }: { tone: Tone; text: string; sta
     );
   }
   return <span className="text-[12px] text-fg-subtle">{text}</span>;
+}
+
+/** Speed from a tracker, in the company's unit: current on a live fix, otherwise the last one it reported. */
+function SpeedCell({ speed, source, at, now, f }: { speed: number | null; source: string | null; at: Date | null; now: Date; f: Pick<Formatter, "speed"> }) {
+  if (speed == null || !isTrackerSource(source)) return <span className="text-fg-faint">—</span>;
+  const live = at != null && now.getTime() - at.getTime() < LIVE_FIX_MS;
+  const moving = live && speed > ROLLING_KMH;
+  return (
+    <Cell mono primary={<span className={moving ? "font-medium text-fg" : "text-fg-muted"}>{source === "TRACKPRO" ? "≈ " : ""}{f.speed(speed)}</span>}
+      secondary={live ? (moving ? "Moving" : "Stopped") : at ? `last known · ${sinceShort(at)} ago` : "last known"} />
+  );
 }
 
 function PapersCell({ id, expired, missing, expiry }: { id: string; expired: string[]; missing: string[]; expiry: Record<string, Date | null> }) {
