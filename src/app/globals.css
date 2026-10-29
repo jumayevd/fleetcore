@@ -169,6 +169,10 @@
 :root[data-font="inter"] { --font-ui: var(--font-inter); --font-code: var(--font-geist-mono); }
 :root[data-font="geist"] { --font-ui: var(--font-geist-sans); --font-code: var(--font-geist-mono); }
 :root[data-font="system"] { --font-ui: ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; --font-code: var(--font-geist-mono); }
+/* Alegreya SC's small capitals read small at UI sizes, so the house face is drawn a fifth larger than the sizes in the
+   classes (11px reads as ~13px, 13px as ~15.5px): the font's x-height metric is 0.452 em, and 0.543 = 0.452 × 1.2.
+   Inherited by everything, sidebar, tables and map labels included; the personal fonts keep their own size. */
+:root[data-font="alegreya"] { font-size-adjust: 0.543; }
 
 @theme inline {
   --font-sans: var(--font-ui), ui-sans-serif, system-ui, sans-serif;
