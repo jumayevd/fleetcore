@@ -155,7 +155,13 @@ function SideNav({ user, active, accounts, path, data, expanded, pinned, onToggl
     <nav className="flex h-full flex-col" aria-label="Main">
       {/* The company's colour along the top edge: you always see which company you are working in. */}
       <div aria-hidden className="h-[3px] shrink-0" style={{ background: active.color ?? "var(--mark)" }} />
-      <div className={cn("flex h-14 shrink-0 items-center", expanded ? "px-2" : "justify-center px-1.5")}>
+      {/* The brand leads the sidebar; the company you are working in sits right under it. */}
+      <Link href="/select" onClick={onNavigate} title="FleetCore · all companies"
+        className={cn("flex h-14 shrink-0 items-center gap-2.5 transition-opacity hover:opacity-80", expanded ? "px-4" : "justify-center")}>
+        <BrandIcon className="h-8 w-8" />
+        {expanded && <Wordmark className="h-[22px] text-fg" />}
+      </Link>
+      <div className={cn("flex shrink-0 items-center pb-2", expanded ? "px-2" : "justify-center px-1.5")}>
         <WorkspaceSwitcher active={active} accounts={accounts} expanded={expanded} />
       </div>
       <div className="flex-1 space-y-0.5 overflow-y-auto overflow-x-hidden px-2 pb-3 pt-1">
@@ -214,19 +220,14 @@ function SideNav({ user, active, accounts, path, data, expanded, pinned, onToggl
           );
         })}
       </div>
-      <div className="flex items-center gap-1 p-2">
-        <Link href="/select" onClick={onNavigate} title="FleetCore · all companies"
-          className={cn("flex h-8 min-w-0 items-center gap-2 rounded-[9px] text-[12px] text-fg-subtle transition-colors hover:bg-surface/60 hover:text-fg", expanded ? "flex-1 px-2.5" : "w-full justify-center")}>
-          <BrandIcon />
-          {expanded && <Wordmark className="h-3.5 text-current" />}
-        </Link>
-        {expanded && (
+      {expanded && (
+        <div className="hidden justify-end p-2 lg:flex">
           <button type="button" onClick={onTogglePin} title={pinned ? "Collapse sidebar" : "Keep sidebar open"}
-            className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-[9px] text-fg-subtle transition-colors hover:bg-surface/60 hover:text-fg lg:flex">
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] text-fg-subtle transition-colors hover:bg-surface/60 hover:text-fg">
             {pinned ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </nav>
   );
 }
