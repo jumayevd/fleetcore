@@ -126,7 +126,7 @@ export default async function TrailerDetail({ params, searchParams }: PageProps<
           <Card id="where" className="scroll-mt-20" title="Where it is" flush>
             {trailer.lat != null && trailer.lng != null ? (
               <div className="p-2">
-                <LeafletMap height={180} fitKey={id} trucks={[{ id: trailer.id, unitNumber: trailer.unitNumber, lat: trailer.lat, lng: trailer.lng, heading: 0, speedKmh: 0, status: trailer.status === "SHOP" || trailer.status === "OUT_OF_SERVICE" ? "MAINTENANCE" : "ACTIVE", moving: false, stale: pingStale(trailer.lastPingAt), label: trailer.locationName ?? typeLabel }]} />
+                <LeafletMap height={180} fitKey={id} layerSwitch trucks={[{ id: trailer.id, unitNumber: trailer.unitNumber, lat: trailer.lat, lng: trailer.lng, heading: 0, speedKmh: 0, status: trailer.status === "SHOP" || trailer.status === "OUT_OF_SERVICE" ? "MAINTENANCE" : "ACTIVE", moving: false, stale: pingStale(trailer.lastPingAt), label: trailer.locationName ?? typeLabel }]} />
               </div>
             ) : (
               <p className="px-4 py-5 text-center text-[12px] text-fg-muted">

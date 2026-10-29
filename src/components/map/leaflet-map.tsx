@@ -5,11 +5,18 @@ import L from "leaflet";
 import { MapContainer, TileLayer, Marker, Polyline, Popup, CircleMarker, useMap } from "react-leaflet";
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { useFormat } from "@/components/locale";
+import { MapLayerButton, useMapLayer } from "./layer";
 
 // Default: OpenStreetMap (fine for dev/low volume). For production traffic set a
 // commercial tile provider via NEXT_PUBLIC_MAP_TILE_URL (e.g. MapTiler, Mapbox, Stadia).
 const TILE_URL = process.env.NEXT_PUBLIC_MAP_TILE_URL || "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const TILE_ATTRIBUTION = process.env.NEXT_PUBLIC_MAP_TILE_ATTRIBUTION || '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+// Satellite: Esri World Imagery, with Esri's road and place-name layers on top so highways and towns still read.
+// Free with attribution; for heavy use Esri asks for a (free) ArcGIS key, so the imagery URL can be swapped too.
+const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services";
+const SATELLITE_URL = process.env.NEXT_PUBLIC_MAP_SATELLITE_URL || `${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`;
+const SATELLITE_OVERLAYS = [`${ESRI}/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}`, `${ESRI}/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}`];
+const SATELLITE_ATTRIBUTION = "Imagery &copy; Esri, Maxar, Earthstar Geographics and the GIS User Community";
 
 /** Marker fill. Without it the marker follows `status` / `moving` (in service = warn, moving = progress, else info). */
 export type MapTone = "progress" | "info" | "warn" | "danger" | "ok" | "neutral";
@@ -211,7 +218,7 @@ function FlyTo({ target }: { target: [number, number] | null }) {
   return null;
 }
 
-export default function LeafletMap({ trucks = [], points = [], selectedId, onSelect, renderPopup, height = 520, fitKey = "all", flyTo = null, className, center, zoom }: {
+export default function LeafletMap({ trucks = [], points = [], selectedId, onSelect, renderPopup, height = 520, fitKey = "all", flyTo = null, className, center, zoom, layerSwitch }: {
   trucks?: MapTruck[];
   points?: MapPoint[];
   selectedId?: string | null;
@@ -227,9 +234,13 @@ export default function LeafletMap({ trucks = [], points = [], selectedId, onSel
   /** Opening view before any position is known (defaults to the company's region, from its time zone). */
   center?: [number, number];
   zoom?: number;
+  /** Street map / satellite button in the top-right corner (the live map places its own). */
+  layerSwitch?: boolean;
 }) {
   const v = useThemeVars();
   const f = useFormat();
+  const [layer] = useMapLayer();
+  const satellite = layer === "satellite";
   const start = defaultView(f.tz);
   const positioned = trucks.filter((t) => t.lat != null && t.lng != null);
   const all: [number, number][] = [
@@ -238,9 +249,15 @@ export default function LeafletMap({ trucks = [], points = [], selectedId, onSel
   ];
 
   return (
-    <div style={{ height }} className={`overflow-hidden rounded-lg ${className ?? ""}`}>
+    <div style={{ height }} className={`relative overflow-hidden rounded-lg ${satellite ? "map-satellite" : ""} ${className ?? ""}`}>
+      {layerSwitch && <MapLayerButton className="absolute right-2.5 top-2.5 z-[1000]" />}
       <MapContainer center={center ?? start.center} zoom={zoom ?? start.zoom} style={{ height: "100%", width: "100%" }} scrollWheelZoom>
-        <TileLayer attribution={TILE_ATTRIBUTION} url={TILE_URL} />
+        {satellite ? (
+          <>
+            <TileLayer key="satellite" attribution={SATELLITE_ATTRIBUTION} url={SATELLITE_URL} maxNativeZoom={19} />
+            {SATELLITE_OVERLAYS.map((url) => <TileLayer key={url} url={url} maxNativeZoom={19} />)}
+          </>
+        ) : <TileLayer key="map" attribution={TILE_ATTRIBUTION} url={TILE_URL} />}
         <FitBounds points={all} fitKey={fitKey} />
         <FlyTo target={flyTo} />
         {positioned.map((t) => {

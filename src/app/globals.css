@@ -294,6 +294,10 @@ input[type="time"] {
 .leaflet-tile-pane {
   filter: var(--map-filter);
 }
+/* Photos stay as they are: the theme filter would turn satellite imagery into a negative. */
+.map-satellite .leaflet-tile-pane {
+  filter: none;
+}
 .leaflet-control-zoom a,
 .leaflet-control-attribution {
   background: var(--surface) !important;

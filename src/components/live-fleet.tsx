@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { ArrowUpRight, Container, MapPin, Maximize2, OctagonX, Phone, Search, Wrench, X } from "lucide-react";
 import { LeafletMap, type MapTruck } from "./map";
+import { MapLayerButton } from "./map/layer";
 import {
   FLEET_STATUSES, FLEET_STATUS_HINT, FLEET_STATUS_LABEL, FLEET_STATUS_TONE, LOW_FUEL_PCT,
   fixAge, fleetStatus, serviceLine, serviceNeeded, serviceTone, sourceLabel, type FleetStatus,
@@ -327,7 +328,7 @@ export function LiveFleetMini({ initial, at, height = 360, live = true }: {
 
   return (
     <div>
-      <LeafletMap trucks={mapTrucks} height={height} renderPopup={renderPopup} />
+      <LeafletMap trucks={mapTrucks} height={height} renderPopup={renderPopup} layerSwitch />
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[11px] text-fg-muted">
         {FLEET_STATUSES.map((s) => {
           const n = count(s);
@@ -565,9 +566,10 @@ export function TrackingBoard({ initial, at, selectedId: initialSelected, initia
               height="100%" fitKey={`all-${fitN}`} flyTo={flyTo} className="rounded-none" />
           </div>
 
-          <div className="absolute left-3 top-[88px] z-[1001]">
+          <div className="absolute left-3 top-[88px] z-[1001] flex flex-col gap-1.5">
             <IconButton label="Fit all trucks" onClick={() => { setFitN((n) => n + 1); setFlyTo(null); }}
               className="border border-line bg-overlay shadow-float hover:bg-raised"><Maximize2 /></IconButton>
+            <MapLayerButton />
           </div>
 
           <div className="pointer-events-none absolute bottom-3 left-3 z-[1001] hidden flex-wrap items-center gap-3 rounded-md border border-line bg-overlay/90 px-2.5 py-1.5 text-[11px] text-fg-muted shadow-float backdrop-blur md:flex">

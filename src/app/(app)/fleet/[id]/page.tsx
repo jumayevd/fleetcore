@@ -361,7 +361,7 @@ async function OverviewTab({ truck, now, editable, showMoney, prompts, attention
           </div>
           {hasPosition ? (
             <div className="p-2">
-              <LeafletMap height={240} fitKey={id} trucks={[{
+              <LeafletMap height={240} fitKey={id} layerSwitch trucks={[{
                 id: truck.id, unitNumber: truck.unitNumber, lat: truck.lat, lng: truck.lng, heading: truck.heading ?? 0, speedKmh: truck.speedKmh ?? 0,
                 status: truck.status, driverName: truck.driver?.name, moving: (truck.speedKmh ?? 0) > 1, stale,
                 label: truck.locationName ?? "Last known position",
