@@ -11,7 +11,7 @@ const DAY = 86_400_000;
 const INSPECTION_SOON_DAYS = 30;
 
 /**
- * Oil change / PM and annual DOT inspection of one truck (truck page, Maintenance tab), by the same rule as the Oil & PM
+ * Oil change / PM and annual DOT inspection of one truck (truck page, Maintenance tab), by the same rule as the Oil changes
  * board: what is left, from which reading, the booked shop, and the next step (log, book, get a reading).
  */
 export async function ServiceSchedule({ truckId, editable }: { truckId: string; editable: boolean }) {

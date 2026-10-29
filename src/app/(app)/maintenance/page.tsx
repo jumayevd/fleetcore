@@ -49,7 +49,7 @@ export default async function ShopOverview({ searchParams }: PageProps<"/mainten
         actions={
           <>
             {periodic && <Segmented active={period} items={(Object.keys(PERIODS) as PeriodKey[]).map((p) => ({ key: p, label: PERIODS[p].label, href: href({ period: p }) }))} />}
-            <LinkButton href="/maintenance/oil" variant="secondary"><Droplet />Oil &amp; PM</LinkButton>
+            <LinkButton href="/maintenance/oil" variant="secondary"><Droplet />Oil changes</LinkButton>
             <LinkButton href="/vendors" variant="secondary"><Store />Vendors</LinkButton>
             {editable && <LinkButton href={newWorkOrderHref()}><Plus />New repair</LinkButton>}
           </>

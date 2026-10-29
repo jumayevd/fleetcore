@@ -694,7 +694,7 @@ export function buildAssistantTools(ctx: ToolContext) {
     }),
 
     maintenanceDue: tool({
-      description: `Oil change / PM status by odometer, the same rule as the Oil & PM board: the interval comes from the truck's type (else the truck's own), due at = last oil change odometer + interval. Overdue = past it; due now = within ${f.dist(OIL_DUE_NOW)}; due soon = within ${f.dist(OIL_DUE_SOON)}; an odometer reading older than two weeks makes the figures bounds ("at least … used") and shows as no recent reading. Most overdue first, each with the oil service repair order if one is booked. Answers 'which trucks are overdue for an oil change'.`,
+      description: `Oil change / PM status by odometer, the same rule as the Oil changes board: the interval comes from the truck's type (else the truck's own), due at = last oil change odometer + interval. Overdue = past it; due now = within ${f.dist(OIL_DUE_NOW)}; due soon = within ${f.dist(OIL_DUE_SOON)}; an odometer reading older than two weeks makes the figures bounds ("at least … used") and shows as no recent reading. Most overdue first, each with the oil service repair order if one is booked. Answers 'which trucks are overdue for an oil change'.`,
       inputSchema: z.object({
         within: z.number().int().min(0).max(100_000).optional().describe(`Include trucks due within this distance in ${L.distanceLong} (default ${OIL_DUE_SOON}). Overdue trucks are always included.`),
         truckType: filterText("Only this truck type (case-insensitive contains)"),

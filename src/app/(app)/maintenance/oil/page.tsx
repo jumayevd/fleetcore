@@ -21,7 +21,7 @@ import { TruckTypesDialog } from "../_components/oil-types";
 import { OilRow } from "../_components/oil-row";
 import { eldByTruck } from "@/lib/eld/sync";
 
-export const metadata = { title: "Oil & PM" };
+export const metadata = { title: "Oil changes" };
 
 const VIEWS = ["all", "overdue", "due", "ok", "stale", "unknown"] as const;
 type View = (typeof VIEWS)[number];
@@ -32,7 +32,7 @@ const VIEW_STATES: Record<View, ServiceState[] | null> = {
 const RANK: Record<ServiceState, number> = { overdue: 0, due_now: 1, due_soon: 2, no_reading: 3, ok: 4, unknown: 5 };
 
 /**
- * Oil & PM board: every truck in service by its oil change, worst first. Editors type each truck's shop and the
+ * Oil changes board: every truck in service by its oil change, worst first. Editors type each truck's shop and the
  * odometer of its last oil change into the row (see OilRow). `view` filters (overdue, due, ok, stale, unknown), `q`
  * searches unit / driver, `log=1[&truck=]` opens "Log oil change", `book=<truckId>` opens a booking (the Today page
  * links there), `reading=<truckId>` goes to that truck's readings.
@@ -95,8 +95,8 @@ export default async function OilBoard({ searchParams }: PageProps<"/maintenance
   return (
     <>
       <PageHeader
-        title="Oil & PM"
-        subtitle={`Oil changes by odometer. Intervals come from the truck type, else the truck's own. A reading older than ${STALE_READING_DAYS} days is a lower bound.`}
+        title="Oil changes"
+        subtitle={`Due by odometer. Intervals come from the truck type, else the truck's own. A reading older than ${STALE_READING_DAYS} days is a lower bound.`}
         actions={
           <>
             <TruckTypesDialog types={typeOptions} editable={editable} />

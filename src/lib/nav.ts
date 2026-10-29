@@ -30,7 +30,7 @@ export const NAV: NavSection[] = [
     icon: "Wrench",
     items: [
       { href: "/maintenance/work-orders", label: "Repairs", icon: "ClipboardList", perm: "fleet.view", shortcut: "g w", description: "Repair orders from opening to invoice" },
-      { href: "/maintenance/oil", label: "Oil & PM", icon: "Droplet", perm: "fleet.view", shortcut: "g s", description: "Oil changes and service by odometer" },
+      { href: "/maintenance/oil", label: "Oil changes", icon: "Droplet", perm: "fleet.view", shortcut: "g s", description: "Oil changes and service by odometer" },
       { href: "/maintenance", label: "Shop overview", icon: "Wrench", perm: "fleet.view", description: "Spend, in shop, lease mileage, compliance" },
       { href: "/vendors", label: "Vendors", icon: "Store", perm: "fleet.view", shortcut: "g v", description: "Shops, dealers, tire and road-side services" },
     ],
@@ -73,7 +73,7 @@ export const NAV: NavSection[] = [
 /** Breadcrumb titles for route segments that aren't nav items. */
 export const SEGMENT_LABELS: Record<string, string> = {
   new: "New", edit: "Edit", "work-orders": "Repairs", trailers: "Trailers", account: "My account", admin: "Company",
-  company: "Company profile", members: "Members", audit: "Audit log", integrations: "Integrations", alerts: "Needs attention", oil: "Oil & PM",
+  company: "Company profile", members: "Members", audit: "Audit log", integrations: "Integrations", alerts: "Needs attention", oil: "Oil changes",
   defects: "Defects", roadside: "DOT inspections", vendors: "Vendors", inspections: "Pre-trip board",
 };
 

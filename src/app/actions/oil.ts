@@ -16,7 +16,7 @@ import {
 import { OIL_CHECKLIST, OIL_SERVICE_TYPES } from "@/components/shop/shared";
 
 /*
- * Oil & PM: truck types (each with its oil interval, in the company's distance unit), booking an oil change, and
+ * Oil changes: truck types (each with its oil interval, in the company's distance unit), booking an oil change, and
  * logging one that was done — which writes ONE completed repair order and restarts the interval.
  */
 

@@ -102,7 +102,7 @@ export function TruckForm({ action, truck, drivers, groups, types, cancelHref }:
 
           <Card id="service" className="scroll-mt-20" title={<span className="flex items-center gap-1.5">Odometer &amp; oil service<InfoTip>The truck type sets the oil interval for every truck of that type. Without a type, the truck&apos;s own interval below applies.</InfoTip></span>}>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <Field label="Truck type" hint={type ? `Oil every ${f.dist(type.oilIntervalKm)}, from the type.` : types.length ? "No type: the truck's own interval applies." : <>No truck types yet. Set them up on <Link href="/maintenance/oil" className="font-medium text-fg hover:underline">Oil &amp; PM</Link>.</>}>
+              <Field label="Truck type" hint={type ? `Oil every ${f.dist(type.oilIntervalKm)}, from the type.` : types.length ? "No type: the truck's own interval applies." : <>No truck types yet. Set them up on <Link href="/maintenance/oil" className="font-medium text-fg hover:underline">Oil changes</Link>.</>}>
                 <Select name="truckTypeId" value={typeId} onChange={(e) => setTypeId(e.target.value)} placeholder="No type"
                   options={types.map((t) => ({ value: t.id, label: `${t.name} · ${f.dist(t.oilIntervalKm)}` }))} />
               </Field>

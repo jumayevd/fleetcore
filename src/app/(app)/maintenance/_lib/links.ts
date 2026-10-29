@@ -22,6 +22,6 @@ export function withQuery(base: string, q: Query) {
 export const maintenanceHref = (q: Query) => withQuery("/maintenance", q);
 export const workOrdersHref = (q: Query) => withQuery("/maintenance/work-orders", q);
 export const newWorkOrderHref = (q: Query = {}) => withQuery("/maintenance/work-orders/new", q);
-/** Oil & PM board. `log=1` opens the "Log oil change" form, `book=<truckId>` the booking for a truck. */
+/** Oil changes board. `log=1` opens the "Log oil change" form, `book=<truckId>` the booking for a truck. */
 export const oilHref = (q: Query = {}) => withQuery("/maintenance/oil", q);
 export const vendorsHref = (q: Query = {}) => withQuery("/vendors", q);
