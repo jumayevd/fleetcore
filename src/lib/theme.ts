@@ -29,9 +29,10 @@ export const ACCENT_SWATCH: Record<Accent, string> = {
 export const DENSITIES = ["compact", "default", "comfortable"] as const;
 export type Density = (typeof DENSITIES)[number];
 
-export const FONTS = ["inter", "geist", "system"] as const;
+/** Alegreya SC is the house face; the others are personal options. */
+export const FONTS = ["alegreya", "inter", "geist", "system"] as const;
 export type FontChoice = (typeof FONTS)[number];
-export const FONT_LABEL: Record<FontChoice, string> = { inter: "Inter", geist: "Geist", system: "System" };
+export const FONT_LABEL: Record<FontChoice, string> = { alegreya: "Alegreya SC", inter: "Inter", geist: "Geist", system: "System" };
 
 export const APPEARANCE_COOKIE = { accent: "accent", density: "density", font: "font" } as const;
 
@@ -39,7 +40,7 @@ const oneOf = <T extends string>(list: readonly T[], v: string | undefined | nul
   (list as readonly string[]).includes(v ?? "") ? (v as T) : fallback;
 export const parseAccent = (v?: string | null) => oneOf(ACCENTS, v, "blue");
 export const parseDensity = (v?: string | null) => oneOf(DENSITIES, v, "default");
-export const parseFont = (v?: string | null) => oneOf(FONTS, v, "inter");
+export const parseFont = (v?: string | null) => oneOf(FONTS, v, "alegreya");
 
 /** Write one appearance cookie for a year and apply it to <html> right away. */
 export function saveAppearance(name: "accent" | "density" | "font", value: string) {

@@ -48,7 +48,8 @@ Every page must look right in **both** themes.
 | Categorical hues | `bg-hue-N-soft text-hue-N` (N = 1…6) | blue, violet, teal, amber, pink, green | |
 
 Shadows: `shadow-card` (resting), `shadow-lift` (hover), `shadow-float` (menus, drawers).
-Typography: Inter by default (Geist and system optional). Page title 22/600, card title 14/600, body 13–14,
+Typography: Alegreya SC (small caps) for every text by default, numbers and codes included, with lining tabular
+figures in `.num`; Inter, Geist and the system font are personal options (codes then use Geist Mono). Page title 22/600, card title 14/600, body 13–14,
 table 13, table header 12/500 `text-fg-subtle`, chips 11/500.
 
 ## Components
@@ -126,5 +127,5 @@ Everyone can tune the look from the palette icon in the top bar (also on My acco
   `globals.css`, with a Night variant each).
 - **Density**: compact (13 px root), default (14 px), roomy (15.5 px). Rem-based spacing and control heights
   scale; text sizes and corner radii stay put.
-- **Font**: Inter (default), Geist, or the system UI font.
+- **Font**: Alegreya SC (default), Inter, Geist, or the system UI font.
 - **Overview**: "Customize" shows or hides each section (`overview` cookie); hidden sections are not queried.

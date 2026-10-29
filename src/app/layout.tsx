@@ -1,10 +1,12 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Inter } from "next/font/google";
+import { Alegreya_SC, Geist, Geist_Mono, Inter } from "next/font/google";
 import { cookies } from "next/headers";
 import { APPEARANCE_COOKIE, THEME_BOOT_SCRIPT, THEME_COOKIE, parseAccent, parseDensity, parseFont, parseThemePref } from "@/lib/theme";
 import "./globals.css";
 
-// Inter is the default UI face (crisp at small sizes on Windows); Geist and the system font are personal options.
+// Alegreya SC (small caps) is the house face for every text, numbers included; Inter, Geist and the system font are
+// personal options (Appearance). Alegreya SC isn't variable: 400 body, 500 medium, 700 for semibold and bold, 800 heavy.
+const alegreya = Alegreya_SC({ variable: "--font-alegreya-sc", subsets: ["latin", "latin-ext", "cyrillic"], weight: ["400", "500", "700", "800"] });
 const inter = Inter({ variable: "--font-inter", subsets: ["latin", "cyrillic"] });
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
@@ -29,7 +31,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       data-accent={parseAccent(jar.get(APPEARANCE_COOKIE.accent)?.value)}
       data-density={parseDensity(jar.get(APPEARANCE_COOKIE.density)?.value)}
       data-font={parseFont(jar.get(APPEARANCE_COOKIE.font)?.value)}
-      className={`${inter.variable} ${geistSans.variable} ${geistMono.variable}`}
+      className={`${alegreya.variable} ${inter.variable} ${geistSans.variable} ${geistMono.variable}`}
       suppressHydrationWarning
     >
       <head>

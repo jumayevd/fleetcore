@@ -163,14 +163,16 @@
 :root[data-density="compact"] { font-size: 13px; }
 :root[data-density="comfortable"] { font-size: 15.5px; }
 
-/* Font choice */
-:root { --font-ui: var(--font-inter); }
-:root[data-font="geist"] { --font-ui: var(--font-geist-sans); }
-:root[data-font="system"] { --font-ui: ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+/* Font choice. Alegreya SC (the house face) sets every text, the numbers and codes too; the personal options keep
+   Geist Mono for codes. */
+:root { --font-ui: var(--font-alegreya-sc), Georgia, serif; --font-code: var(--font-alegreya-sc), Georgia, serif; }
+:root[data-font="inter"] { --font-ui: var(--font-inter); --font-code: var(--font-geist-mono); }
+:root[data-font="geist"] { --font-ui: var(--font-geist-sans); --font-code: var(--font-geist-mono); }
+:root[data-font="system"] { --font-ui: ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; --font-code: var(--font-geist-mono); }
 
 @theme inline {
   --font-sans: var(--font-ui), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-mono: var(--font-code), ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --color-canvas: var(--canvas);
   --color-surface: var(--surface);
@@ -246,8 +248,9 @@ html {
 
 /* Tabular numerals for metrics, IDs and money: columns line up, in the same face as the text. */
 .num {
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum";
+  /* Lining, equal-width figures: Alegreya's default old-style figures would bob and stagger down a column. */
+  font-variant-numeric: lining-nums tabular-nums;
+  font-feature-settings: "lnum", "tnum";
   letter-spacing: -0.005em;
 }
 

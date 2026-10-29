@@ -7,7 +7,7 @@ import RootError from "./error";
 
 // Replaces the root layout, so nothing from it applies: no data-theme, no Geist font variables.
 // System stacks stand in for Geist; the theme is resolved like the layout's boot script does.
-const FONT_FALLBACK = { "--font-inter": "ui-sans-serif", "--font-geist-sans": "ui-sans-serif", "--font-geist-mono": "ui-monospace" } as CSSProperties;
+const FONT_FALLBACK = { "--font-alegreya-sc": "ui-serif", "--font-inter": "ui-sans-serif", "--font-geist-sans": "ui-sans-serif", "--font-geist-mono": "ui-monospace" } as CSSProperties;
 const subscribe = () => () => {};
 function readTheme(): "light" | "dark" {
   try {
