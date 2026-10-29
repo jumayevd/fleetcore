@@ -16,7 +16,7 @@ export function UnitLink({ truck, trailer, secondary, className }: { truck?: Ref
     <div className={cn("min-w-0", className)}>
       <Link href={truck ? truckHref(unit.id) : trailerHref(unit.id)} className="inline-flex items-center gap-1.5 font-medium text-fg hover:underline">
         <Icon className="h-3.5 w-3.5 shrink-0 text-fg-subtle" aria-hidden />
-        <span className="num">{unit.unitNumber}</span>
+        <span className="num unit-no">{unit.unitNumber}</span>
       </Link>
       {secondary && <div className="truncate pl-5 text-[11px] text-fg-subtle">{secondary}</div>}
     </div>

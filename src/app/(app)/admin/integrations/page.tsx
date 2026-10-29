@@ -121,7 +121,7 @@ export default async function IntegrationsPage() {
             {units.map((u) => (
               <tr key={u.id}>
                 <td>
-                  <span className="num font-medium text-fg">{u.unitNumber ?? "—"}</span>
+                  <span className="num unit-no font-medium text-fg">{u.unitNumber ?? "—"}</span>
                   <p className="truncate text-[11px] text-fg-subtle">{[u.make, u.model].filter(Boolean).join(" ") || "—"}{u.vin ? <> · <span className="num">{u.vin}</span></> : null}</p>
                 </td>
                 <td className="text-[12.5px]">{u.driverName ?? <span className="text-fg-faint">—</span>}</td>

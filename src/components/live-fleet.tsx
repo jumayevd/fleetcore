@@ -265,7 +265,7 @@ function TruckPopup({ v, f }: { v: View; f: Formatter }) {
     <div className="text-[12px] leading-[18px] text-fg">
       <div className="flex items-center gap-1.5">
         <StatusDot tone={FLEET_STATUS_TONE[v.status]} />
-        <span className="num text-[13px] font-semibold">{t.unitNumber}</span>
+        <span className="num text-[14px] font-semibold">{t.unitNumber}</span>
         <span className={cn("ml-auto text-[11px] font-medium", TONE_TEXT[FLEET_STATUS_TONE[v.status]])}>{stateText(v, f)}</span>
       </div>
       <div className="truncate text-[11px] text-fg-subtle">{t.name} · <span className="num">{t.plate}</span></div>
@@ -631,7 +631,7 @@ function TruckCard({ v, f, selected, onSelect }: { v: View; f: Formatter; select
           {v.status === "oos"
             ? <OctagonX aria-hidden className="h-3.5 w-3.5 shrink-0 text-danger" />
             : <StatusDot tone={tone} pulse={v.status === "rolling"} className={cn(v.status === "nosignal" && "opacity-60")} />}
-          <span className="num text-[13px] font-semibold text-fg">{t.unitNumber}</span>
+          <span className="num text-[14px] font-semibold text-fg">{t.unitNumber}</span>
           <span className="num truncate text-[11px] text-fg-subtle">{t.plate}</span>
           <span className="ml-auto shrink-0">
             {v.status === "oos"
@@ -695,7 +695,7 @@ function DetailPanel({ v, f, canEdit, onClose }: { v: View; f: Formatter; canEdi
         <StatusDot tone={FLEET_STATUS_TONE[v.status]} pulse={v.status === "rolling"} className="mt-1.5" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            <Link href={`/fleet/${t.id}`} className="num text-[15px] font-semibold leading-5 text-fg hover:text-accent-text">{t.unitNumber}</Link>
+            <Link href={`/fleet/${t.id}`} className="num text-[16px] font-semibold leading-5 text-fg hover:text-accent-text">{t.unitNumber}</Link>
             <Badge value={v.status.toUpperCase()} tone={FLEET_STATUS_TONE[v.status]} label={statusLabel} />
           </div>
           <p className="truncate text-[11px] text-fg-subtle">
@@ -752,7 +752,7 @@ function DetailPanel({ v, f, canEdit, onClose }: { v: View; f: Formatter; canEdi
             <dt className="text-fg-subtle">Trailer</dt>
             <dd className="flex min-w-0 flex-wrap justify-end gap-x-2">
               {t.trailers.length
-                ? t.trailers.map((r) => <Link key={r.id} href={`/fleet/trailers/${r.id}`} className="num font-medium text-fg hover:text-accent-text">{r.unitNumber}</Link>)
+                ? t.trailers.map((r) => <Link key={r.id} href={`/fleet/trailers/${r.id}`} className="num unit-no font-medium text-fg hover:text-accent-text">{r.unitNumber}</Link>)
                 : <span className="text-fg-faint">None paired</span>}
             </dd>
           </div>

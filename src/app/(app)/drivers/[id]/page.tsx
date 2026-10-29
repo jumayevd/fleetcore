@@ -95,7 +95,7 @@ export default async function DriverDetail({ params, searchParams }: PageProps<"
             </span>
             <Chip tone={DRIVER_TYPE_TONE[driver.type]}>{DRIVER_TYPE_LABELS[driver.type] ?? driver.type}</Chip>
             {driver.truck
-              ? <span className="inline-flex items-center gap-1.5 text-fg-muted"><TruckIcon className="h-3.5 w-3.5" />Drives <Link href={`/fleet/${driver.truck.id}`} className="num font-medium text-fg hover:underline">{driver.truck.unitNumber}</Link></span>
+              ? <span className="inline-flex items-center gap-1.5 text-fg-muted"><TruckIcon className="h-3.5 w-3.5" />Drives <Link href={`/fleet/${driver.truck.id}`} className="num unit-no font-medium text-fg hover:underline">{driver.truck.unitNumber}</Link></span>
               : <span className="inline-flex items-center gap-1.5 text-fg-subtle"><TruckIcon className="h-3.5 w-3.5" />No truck</span>}
             {driver.dispatcher && <span className="inline-flex items-center gap-1.5 text-fg-muted"><Headset className="h-3.5 w-3.5" />Dispatch {driver.dispatcher}</span>}
           </span>
@@ -143,7 +143,7 @@ export default async function DriverDetail({ params, searchParams }: PageProps<"
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <Link href={`/fleet/${driver.truck.id}`} className="num text-[15px] font-semibold text-fg hover:underline">{driver.truck.unitNumber}</Link>
+                      <Link href={`/fleet/${driver.truck.id}`} className="num text-[16px] font-semibold text-fg hover:underline">{driver.truck.unitNumber}</Link>
                       <Badge value={truckStatusTone(driver.truck.status, true)} label={truckStatusLabel(driver.truck.status, true)} />
                     </div>
                     <p className="mt-0.5 truncate text-[12px] text-fg-muted">{driver.truck.year} {driver.truck.make} {driver.truck.model} · <span className="num">{driver.truck.plate}</span></p>
@@ -172,7 +172,7 @@ export default async function DriverDetail({ params, searchParams }: PageProps<"
                   {stints.map((s) => (
                     <tr key={s.id}>
                       <td>
-                        <Link href={`/fleet/${s.truck.id}?tab=driver`} className="num font-medium text-fg hover:underline">{s.truck.unitNumber}</Link>
+                        <Link href={`/fleet/${s.truck.id}?tab=driver`} className="num unit-no font-medium text-fg hover:underline">{s.truck.unitNumber}</Link>
                         {!s.endedAt && <Badge value="ACTIVE" label="Now" className="ml-2" />}
                       </td>
                       <td className="num text-fg-muted">{s.backfilled ? "about " : ""}{f.date(s.startedAt)}</td>
@@ -328,7 +328,7 @@ async function FuelTab({ driverId, truck, canLog, showMoney }: { driverId: strin
           {logs.map((x) => (
             <tr key={x.id}>
               <td className="num whitespace-nowrap text-fg-muted">{fmt.date(x.date)}</td>
-              <td><Link href={`/fleet/${x.truck.id}`} className="num font-medium text-fg hover:underline">{x.truck.unitNumber}</Link></td>
+              <td><Link href={`/fleet/${x.truck.id}`} className="num unit-no font-medium text-fg hover:underline">{x.truck.unitNumber}</Link></td>
               <td className="max-w-48 truncate">{x.station ?? <span className="text-fg-faint">—</span>}</td>
               <td className="num">{fmt.decimal(x.liters)}</td>
               {showMoney && <>

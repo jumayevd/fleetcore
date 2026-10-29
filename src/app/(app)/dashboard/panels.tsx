@@ -146,7 +146,7 @@ export function InShop({ jobs, now, f, canEdit }: { jobs: OpenRepair[]; now: Dat
             <Link href={`/maintenance/work-orders/${w.id}`} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 px-4 py-2 transition-colors hover:bg-raised">
               <span className="min-w-0">
                 <span className="flex min-w-0 items-baseline gap-1.5">
-                  <span className="num truncate text-[13px] font-medium text-fg">{unit}</span>
+                  <span className="num truncate text-[14px] font-medium text-fg">{unit}</span>
                   <span className="num shrink-0 text-[11px] text-fg-subtle">{roLabel(w.number)}</span>
                   {w.stage === "WAITING_APPROVAL" && <Chip tone="warn">Needs approval</Chip>}
                 </span>
@@ -262,7 +262,7 @@ export function ComingUp({ papers, oil, now, f, role, canEdit }: { papers: Paper
             more={moreOil > 0 ? { href: "/maintenance/oil", label: `${moreOil} more` } : undefined} />
           {oil.slice(0, SHOW_OIL).map((t) => (
             <li key={t.id} className="grid grid-cols-[64px_minmax(0,1fr)_auto] items-center gap-x-3 px-4 py-2">
-              <Link href={`/fleet/${t.id}`} className="num truncate text-[13px] font-medium text-fg hover:text-accent-text">{t.unitNumber}</Link>
+              <Link href={`/fleet/${t.id}`} className="num truncate text-[14px] font-medium text-fg hover:text-accent-text">{t.unitNumber}</Link>
               <span className="flex min-w-0 items-center gap-2">
                 <Droplet aria-hidden className="h-3.5 w-3.5 shrink-0 text-fg-faint" />
                 <span className="num truncate text-[13px] text-fg-muted" title={t.dueAtKm != null ? `Due at ${f.dist(t.dueAtKm)}` : undefined}>In {f.dist(t.left)}</span>

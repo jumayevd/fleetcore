@@ -37,7 +37,7 @@ export async function LeaseTab({ trucks, money }: { trucks: Truck[]; money: bool
             return (
               <tr key={r.truck.id}>
                 <td className="whitespace-nowrap text-fg-muted">{r.truck.lessor ?? <span className="text-fg-faint">—</span>}</td>
-                <td title={`${r.truck.make} ${r.truck.model}`}><Link href={truckHref(r.truck.id)} className="num font-medium text-fg hover:underline">{r.truck.unitNumber}</Link></td>
+                <td title={`${r.truck.make} ${r.truck.model}`}><Link href={truckHref(r.truck.id)} className="num unit-no font-medium text-fg hover:underline">{r.truck.unitNumber}</Link></td>
                 <td className="num text-fg-muted">{f.dist(r.startKm)}</td>
                 <td className="num">{f.dist(r.truck.odometerKm)}</td>
                 <td className="num text-fg-muted">{f.dist(r.limitKm)}</td>

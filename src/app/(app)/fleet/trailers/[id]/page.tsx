@@ -151,7 +151,7 @@ export default async function TrailerDetail({ params, searchParams }: PageProps<
                 {trailer.truck ? (
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <Link href={`/fleet/${trailer.truck.id}`} className="num text-[13px] font-semibold text-fg hover:underline">{trailer.truck.unitNumber}</Link>
+                      <Link href={`/fleet/${trailer.truck.id}`} className="num text-[14px] font-semibold text-fg hover:underline">{trailer.truck.unitNumber}</Link>
                       <p className="truncate text-[11px] text-fg-subtle">{trailer.truck.make} {trailer.truck.model}</p>
                     </div>
                     <Badge value={trailer.truck.status} label={TRUCK_STATUS_LABELS[trailer.truck.status]} />

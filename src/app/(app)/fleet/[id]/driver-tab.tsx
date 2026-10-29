@@ -67,7 +67,7 @@ export async function DriverTab({ truckId, unit, editable }: { truckId: string; 
                   <div className="min-w-0">
                     <Link href={`/drivers/${current.driver.id}`} className="block truncate text-[14px] font-semibold text-fg hover:underline">{current.driver.name}</Link>
                     <p className="truncate text-[12px] text-fg-subtle">
-                      {DRIVER_TYPE_LABELS[current.driver.type] ?? current.driver.type} · in unit <span className="num text-fg-muted">{unit}</span>
+                      {DRIVER_TYPE_LABELS[current.driver.type] ?? current.driver.type} · in unit <span className="num unit-no text-fg-muted">{unit}</span>
                       {current.driver.dispatcher && <> · dispatch {current.driver.dispatcher}</>}
                     </p>
                   </div>

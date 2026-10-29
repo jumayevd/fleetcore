@@ -196,7 +196,7 @@ export default async function DefectsPage({ searchParams }: PageProps<"/inspecti
                   </div>
                 </td>
                 <td className="whitespace-nowrap">
-                  {unitHref ? <Link href={unitHref} className="num font-medium text-fg hover:underline">{d.truck?.unitNumber ?? d.trailer?.unitNumber}</Link> : "—"}
+                  {unitHref ? <Link href={unitHref} className="num unit-no font-medium text-fg hover:underline">{d.truck?.unitNumber ?? d.trailer?.unitNumber}</Link> : "—"}
                   <div className="max-w-40 truncate text-[11px] text-fg-subtle">{d.truck ? d.truck.driver?.name ?? "No driver" : "Trailer"}</div>
                 </td>
                 <td className="max-w-96">

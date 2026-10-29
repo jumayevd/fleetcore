@@ -105,7 +105,7 @@ function BoardTable({ rows, week, show, f, editable, sender }: { rows: BoardRow[
         return (
           <tr key={r.truck.id} className="align-top">
             <td className="whitespace-nowrap">
-              <Link href={`/fleet/${r.truck.id}`} className="num font-medium text-fg hover:underline">{r.truck.unitNumber}</Link>
+              <Link href={`/fleet/${r.truck.id}`} className="num unit-no font-medium text-fg hover:underline">{r.truck.unitNumber}</Link>
               <div className="max-w-56 truncate text-[11px] text-fg-subtle" title={r.driver ? `${r.driver.name}${r.driver.dispatcher ? ` · dispatcher ${r.driver.dispatcher}` : ""}` : undefined}>
                 {r.driver ? <>{r.driver.name}{r.driver.dispatcher && <span className="text-fg-faint"> · {r.driver.dispatcher}</span>}</> : "No driver"}
               </div>

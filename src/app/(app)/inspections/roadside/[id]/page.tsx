@@ -102,8 +102,8 @@ export default async function RoadsideDetail({ params }: PageProps<"/inspections
           <Card title="Details">
             <DL cols={1} items={[
               ["Driver", r.driver ? <Link href={`/drivers/${r.driver.id}`} className="hover:underline">{r.driver.name}</Link> : "—"],
-              ["Truck", r.truck ? <Link href={`/fleet/${r.truck.id}`} className="hover:underline"><span className="num">{r.truck.unitNumber}</span> · {r.truck.make} {r.truck.model}</Link> : "—"],
-              ["Trailer", r.trailer ? <Link href={`/fleet/trailers/${r.trailer.id}`} className="num hover:underline">{r.trailer.unitNumber}</Link> : "—"],
+              ["Truck", r.truck ? <Link href={`/fleet/${r.truck.id}`} className="hover:underline"><span className="num unit-no">{r.truck.unitNumber}</span> · {r.truck.make} {r.truck.model}</Link> : "—"],
+              ["Trailer", r.trailer ? <Link href={`/fleet/trailers/${r.trailer.id}`} className="num unit-no hover:underline">{r.trailer.unitNumber}</Link> : "—"],
               ["Correction due", r.correctionDueAt ? <span className={cn("num", late && "text-danger")}>{f.date(r.correctionDueAt)}</span> : "—"],
               ["Logged", `${f.date(r.createdAt)}${r.createdBy ? ` by ${r.createdBy.name}` : ""}`],
             ]} />

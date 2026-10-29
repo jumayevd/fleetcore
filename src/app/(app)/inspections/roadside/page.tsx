@@ -118,8 +118,8 @@ export default async function RoadsidePage({ searchParams }: PageProps<"/inspect
                 </td>
                 <td className="max-w-44 truncate">{r.driver ? <Link href={`/drivers/${r.driver.id}`} className="hover:underline">{r.driver.name}</Link> : <span className="text-fg-faint">—</span>}</td>
                 <td className="whitespace-nowrap">
-                  {r.truck ? <Link href={`/fleet/${r.truck.id}`} className="num hover:underline">{r.truck.unitNumber}</Link> : <span className="text-fg-faint">—</span>}
-                  {r.trailer && <span className="text-fg-muted"> / <Link href={`/fleet/trailers/${r.trailer.id}`} className="num hover:underline">{r.trailer.unitNumber}</Link></span>}
+                  {r.truck ? <Link href={`/fleet/${r.truck.id}`} className="num unit-no hover:underline">{r.truck.unitNumber}</Link> : <span className="text-fg-faint">—</span>}
+                  {r.trailer && <span className="text-fg-muted"> / <Link href={`/fleet/trailers/${r.trailer.id}`} className="num unit-no hover:underline">{r.trailer.unitNumber}</Link></span>}
                 </td>
                 <td className="whitespace-nowrap text-fg-muted" title={INSPECTION_LEVEL_LABELS[r.level]}>{levelShort(r.level)}</td>
                 <td className="num">

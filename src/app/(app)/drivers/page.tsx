@@ -203,7 +203,7 @@ export default async function DriversPage({ searchParams }: PageProps<"/drivers"
                 <td>
                   {d.truck ? (
                     <div className="min-w-0">
-                      <Link href={`/fleet/${d.truck.id}`} className="num font-medium text-fg hover:underline">{d.truck.unitNumber}</Link>
+                      <Link href={`/fleet/${d.truck.id}`} className="num unit-no font-medium text-fg hover:underline">{d.truck.unitNumber}</Link>
                       <p className="truncate text-[11px] text-fg-subtle">{d.truck.make} {d.truck.model}{d.truck.status !== "ACTIVE" && <> · <span className="text-warn">{humanize(d.truck.status).toLowerCase()}</span></>}</p>
                     </div>
                   ) : d.status === "ACTIVE" && editable && can(user.role, "fleet.edit") ? (

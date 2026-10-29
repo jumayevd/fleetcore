@@ -251,6 +251,12 @@ html {
 }
 
 /* Tabular numerals for metrics, IDs and money: columns line up, in the same face as the text. */
+/* A truck or trailer unit number where it labels a row or a card: one pixel larger than the text around it. Where the
+   element sets its own size, that size is bumped by a pixel instead (text-[13px] → text-[14px]). */
+.unit-no {
+  font-size: calc(1em + 1px);
+}
+
 .num {
   /* Lining, equal-width figures: Alegreya's default old-style figures would bob and stagger down a column. */
   font-variant-numeric: lining-nums tabular-nums;

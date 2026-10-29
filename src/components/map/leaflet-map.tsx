@@ -146,7 +146,7 @@ function buildTruckIcon(t: MapTruck, selected: boolean, heading: number, fill: s
       ${t.moving ? `<div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%) rotate(${heading}deg);transform-origin:50% ${size / 2 + 8}px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:8px solid ${fill}"></div>` : ""}
       <svg width="${Math.round(size * 0.52)}" height="${Math.round(size * 0.52)}" viewBox="0 0 24 24" fill="none" stroke="${ink}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${t.glyph === "stop" ? STOP_GLYPH : TRUCK_GLYPH}</svg>
     </div>
-    <div style="position:absolute;top:${size + 3}px;left:50%;transform:translateX(-50%);background:${v["--fg"]};color:${v["--surface"]};font-family:var(--font-mono),ui-monospace,monospace;font-size:10px;font-weight:600;letter-spacing:-.01em;padding:1px 5px;border-radius:4px;white-space:nowrap;${t.stale ? "opacity:.7;" : ""}">${escapeHtml(t.unitNumber)}</div>`,
+    <div style="position:absolute;top:${size + 3}px;left:50%;transform:translateX(-50%);background:${v["--fg"]};color:${v["--surface"]};font-family:var(--font-mono),ui-monospace,monospace;font-size:11px;font-weight:600;letter-spacing:-.01em;padding:1px 5px;border-radius:4px;white-space:nowrap;${t.stale ? "opacity:.7;" : ""}">${escapeHtml(t.unitNumber)}</div>`,
   });
 }
 
@@ -289,7 +289,7 @@ export default function LeafletMap({ trucks = [], points = [], selectedId, onSel
             ) : (
               <Popup>
                 <div className="text-[12px] leading-4">
-                  <b className="num">{t.unitNumber}</b>
+                  <b className="num unit-no">{t.unitNumber}</b>
                   {t.driverName && <div>{t.driverName}</div>}
                   {t.label && <div className="text-fg-muted">{t.label}</div>}
                   <div className="num text-fg-muted">{f.speed(t.speedKmh)}</div>

@@ -83,7 +83,7 @@ export function OilRow({ t, editable, highlighted, now, types }: {
   return (
     <tr className={highlighted ? "bg-accent-soft" : undefined}>
       <td>
-        <Link href={truckHref(t.id)} className="num font-medium text-fg hover:underline">{t.unitNumber}</Link>
+        <Link href={truckHref(t.id)} className="num unit-no font-medium text-fg hover:underline">{t.unitNumber}</Link>
         <p className="truncate text-[11px] text-fg-subtle">{t.driverName ?? "No driver"}</p>
       </td>
       <td className="whitespace-nowrap">

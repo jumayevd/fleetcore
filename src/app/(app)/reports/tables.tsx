@@ -41,7 +41,7 @@ export function UnitCell({ unit, secondary }: { unit: UnitRef | null; secondary?
     <div className="min-w-0">
       <Link href={unitHref(unit.type, unit.id)} className="inline-flex items-center gap-1.5 font-medium text-fg hover:underline">
         <Icon className="h-3.5 w-3.5 shrink-0 text-fg-subtle" aria-hidden />
-        <span className="num">{unit.unitNumber}</span>
+        <span className="num unit-no">{unit.unitNumber}</span>
       </Link>
       {secondary && <div className="truncate pl-5 text-[11px] text-fg-subtle">{secondary}</div>}
     </div>

@@ -117,7 +117,7 @@ export default async function RepairsPage({ searchParams }: PageProps<"/maintena
             {notTold.map((w) => (
               <li key={w.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-[13px]">
                 <Link href={workOrderHref(w.id)} className="num font-medium text-fg hover:underline">{roLabel(w.number)}</Link>
-                <span className="num text-fg-muted">{w.truck?.unitNumber ?? w.trailer?.unitNumber ?? "—"}</span>
+                <span className="num unit-no text-fg-muted">{w.truck?.unitNumber ?? w.trailer?.unitNumber ?? "—"}</span>
                 <span className="min-w-0 flex-1 truncate text-fg-muted">{w.title}</span>
                 <span className="font-medium text-fg">{w.chargeDriver?.name ?? <span className="text-warn">No driver picked</span>}</span>
                 {money && <span className="num text-fg-muted">{f.money(w.invoiceTotal ?? w.cost)}</span>}

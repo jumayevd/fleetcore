@@ -201,13 +201,13 @@ export default async function TrailersPage({ searchParams }: PageProps<"/fleet/t
               return (
                 <LinkRow key={t.id} href={`/fleet/trailers/${t.id}`}>
                   <td title={[t.year, t.plate].filter(Boolean).join(" · ") || undefined}>
-                    <Cell mono primary={<Link href={`/fleet/trailers/${t.id}`} className="font-semibold hover:underline">{t.unitNumber}</Link>}
+                    <Cell mono primary={<Link href={`/fleet/trailers/${t.id}`} className="unit-no font-semibold hover:underline">{t.unitNumber}</Link>}
                       secondary={EQUIPMENT_LABELS[t.type] ?? t.type} />
                   </td>
                   <td data-col="status" className="whitespace-nowrap"><TrailerStatusControl id={t.id} status={t.status} locationName={t.locationName} editable={editable} since={sinceShort(t.statusSince)} /></td>
                   <td data-col="truck">
                     {t.truck ? (
-                      <Cell mono primary={<Link href={`/fleet/${t.truck.id}`} className="font-medium hover:underline">{t.truck.unitNumber}</Link>}
+                      <Cell mono primary={<Link href={`/fleet/${t.truck.id}`} className="unit-no font-medium hover:underline">{t.truck.unitNumber}</Link>}
                         secondary={`${t.truck.make} ${t.truck.model}`} />
                     ) : <span className="text-fg-faint">—</span>}
                   </td>

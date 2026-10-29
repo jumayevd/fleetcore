@@ -307,7 +307,7 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
                     <Cell
                       primary={
                         <span className="flex min-w-0 items-baseline gap-2">
-                          <Link href={`/fleet/${t.id}`} className="num shrink-0 font-semibold text-accent-text hover:underline">{t.unitNumber}</Link>
+                          <Link href={`/fleet/${t.id}`} className="num unit-no shrink-0 font-semibold text-accent-text hover:underline">{t.unitNumber}</Link>
                           {x.reasons.length > 0 && <span className="truncate text-[11px] text-danger" title={x.reasons.join(" · ")}>{x.reasons[0]}</span>}
                         </span>
                       }

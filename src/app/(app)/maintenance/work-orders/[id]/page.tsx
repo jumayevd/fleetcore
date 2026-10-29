@@ -89,7 +89,7 @@ export default async function RepairDetail({ params, searchParams }: PageProps<"
             <Badge value={wo.status} tone={repairStatusTone(wo)} label={repairStatusLabel(wo)} dot />
             {inShop && wo.stage && <span className="text-fg-muted">{stageLabel(wo.stage)}</span>}
             <RepairTags w={wo} />
-            {unitHref && <Link href={unitHref} className="num font-medium text-fg hover:underline">{unitNumber}</Link>}
+            {unitHref && <Link href={unitHref} className="num unit-no font-medium text-fg hover:underline">{unitNumber}</Link>}
             {(wo.vendorRef || wo.vendor) && <span>at {wo.vendorRef ? <Link href={vendorHref(wo.vendorRef.id)} className="text-fg hover:underline">{wo.vendorRef.name}</Link> : wo.vendor}</span>}
           </span>
         }
@@ -169,7 +169,7 @@ export default async function RepairDetail({ params, searchParams }: PageProps<"
             <DL cols={3} items={[
               ["Repair type", repairTypeLabel(wo.repairType)],
               ["Technician", wo.technician ?? "—"],
-              ["Unit", unitHref ? <Link key="u" href={unitHref} className="num hover:underline">{unitNumber}</Link> : "—"],
+              ["Unit", unitHref ? <Link key="u" href={unitHref} className="num unit-no hover:underline">{unitNumber}</Link> : "—"],
               ["Odometer in", wo.odometerKm != null ? <span key="oi" className="num">{f.dist(wo.odometerKm)}</span> : "—"],
               ["Odometer out", wo.odometerOutKm != null ? <span key="oo" className="num">{f.dist(wo.odometerOutKm)}</span> : "—"],
               ["Booked for", f.date(wo.scheduledAt)],
@@ -362,7 +362,7 @@ export default async function RepairDetail({ params, searchParams }: PageProps<"
             <Card title="Unit">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  {unitHref && <Link href={unitHref} className="num text-[13px] font-medium text-fg hover:underline">{unitNumber}</Link>}
+                  {unitHref && <Link href={unitHref} className="num text-[14px] font-medium text-fg hover:underline">{unitNumber}</Link>}
                   <p className="truncate text-[12px] text-fg-subtle">{wo.truck ? `${wo.truck.make} ${wo.truck.model} · ${wo.truck.plate}` : wo.trailer ? `${EQUIPMENT_LABELS[wo.trailer.type] ?? wo.trailer.type} trailer${wo.trailer.truck ? ` · on ${wo.trailer.truck.unitNumber}` : ""}` : ""}</p>
                 </div>
                 <Badge value={(wo.truck ?? wo.trailer)!.status} dot />

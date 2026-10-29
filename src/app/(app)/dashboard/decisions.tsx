@@ -142,7 +142,7 @@ function DecisionRow({ d, canEdit }: { d: Decision; canEdit: boolean }) {
       {/* Unit · driver */}
       <div className="min-w-0">
         {d.unit
-          ? <Link href={d.unit.href} className={cn("block truncate text-[13px] font-medium text-fg hover:text-accent-text", d.unit.kind !== "driver" && "num")}>{d.unit.label}</Link>
+          ? <Link href={d.unit.href} className={cn("block truncate font-medium text-fg hover:text-accent-text", d.unit.kind !== "driver" ? "num text-[14px]" : "text-[13px]")}>{d.unit.label}</Link>
           : <span className="block truncate text-[13px] text-fg-muted">Whole fleet</span>}
         {d.driver && d.unit?.kind !== "driver"
           ? <Link href={d.driver.href} className="block truncate text-[12px] text-fg-subtle hover:text-fg">{d.driver.name}</Link>

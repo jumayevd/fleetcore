@@ -220,7 +220,7 @@ export default async function TruckDetail({ params, searchParams }: PageProps<"/
       {tab === "specs" && (
         <Card title="Specifications" actions={editable && <LinkButton href={`/fleet/${id}/edit`} variant="secondary" size="sm"><Pencil />Edit</LinkButton>}>
           <DL cols={3} items={[
-            ["Unit", <span key="u" className="num">{truck.unitNumber}</span>],
+            ["Unit", <span key="u" className="num unit-no">{truck.unitNumber}</span>],
             ["VIN", <span key="v" className="num">{truck.vin ?? "—"}</span>],
             ["Plate", <span key="p" className="num">{truck.plate || "—"}</span>],
             ["Year", <span key="y" className="num">{truck.year}</span>],
@@ -475,7 +475,7 @@ async function OverviewTab({ truck, now, editable, showMoney, prompts, attention
                 <ul className="space-y-1">
                   {truck.trailers.map((tr) => (
                     <li key={tr.id} className="flex items-center justify-between gap-2 text-[13px]">
-                      <Link href={`/fleet/trailers/${tr.id}`} className="num font-medium text-fg hover:underline">{tr.unitNumber}</Link>
+                      <Link href={`/fleet/trailers/${tr.id}`} className="num unit-no font-medium text-fg hover:underline">{tr.unitNumber}</Link>
                       <span className="flex items-center gap-2 text-[11px] text-fg-subtle">{EQUIPMENT_LABELS[tr.type] ?? tr.type}<Badge value={tr.status} /></span>
                     </li>
                   ))}
