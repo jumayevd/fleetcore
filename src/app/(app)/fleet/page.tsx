@@ -34,9 +34,8 @@ const SERVICE_MATCH: Record<(typeof SERVICE_FILTERS)[number], ServiceState[]> = 
   overdue: ["overdue"], due: ["due_now", "due_soon"], no_reading: ["no_reading"], unknown: ["unknown"],
 };
 
-/** Columns people can show or hide (Unit always shows). Order = table order. */
+/** Columns people can show or hide (Unit / Vehicle always shows). Order = table order. */
 const COLUMNS: ColumnDef[] = [
-  { key: "vehicle", label: "Vehicle" },
   { key: "type", label: "Truck type", hidden: true },
   { key: "status", label: "Status" },
   { key: "driver", label: "Driver" },
@@ -264,8 +263,7 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
             </p>
           )}
           <Table head={[
-            "Unit",
-            col("vehicle", "Vehicle"),
+            "Unit / Vehicle",
             col("type", "Truck type"),
             col("status", "Status"),
             col("driver", "Driver"),
@@ -294,12 +292,16 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
               const stale = x.s.stale;
               return (
                 <LinkRow key={t.id} href={`/fleet/${t.id}`} className={t.status === "INACTIVE" ? "opacity-70" : undefined}>
-                  <td>
-                    <Cell mono primary={<Link href={`/fleet/${t.id}`} className="font-semibold hover:underline">{t.unitNumber}</Link>}
-                      secondary={x.reasons.length ? <span className="text-danger" title={x.reasons.join(" · ")}>{x.reasons[0]}</span> : undefined} />
-                  </td>
-                  <td data-col="vehicle" className="whitespace-nowrap">
-                    <Cell primary={`${t.make} ${t.model}`} secondary={String(t.year)} />
+                  <td className="max-w-72 whitespace-nowrap">
+                    {/* Unit on top (with what needs a look beside it), the vehicle under it. */}
+                    <Cell
+                      primary={
+                        <span className="flex min-w-0 items-baseline gap-2">
+                          <Link href={`/fleet/${t.id}`} className="num shrink-0 font-semibold text-accent-text hover:underline">{t.unitNumber}</Link>
+                          {x.reasons.length > 0 && <span className="truncate text-[11px] text-danger" title={x.reasons.join(" · ")}>{x.reasons[0]}</span>}
+                        </span>
+                      }
+                      secondary={<span title={`${t.year} ${t.make} ${t.model}`}><span className="num">{t.year}</span> {t.make} {t.model}</span>} />
                   </td>
                   <td data-col="type" className="whitespace-nowrap text-fg-muted">{t.truckType?.name ?? <span className="text-fg-faint">No type</span>}</td>
                   <td data-col="status"><Badge value={t.status} label={TRUCK_STATUS_LABELS[t.status]} dot /></td>
