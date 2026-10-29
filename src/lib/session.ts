@@ -69,14 +69,15 @@ export async function writeAccounts(accounts: SessionAccount[]) {
 }
 
 /**
- * Only accounts that still exist and are active. A signed cookie can outlive its user (deleted, deactivated, or a
- * reseeded database): such entries are ignored, so they never count as "signed in".
+ * Only accounts that still exist and are active, signed in since their password last changed. A signed cookie can
+ * outlive its user (deleted, deactivated, or a reseeded database) or its password: such entries are ignored, so they
+ * never count as "signed in".
  */
 async function liveAccounts(accounts: SessionAccount[]) {
   if (!accounts.length) return accounts;
-  const rows = await rootDb.user.findMany({ where: { id: { in: accounts.map((a) => a.userId) }, active: true }, select: { id: true } });
-  const ok = new Set(rows.map((r) => r.id));
-  return accounts.filter((a) => ok.has(a.userId));
+  const rows = await rootDb.user.findMany({ where: { id: { in: accounts.map((a) => a.userId) }, active: true }, select: { id: true, sessionsValidFrom: true } });
+  const from = new Map(rows.map((r) => [r.id, r.sessionsValidFrom?.getTime() ?? 0]));
+  return accounts.filter((a) => from.has(a.userId) && a.at * 1000 >= from.get(a.userId)!);
 }
 
 /** Signed-in accounts, as written: use in actions that are about to change them. */
@@ -88,6 +89,14 @@ export async function currentAccounts() {
 export async function addAccount(userId: string) {
   const others = (await currentAccounts()).filter((a) => a.userId !== userId);
   await writeAccounts([{ userId, at: nowS() }, ...others]);
+}
+
+/** After a password change: the account's sign-ins in every other browser end; this browser stays signed in. */
+export async function endOtherSessions(userId: string) {
+  const at = nowS();
+  await rootDb.user.update({ where: { id: userId }, data: { sessionsValidFrom: new Date(at * 1000) } });
+  const others = (await currentAccounts()).filter((a) => a.userId !== userId);
+  await writeAccounts([{ userId, at }, ...others]);
 }
 
 /** Point this browser at a company. Pass null to leave it on the chooser. */

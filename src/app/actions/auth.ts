@@ -5,7 +5,8 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { rootDb } from "@/lib/db-root";
 import { requireUser } from "@/lib/auth";
-import { addAccount, currentAccounts, forgetSessions, getSessionContext, writeAccounts, writeActive } from "@/lib/session";
+import { addAccount, currentAccounts, endOtherSessions, forgetSessions, getSessionContext, writeAccounts, writeActive } from "@/lib/session";
+import { clearFailures, clientIp, pausedFor, pausedMessage, recordFailure } from "@/lib/login-throttle";
 import { attempt, fields, FormError, type ActionState } from "@/lib/action";
 import { COMPANY_COLORS, isRole } from "@/lib/constants";
 import { landingAfterSwitch } from "@/lib/nav";
@@ -75,10 +76,20 @@ export async function login(_: ActionState, fd: FormData): Promise<ActionState> 
   const email = String(fd.get("email") ?? "").trim().toLowerCase();
   const password = String(fd.get("password") ?? "");
   const inviteToken = String(fd.get("invite") ?? "").trim();
+  const ip = await clientIp();
+  const paused = await pausedFor(email, ip);
+  if (paused) return { error: pausedMessage(paused) };
   const user = await rootDb.user.findUnique({ where: { email } });
   // Always run one bcrypt compare so response time doesn't reveal which emails are registered.
   const ok = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
-  if (!user || !user.active || !ok) return { error: "That email and password don't match an account." };
+  if (!user || !user.active || !ok) {
+    if (await recordFailure(email, ip)) {
+      if (user) await rootDb.auditLog.create({ data: { companyId: null, userId: user.id, action: "lock", entity: "user", entityId: user.id, details: "Sign-in paused for 15 minutes after 5 wrong passwords" } });
+      return { error: pausedMessage(15) };
+    }
+    return { error: "That email and password don't match an account." };
+  }
+  await clearFailures(email);
 
   let invite: Awaited<ReturnType<typeof usableInvite>> | null = null;
   if (inviteToken) {
@@ -305,7 +316,9 @@ export async function setPasswordWithLink(token: string, _: ActionState, fd: For
       rootDb.passwordLink.deleteMany({ where: { userId: link.userId, usedAt: null, id: { not: link.id } } }),
       rootDb.auditLog.create({ data: { companyId: null, userId: link.userId, action: "change_password", entity: "user", entityId: link.userId, details: "Password set with a one-time link" } }),
     ]);
-    await addAccount(link.userId);
+    // New password: whoever was signed in with the old one is signed out; this browser goes in.
+    await endOtherSessions(link.userId);
+    await clearFailures(link.user.email);
     if (isPlatformOwner(link.user)) dest = "/platform";
   });
   if (res?.error) return res;
@@ -320,10 +333,18 @@ export async function changePassword(_: ActionState, fd: FormData): Promise<Acti
     const next = f.req("next", "New password");
     if (next.length < 8) throw new FormError("New password must be at least 8 characters.");
     if (next !== f.str("confirm")) throw new FormError("Passwords do not match.");
+    // The current password is guessable here too (from a device left signed in): same brakes as the sign-in form.
+    const ip = await clientIp();
+    const paused = await pausedFor(me.email, ip);
+    if (paused) throw new FormError(pausedMessage(paused));
     const user = await rootDb.user.findUniqueOrThrow({ where: { id: me.id } });
-    if (!(await bcrypt.compare(current, user.passwordHash))) throw new FormError("Current password is incorrect.");
+    if (!(await bcrypt.compare(current, user.passwordHash))) {
+      throw new FormError((await recordFailure(me.email, ip)) ? pausedMessage(15) : "Current password is incorrect.");
+    }
+    await clearFailures(me.email);
     await rootDb.user.update({ where: { id: me.id }, data: { passwordHash: await bcrypt.hash(next, 10) } });
     await rootDb.auditLog.create({ data: { companyId: null, userId: me.id, action: "change_password", entity: "user", entityId: me.id } });
-    return { ok: "Password updated." };
+    await endOtherSessions(me.id);
+    return { ok: "Password updated. Any other device signed in to this account has been signed out." };
   });
 }

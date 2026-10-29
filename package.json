@@ -15,7 +15,8 @@
     "db:stop": "node scripts/dev-db.mjs stop",
     "env:pull": "vercel env pull .env.vercel --yes",
     "user:reset-password": "dotenv -e .env.local -- node scripts/reset-password.mjs",
-    "user:password-link": "dotenv -e .env.local -- node scripts/password-link.mjs"
+    "user:password-link": "dotenv -e .env.local -- node scripts/password-link.mjs",
+    "db:backup": "dotenv -e .env.local -- node scripts/backup-restore.mjs"
   },
   "dependencies": {
     "@ai-sdk/react": "^4.0.130",

@@ -46,6 +46,8 @@ model User {
   platformRole  String?
   passwordLinks PasswordLink[]
   active        Boolean              @default(true)
+  /// Sign-ins older than this no longer count (set when the password changes, so other browsers are signed out).
+  sessionsValidFrom DateTime?
   lastLoginAt   DateTime?
   createdAt     DateTime             @default(now())
   memberships   Membership[]
@@ -126,6 +128,15 @@ model PasswordLink {
   createdAt   DateTime  @default(now())
 
   @@index([userId])
+}
+
+/// Wrong passwords on the sign-in form, per email ("email:…") and per IP address ("ip:…"), so every server instance
+/// counts the same (src/lib/login-throttle.ts). Times with a zone: they are compared in SQL.
+model LoginThrottle {
+  key         String    @id
+  failures    Int       @default(0)
+  windowStart DateTime  @db.Timestamptz(3)
+  lockedUntil DateTime? @db.Timestamptz(3)
 }
 
 /// A link that lets someone join a company. Accepted by a signed-in account with the same email.

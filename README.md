@@ -52,6 +52,25 @@ the signed-in accounts; `fo_active` says which account × company this browser w
 membership on every request. `rootDb` (`src/lib/db-root.ts`) is unscoped and used only for accounts, memberships,
 invites and companies. Raw SQL is not scoped — don't use it for company data.
 
+### Security and backups
+
+- **Password guessing**: 5 wrong passwords for one email within 15 minutes pause sign-in for that email for 15
+  minutes, and 30 from one IP address pause that address (`src/lib/login-throttle.ts`, table `LoginThrottle`). While
+  paused even the right password is refused; the pause is in the audit log. Emails without an account are counted the
+  same way, so a pause doesn't reveal which accounts exist. The current-password check in My account has the same brakes.
+- **New password, other devices out**: changing a password (My account, a password link, or
+  `scripts/reset-password.mjs`) sets `User.sessionsValidFrom`; sign-ins made before it stop counting everywhere except
+  the browser that made the change.
+- **Headers** (`next.config.ts`): no framing by other sites, no MIME sniffing, origin-only referrers (invite and
+  password links carry tokens), no plugins, no camera / microphone / location APIs. HSTS comes from Vercel.
+- **Only `main` deploys**: `vercel.json` skips every non-production build (`ignoreCommand`) and runs migrations only in
+  production, because the Preview environment shares the production database.
+- **Nightly backup**: `/api/cron/backup` (Vercel Cron, 03:00 UTC, `CRON_SECRET`) writes the whole database as gzipped
+  JSON to the private Blob store under `backups/`, keeping 30 days (`src/lib/backup.ts`). Uploaded files are not copied
+  (they are in the store already). `npm run db:backup -- list | download [name] | restore <file>` lists them, downloads
+  one to `./backups-local/` (gitignored: it holds every company's data), or loads one into an **empty**, migrated
+  database (a new Neon branch or a local one), all tables in one transaction.
+
 ## Modules
 
 | Module | Highlights |
@@ -143,14 +162,15 @@ it elsewhere):
 2. Add a **new** Neon database from the Vercel Marketplace (sets `DATABASE_URL`, `DATABASE_URL_UNPOOLED`) and a private
    Blob store (`BLOB_READ_WRITE_TOKEN`).
 3. Set `AUTH_SECRET` (random 32-byte hex) and `DEMO_MODE=false`; optionally `APP_URL` for invitation links.
-4. Deploy. The build runs `prisma migrate deploy`, which applies `prisma/migrations` (`0_init` onwards).
+4. Deploy. The production build runs `prisma migrate deploy`, which applies `prisma/migrations` (`0_init` onwards).
+   Builds of other branches are skipped (`ignoreCommand`), since Preview shares the production database.
 5. Open `/signup` to create the first account and company. Seed demo data into production only on purpose:
    `CONFIRM_SEED=yes` (it wipes the database).
 
 ## Architecture
 
 - **Next.js 16 (App Router)**: Server Components, Server Actions, route handlers under `src/app/api`
-- **Prisma 6 + PostgreSQL**: `prisma/schema.prisma`; company scope in `src/lib/db.ts`; migrations applied on every Vercel build
+- **Prisma 6 + PostgreSQL**: `prisma/schema.prisma`; company scope in `src/lib/db.ts`; migrations applied on every production build
 - **Vercel Blob (private)** for documents (keys prefixed by company); local `./storage` fallback; seeded documents render a placeholder PDF
 - **AI SDK 7** for the assistant; **Leaflet + OpenStreetMap**; **Recharts**
 - "Graphite" design system with Day/Night themes: `docs/design-system.md`, kit in `src/components/ui.tsx`
@@ -166,7 +186,8 @@ it elsewhere):
 | `DATABASE_URL`, `DATABASE_URL_UNPOOLED` | Neon integration of this project; local cluster (`.env.local`) |
 | `BLOB_READ_WRITE_TOKEN` | Blob store of this project |
 | `AUTH_SECRET` | Random 32-byte hex (also keys the encrypted ELD tokens: changing it means pasting them again) |
-| `CRON_SECRET` | Random; Vercel Cron sends it to `/api/cron/eld` || `DEMO_MODE` | `true` locally, `false` in production |
+| `CRON_SECRET` | Random; Vercel Cron sends it to `/api/cron/eld` and `/api/cron/backup` |
+| `DEMO_MODE` | `true` locally, `false` in production |
 | `APP_URL` | Optional, base URL for invitation links |
 | `AI_GATEWAY_API_KEY`, `ASSISTANT_MODEL` | Optional locally; OIDC on Vercel |
-| `NEXT_PUBLIC_MAP_TILE_URL` | Optional |
+| `NEXT_PUBLIC_MAP_TILE_URL`, `NEXT_PUBLIC_MAP_SATELLITE_URL` | Optional (street map; satellite imagery, Esri by default) |

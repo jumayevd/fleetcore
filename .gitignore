@@ -48,6 +48,9 @@ prisma/*.db-journal
 # uploaded documents (local dev storage)
 /storage
 
+# downloaded database backups: every company's data (never commit)
+/backups-local
+
 .vercel
 .env*.local
 

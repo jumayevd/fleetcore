@@ -1,8 +1,8 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { put, get, del } from "@vercel/blob";
+import { put, get, del, list } from "@vercel/blob";
 
 /**
  * File storage. Uses private Vercel Blob when BLOB_READ_WRITE_TOKEN is set
@@ -60,6 +60,26 @@ export async function deleteFile(key: string) {
     return;
   }
   await unlink(path.join(LOCAL_DIR, key)).catch(() => undefined);
+}
+
+/** Files under a folder such as "backups/", oldest first. */
+export async function listFiles(prefix: string): Promise<{ key: string; size: number; at: Date }[]> {
+  const files: { key: string; size: number; at: Date }[] = [];
+  if (blobEnabled()) {
+    let cursor: string | undefined;
+    do {
+      const res = await list({ prefix, cursor, limit: 1000 });
+      files.push(...res.blobs.map((b) => ({ key: b.pathname, size: b.size, at: new Date(b.uploadedAt) })));
+      cursor = res.hasMore ? res.cursor : undefined;
+    } while (cursor);
+  } else {
+    const dir = path.join(LOCAL_DIR, prefix);
+    for (const name of await readdir(dir).catch(() => [] as string[])) {
+      const s = await stat(path.join(dir, name));
+      if (s.isFile()) files.push({ key: `${prefix}${name}`, size: s.size, at: s.mtime });
+    }
+  }
+  return files.sort((a, b) => a.at.getTime() - b.at.getTime());
 }
 
 /** Minimal single-page PDF with a title line — used for seeded demo documents. */
