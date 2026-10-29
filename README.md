@@ -63,8 +63,9 @@ invites and companies. Raw SQL is not scoped — don't use it for company data.
   the browser that made the change.
 - **Headers** (`next.config.ts`): no framing by other sites, no MIME sniffing, origin-only referrers (invite and
   password links carry tokens), no plugins, no camera / microphone / location APIs. HSTS comes from Vercel.
-- **Only `main` deploys**: `vercel.json` skips every non-production build (`ignoreCommand`) and runs migrations only in
-  production, because the Preview environment shares the production database.
+- **Only `main` deploys**: `vercel.json` turns off automatic deployments for every other branch
+  (`git.deploymentEnabled`), and a Preview build never runs migrations, because the Preview environment shares the
+  production database. Deploy by hand only with `vercel deploy --prod`.
 - **Nightly backup**: `/api/cron/backup` (Vercel Cron, 03:00 UTC, `CRON_SECRET`) writes the whole database as gzipped
   JSON to the private Blob store under `backups/`, keeping 30 days (`src/lib/backup.ts`). Uploaded files are not copied
   (they are in the store already). `npm run db:backup -- list | download [name] | restore <file>` lists them, downloads
@@ -163,7 +164,7 @@ it elsewhere):
    Blob store (`BLOB_READ_WRITE_TOKEN`).
 3. Set `AUTH_SECRET` (random 32-byte hex) and `DEMO_MODE=false`; optionally `APP_URL` for invitation links.
 4. Deploy. The production build runs `prisma migrate deploy`, which applies `prisma/migrations` (`0_init` onwards).
-   Builds of other branches are skipped (`ignoreCommand`), since Preview shares the production database.
+   Other branches don't deploy (`git.deploymentEnabled`), since Preview shares the production database.
 5. Open `/signup` to create the first account and company. Seed demo data into production only on purpose:
    `CONFIRM_SEED=yes` (it wipes the database).
 

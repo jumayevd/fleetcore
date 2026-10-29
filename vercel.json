@@ -1,8 +1,13 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
-  "buildCommand": "prisma generate && if [ \"$VERCEL_ENV\" = \"production\" ]; then prisma migrate deploy; fi && next build",
-  "ignoreCommand": "[ \"$VERCEL_ENV\" != \"production\" ]",
+  "buildCommand": "prisma generate && if [ \"$VERCEL_ENV\" = \"preview\" ]; then echo 'Preview: migrations skipped'; else prisma migrate deploy; fi && next build",
+  "git": {
+    "deploymentEnabled": {
+      "**": false,
+      "main": true
+    }
+  },
   "regions": [
     "fra1"
   ],
