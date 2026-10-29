@@ -73,7 +73,7 @@ export default async function CompanyPage() {
         <div className="space-y-4 xl:col-span-2">
           <ActionForm action={saveCompanyProfile} className="space-y-4">
             <div className="grid gap-4 lg:grid-cols-2">
-              <Card title={<span className="flex items-center gap-1.5">Workspace<InfoTip>How this company appears in the company menu, so everyone can tell their companies apart at a glance.</InfoTip></span>}>
+              <Card title={<span className="flex items-center gap-1.5">Workspace<InfoTip>How this company appears in All companies and along the top of the sidebar, so everyone can tell their companies apart at a glance.</InfoTip></span>}>
                 <div className="space-y-3">
                   <Field label="Company name" required><Input name="name" required maxLength={80} defaultValue={user.company.name} /></Field>
                   <Field label="Badge colour"><ColorPicker name="color" value={user.company.color} companyName={user.company.name} /></Field>

@@ -68,7 +68,7 @@ export default async function SelectCompanyPage({ searchParams }: PageProps<"/se
         <h1 className="text-[24px] font-semibold tracking-[-0.015em] text-fg">{total ? "Choose a company" : "Create your first company"}</h1>
         <p className="mt-1 text-[13px] text-fg-subtle">
           {total
-            ? <>Each company keeps its own trucks, drivers and documents. Switch any time from the company menu in the sidebar, or with <span className="num">Alt+1…9</span>.</>
+            ? <>Each company keeps its own trucks, drivers and documents. Switch any time from All companies in your account menu (top right), or with <span className="num">Alt+1…9</span>.</>
             : "A company is one fleet's workspace. Create one for the fleet you manage, or open an invitation from your manager."}
         </p>
 

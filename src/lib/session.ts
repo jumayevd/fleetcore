@@ -179,7 +179,7 @@ export const getSessionContext = cache(async (): Promise<SessionContext> => {
 /* Workspaces (every signed-in account × its companies)               */
 /* ------------------------------------------------------------------ */
 
-/** The switcher's list, in sign-in order (most recent account first), companies by name. */
+/** Every signed-in account with its companies (Alt+1…9, the command palette), in sign-in order (most recent account first), companies by name. */
 export async function listWorkspaces(accounts: SessionAccount[]): Promise<WorkspaceAccount[]> {
   if (!accounts.length) return [];
   const users = await rootDb.user.findMany({

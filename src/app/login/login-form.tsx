@@ -53,7 +53,7 @@ export function LoginForm({ demoAccounts, defaultEmail, invite, submitLabel }: {
             <p className="eyebrow">Demo mode</p>
             <span className="text-[11px] text-fg-subtle">Password <span className="num text-fg-muted">demo1234</span></span>
           </div>
-          <p className="mt-1 text-[12px] text-fg-muted">Sign in with one, then add another from the company menu to try switching.</p>
+          <p className="mt-1 text-[12px] text-fg-muted">Sign in with one, then add another from the account menu (top right) to try switching.</p>
           <div className="mt-3 grid grid-cols-2 gap-1.5">
             {demoAccounts.map((a) => (
               <button key={a.email} type="button" disabled={pending} title={a.hint} aria-label={`${a.label}: ${a.hint}`} className={cn(buttonClass("secondary", "sm"), "justify-start truncate")}

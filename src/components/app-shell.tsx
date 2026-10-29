@@ -21,7 +21,7 @@ const AppearanceControls = dynamic(() => import("./appearance").then((m) => m.Ap
 import { NavProgress } from "./nav-progress";
 import { LocaleProvider } from "./locale";
 import { CompanyClock } from "./company-clock";
-import { WorkspaceGuard, WorkspaceSwitcher, flatCompanies, useSwitchCompany } from "./workspace-switcher";
+import { WorkspaceGuard, flatCompanies, useSwitchCompany } from "./workspace-switcher";
 import { NAV, NAV_COOKIE, SEGMENT_LABELS, allNavItems, findNavItem, findNavSection } from "@/lib/nav";
 import { can } from "@/lib/permissions";
 import { ROLE_LABELS } from "@/lib/constants";
@@ -66,7 +66,7 @@ export function AppShell({ user, active, accounts, locale, navOpen, children }: 
   locale: CompanyLocale;
   /** The company this browser is working in, and as which signed-in account. */
   active: ActiveWorkspace;
-  /** Every signed-in account with its companies (the switcher). */
+  /** Every signed-in account with its companies (Alt+1…9, the command palette, the tab guard). */
   accounts: WorkspaceAccount[];
   /** Sidebar state from the cookie, so the first paint already has the right width. */
   navOpen: boolean;
@@ -122,11 +122,11 @@ export function AppShell({ user, active, accounts, locale, navOpen, children }: 
       <aside className={cn("group/rail fixed inset-y-0 left-0 z-40 hidden bg-canvas transition-[width,box-shadow] duration-200 ease-out lg:block print:hidden",
         pinned ? "w-60" : "w-16 border-r border-line hover:w-60 hover:shadow-float")}>
         <div className={cn(pinned ? "block" : "hidden group-hover/rail:block", "h-full")}>
-          <SideNav user={user} active={active} accounts={accounts} path={path} data={data} expanded pinned={pinned} onTogglePin={togglePinned} />
+          <SideNav user={user} active={active} path={path} data={data} expanded pinned={pinned} onTogglePin={togglePinned} />
         </div>
         {!pinned && (
           <div className="h-full group-hover/rail:hidden">
-            <SideNav user={user} active={active} accounts={accounts} path={path} data={data} expanded={false} pinned={pinned} onTogglePin={togglePinned} />
+            <SideNav user={user} active={active} path={path} data={data} expanded={false} pinned={pinned} onTogglePin={togglePinned} />
           </div>
         )}
       </aside>
@@ -142,8 +142,8 @@ export function AppShell({ user, active, accounts, locale, navOpen, children }: 
   );
 }
 
-function SideNav({ user, active, accounts, path, data, expanded, pinned, onTogglePin, onNavigate }: {
-  user: ShellUser; active: ActiveWorkspace; accounts: WorkspaceAccount[]; path: string; data: ShellData | null;
+function SideNav({ user, active, path, data, expanded, pinned, onTogglePin, onNavigate }: {
+  user: ShellUser; active: ActiveWorkspace; path: string; data: ShellData | null;
   expanded: boolean; pinned: boolean; onTogglePin: () => void; onNavigate?: () => void;
 }) {
   const activeHref = findNavItem(path)?.href;
@@ -155,15 +155,12 @@ function SideNav({ user, active, accounts, path, data, expanded, pinned, onToggl
     <nav className="flex h-full flex-col" aria-label="Main">
       {/* The company's colour along the top edge: you always see which company you are working in. */}
       <div aria-hidden className="h-[3px] shrink-0" style={{ background: active.color ?? "var(--mark)" }} />
-      {/* The brand leads the sidebar; the company you are working in sits right under it. */}
+      {/* The brand leads the sidebar. Companies and accounts are in the account menu (top right). */}
       <Link href="/select" onClick={onNavigate} title="FleetCore · all companies"
-        className={cn("flex h-14 shrink-0 items-center gap-2.5 transition-opacity hover:opacity-80", expanded ? "px-4" : "justify-center")}>
+        className={cn("mb-1 flex h-14 shrink-0 items-center gap-2.5 transition-opacity hover:opacity-80", expanded ? "px-4" : "justify-center")}>
         <BrandIcon className="h-8 w-8" />
         {expanded && <Wordmark className="h-[22px] text-fg" />}
       </Link>
-      <div className={cn("flex shrink-0 items-center pb-2", expanded ? "px-2" : "justify-center px-1.5")}>
-        <WorkspaceSwitcher active={active} accounts={accounts} expanded={expanded} />
-      </div>
       <div className="flex-1 space-y-0.5 overflow-y-auto overflow-x-hidden px-2 pb-3 pt-1">
         {groups.map((g) => {
           const here = g.section === activeSection;
@@ -260,7 +257,7 @@ function TopBar({ user, active, accounts, locale, path, data, pinned, onSidebar,
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="fade-in absolute inset-0 bg-scrim" onClick={() => setMobileOpen(false)} />
           <aside className="drawer-in absolute inset-y-0 left-0 w-64 border-r border-line bg-canvas shadow-float">
-            <SideNav user={user} active={active} accounts={accounts} path={path} data={data} expanded pinned={pinned} onTogglePin={() => {}} onNavigate={() => setMobileOpen(false)} />
+            <SideNav user={user} active={active} path={path} data={data} expanded pinned={pinned} onTogglePin={() => {}} onNavigate={() => setMobileOpen(false)} />
           </aside>
         </div>
       )}
@@ -269,10 +266,13 @@ function TopBar({ user, active, accounts, locale, path, data, pinned, onSidebar,
           {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
         </button>
         <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1 text-[13px]">
-          {/* On a phone the sidebar is hidden, so the company leads the breadcrumb. */}
-          <span className="flex min-w-0 items-center gap-1 lg:hidden">
-            <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: active.color ?? "var(--mark)" }} aria-hidden />
-            <span className="max-w-28 truncate font-medium text-fg-muted">{active.companyName}</span>
+          {/* The company you are working in leads the breadcrumb; it opens the company chooser. */}
+          <span className="flex min-w-0 items-center gap-1">
+            <Link href="/select" title={`${active.companyName} · all companies`}
+              className="flex min-w-0 items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-raised">
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: active.color ?? "var(--mark)" }} aria-hidden />
+              <span className="max-w-28 truncate font-medium text-fg-muted sm:max-w-56">{active.companyName}</span>
+            </Link>
             <ChevronRight className="h-3.5 w-3.5 shrink-0 text-fg-faint" />
           </span>
           {crumbs.map((c, i) => (

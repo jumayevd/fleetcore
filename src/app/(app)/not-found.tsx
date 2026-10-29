@@ -13,7 +13,7 @@ export default async function AppNotFound() {
           <h1 className="mt-2 text-lg font-semibold tracking-tight text-fg">Not found in {user?.company.name ?? "this company"}</h1>
           <p className="mt-2 text-[13px] leading-5 text-fg-muted">
             The record may have been deleted, or it belongs to another company. If you opened a link from another
-            company, switch to it from the company menu at the top of the sidebar.
+            company, switch to it from All companies.
           </p>
           <div className="mt-5 flex flex-wrap items-center gap-2">
             <LinkButton href="/dashboard" variant="primary">Go to overview</LinkButton>

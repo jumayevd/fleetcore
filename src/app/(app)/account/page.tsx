@@ -60,7 +60,7 @@ export default async function AccountPage() {
             </ActionForm>
           </Card>
 
-          <Card flush title={<span className="flex items-center gap-1.5">Your companies<InfoTip>Companies this account belongs to. Other accounts you are signed in to are in the company menu (top of the sidebar).</InfoTip></span>}
+          <Card flush title={<span className="flex items-center gap-1.5">Your companies<InfoTip>Companies this account belongs to. Other accounts you are signed in to are under All companies in the account menu (top right).</InfoTip></span>}
             actions={<LinkButton href="/select" variant="ghost" size="sm">All companies</LinkButton>}>
             <ul className="divide-y divide-line">
               {user.memberships.map((m) => {
@@ -104,7 +104,7 @@ export default async function AccountPage() {
             <ul className="divide-y divide-line border-t border-line text-[12px]">
               <Shortcut keys={[["⌘", "K"], ["Ctrl", "K"]]} sep="or">Open search and commands from anywhere</Shortcut>
               <Shortcut keys={[["/"]]}>Open search (when not typing in a field)</Shortcut>
-              <Shortcut keys={[["Alt", "1"], ["Alt", "9"]]} sep="…">Switch to company 1 to 9 in the company menu</Shortcut>
+              <Shortcut keys={[["Alt", "1"], ["Alt", "9"]]} sep="…">Switch to company 1 to 9, in the order All companies lists them</Shortcut>
               <Shortcut keys={[["↑"], ["↓"]]} sep="">Move through results</Shortcut>
               <Shortcut keys={[["↵"]]}>Open the highlighted result</Shortcut>
               <Shortcut keys={[["esc"]]}>Close search, menus and drawers</Shortcut>

@@ -77,12 +77,13 @@ Status → tone map lives in one place (`STATUS_TONE`). Add new statuses there, 
 ## Shell
 
 - **Sidebar** (240 px) on the canvas, no border. A 3 px strip in the company's colour runs along the top, and the
-  **company menu** sits in the header: the company badge (coloured initials), its name, your role and account. It
-  lists every signed-in account with its companies, plus New company, Add another account and Sign out. Overview,
+  brand leads it: the wheel icon (32 px) and the wordmark, linking to All companies. Companies and accounts live in
+  the user menu (top right): All companies, Add another account, Sign out. Overview,
   Drivers and Reports are plain links; Fleet, Maintenance and Settings fold open on click. The category you are in
   opens by itself; a folded category shows the sum of its counts. The active page is a white pill with an accent
   bar on the guide line. Collapses to a 64 px icon rail that expands on hover (`nav` cookie).
-- **Top bar** (56 px): breadcrumb (led by the company name on a phone), search `⌘K`, appearance, alerts, user menu.
+- **Top bar** (56 px): breadcrumb led by the company (its colour dot and name, linking to All companies), search
+  `⌘K`, appearance, alerts, user menu.
   Sticky, `bg-canvas/80` blur.
 - **Command palette**: navigation + entity search (active company only) + quick actions + "Switch to …". `⌘K`,
   `↑↓`, `↵`, `esc`; `g` + letter jumps; `Alt+1…9` switches company.

@@ -19,8 +19,9 @@ companies** added so one specialist can work for several fleets — each in its 
 - An **account** is a sign-in (email + password). A **company** is one fleet's workspace; it owns every truck, trailer,
   driver, work order, fuel log, document and audit entry. A **membership** gives an account a role in a company.
 - One account can belong to many companies (Slack-style), and one browser can be signed in to **several accounts at
-  once** (Gmail-style) — useful when a company gives you its own login. The company menu at the top of the sidebar lists
-  every signed-in account with its companies; `Alt+1…9` and the command palette (`⌘K`) switch too.
+  once** (Gmail-style) — useful when a company gives you its own login. **All companies** (the user menu, top right, or
+  the company name leading the breadcrumb) lists every signed-in account with its companies; `Alt+1…9` and the command
+  palette (`⌘K`) switch too.
 - Switching keeps the same page (Trucks stays Trucks) with the other company's data. A browser works in one company at
   a time: if another tab switches, the stale tab stops and asks before anything can be saved to the wrong company.
 - Roles are per company: **Owner** (everything, incl. owners and deleting the company), **Admin** (everything except
@@ -140,7 +141,7 @@ Demo data (`prisma/seed.ts`): four companies. Silk Road Freight (Chicago area) a
 New Jersey) are US fleets in miles and US time zones; Nomad Trucking (Fergana valley) is metric on Tashkent time.
 **aziza@demo.local** owns Silk Road Freight, is a fleet specialist at Caspian Carriers and has an open invitation to
 Turon Logistics; **aziza@nomadtrucking.demo** is the same person's second login for Nomad Trucking. Sign in with one,
-then *Add another account* from the company menu to try switching. Also: owner@demo.local, timur@nomadtrucking.demo,
+then *Add another account* from the user menu (top right) to try switching. Also: owner@demo.local, timur@nomadtrucking.demo,
 bekzod@demo.local, viewer@demo.local. All names, shops, phone numbers (555-01xx) and DOT numbers are made up.
 
 | Command | What it does |

@@ -1,7 +1,7 @@
 import type { Role } from "./constants";
 
 /*
- * Client-safe shapes for accounts and companies (the workspace switcher, the chooser and the tab guard).
+ * Client-safe shapes for accounts and companies (the shell's shortcuts, the chooser and the tab guard).
  * No Prisma or server-only imports here.
  */
 
