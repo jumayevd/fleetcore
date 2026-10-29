@@ -81,7 +81,8 @@ Status → tone map lives in one place (`STATUS_TONE`). Add new statuses there, 
   the user menu (top right): All companies, Add another account, Sign out. Overview,
   Drivers and Reports are plain links; Fleet, Maintenance and Settings fold open on click. The category you are in
   opens by itself; a folded category shows the sum of its counts. The active page is a white pill with an accent
-  bar on the guide line. Collapses to a 64 px icon rail that expands on hover (`nav` cookie).
+  bar on the guide line. The button at its foot collapses it to a 64 px icon rail (labels as tooltips) and opens it
+  again; it stays as left (`nav` cookie). The page fills the width next to it, so collapsing gives the page the room.
 - **Top bar** (56 px): breadcrumb led by the company (its colour dot and name, linking to All companies), search
   `⌘K`, appearance, alerts, user menu.
   Sticky, `bg-canvas/80` blur.

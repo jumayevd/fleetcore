@@ -14,6 +14,8 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Dev only: the badge's default corner (bottom-left) covers the sidebar's collapse button.
+  devIndicators: { position: "top-right" },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

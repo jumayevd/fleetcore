@@ -118,23 +118,17 @@ export function AppShell({ user, active, accounts, locale, navOpen, children }: 
   return (
     <div className="min-h-screen">
       <Suspense fallback={null}><NavProgress /></Suspense>
-      {/* Desktop sidebar: labelled by default; collapses to a 64px rail that expands on hover. */}
-      <aside className={cn("group/rail fixed inset-y-0 left-0 z-40 hidden bg-canvas transition-[width,box-shadow] duration-200 ease-out lg:block print:hidden",
-        pinned ? "w-60" : "w-16 border-r border-line hover:w-60 hover:shadow-float")}>
-        <div className={cn(pinned ? "block" : "hidden group-hover/rail:block", "h-full")}>
-          <SideNav user={user} active={active} path={path} data={data} expanded pinned={pinned} onTogglePin={togglePinned} />
-        </div>
-        {!pinned && (
-          <div className="h-full group-hover/rail:hidden">
-            <SideNav user={user} active={active} path={path} data={data} expanded={false} pinned={pinned} onTogglePin={togglePinned} />
-          </div>
-        )}
+      {/* Desktop sidebar: labelled (240px) or a 64px icon rail. The button at its foot switches; it stays as left. */}
+      <aside className={cn("fixed inset-y-0 left-0 z-40 hidden overflow-hidden bg-canvas transition-[width] duration-200 ease-out lg:block print:hidden",
+        pinned ? "w-60" : "w-16 border-r border-line")}>
+        <SideNav user={user} active={active} path={path} data={data} expanded={pinned} pinned={pinned} onTogglePin={togglePinned} />
       </aside>
 
       <div className={cn("transition-[padding] duration-200 ease-out", pinned ? "lg:pl-60" : "lg:pl-16", "print:pl-0")}>
         {/* Keyed by path so popovers and the mobile drawer close on navigation without effects. */}
         <TopBar key={path} user={user} active={active} accounts={accounts} locale={locale} path={path} data={data} pinned={pinned} onSidebar={setSidebar} openSearch={() => setCmd(true)} />
-        <main className="mx-auto w-full max-w-[1680px] px-4 pb-8 pt-2 lg:px-6"><LocaleProvider locale={locale}>{children}</LocaleProvider></main>
+        {/* Full width next to the sidebar: collapsing it gives the page the room instead of re-centring it. */}
+        <main className="w-full px-4 pb-8 pt-2 lg:px-6"><LocaleProvider locale={locale}>{children}</LocaleProvider></main>
       </div>
       {cmd && <CommandPalette onClose={() => setCmd(false)} role={user.role} active={active} accounts={accounts} onSwitch={switchTo} />}
       <WorkspaceGuard active={active} accounts={accounts} />
@@ -217,14 +211,13 @@ function SideNav({ user, active, path, data, expanded, pinned, onTogglePin, onNa
           );
         })}
       </div>
-      {expanded && (
-        <div className="hidden justify-end p-2 lg:flex">
-          <button type="button" onClick={onTogglePin} title={pinned ? "Collapse sidebar" : "Keep sidebar open"}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] text-fg-subtle transition-colors hover:bg-surface/60 hover:text-fg">
-            {pinned ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
-          </button>
-        </div>
-      )}
+      {/* Desktop only (the phone drawer closes itself). */}
+      <div className={cn("hidden p-2 lg:flex", expanded ? "justify-end" : "justify-center")}>
+        <button type="button" onClick={onTogglePin} aria-expanded={pinned} aria-label={pinned ? "Collapse sidebar" : "Expand sidebar"} title={pinned ? "Collapse sidebar" : "Expand sidebar"}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] text-fg-subtle transition-colors hover:bg-surface/60 hover:text-fg">
+          {pinned ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
+        </button>
+      </div>
     </nav>
   );
 }
