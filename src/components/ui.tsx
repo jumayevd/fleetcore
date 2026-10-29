@@ -346,10 +346,11 @@ export function Table({ head, children, empty, emptyTitle, emptyDescription, den
       <table className="w-full min-w-max text-[13px]">
         <thead className={clsx(stickyHead && "sticky top-0 z-10")}>
           <tr className="bg-raised text-left text-[12px] text-fg-subtle">
-            {head.map((h, i) => <th key={i} className={clsx("whitespace-nowrap border-b border-line px-3 font-medium first:pl-4 last:pr-4", dense ? "py-2" : "py-2.5")}>{h}</th>)}
+            {head.map((h, i) => <th key={i} className={clsx("whitespace-nowrap border-b border-line px-3 font-medium first:pl-4 last:pr-4", dense ? "py-1.5" : "py-2")}>{h}</th>)}
           </tr>
         </thead>
-        <tbody className={clsx("divide-y divide-line [&_td]:px-3 [&_td:first-child]:pl-4 [&_td:last-child]:pr-4 [&_tr]:transition-colors [&_tr:hover]:bg-raised", dense ? "[&_td]:py-2" : "[&_td]:py-2.5")}>{children}</tbody>
+        {/* Rows only as tall as their text: little padding, and lines set close (see Cell). */}
+        <tbody className={clsx("divide-y divide-line [&_td]:px-3 [&_td]:leading-[1.35] [&_td:first-child]:pl-4 [&_td:last-child]:pr-4 [&_tr]:transition-colors [&_tr:hover]:bg-raised", dense ? "[&_td]:py-1" : "[&_td]:py-1.5")}>{children}</tbody>
       </table>
       {empty && <EmptyState title={emptyTitle ?? "Nothing here yet"} description={emptyDescription} />}
     </div>
@@ -470,7 +471,9 @@ export function Disclosure({ title, icon, tone = "accent", count, meta, children
 /** Two-line cell: primary + muted secondary. */
 export function Cell({ primary, secondary, mono, className }: { primary: ReactNode; secondary?: ReactNode; mono?: boolean; className?: string }) {
   return (
-    <div className={clsx("min-w-0", className)}>
+    // Two lines set close together (1.35 of the declared size, which the house face draws a fifth larger), so a
+    // two-line row stays compact without clipping descenders.
+    <div className={clsx("min-w-0 leading-[1.35]", className)}>
       <div className={clsx("truncate text-fg", mono && "num")}>{primary}</div>
       {secondary && <div className="truncate text-[11px] text-fg-subtle">{secondary}</div>}
     </div>
