@@ -14,6 +14,7 @@ import { HoldControl } from "./hold-control";
 import { EmploymentMenu } from "./employment-menu";
 import { TruckAssignment } from "./truck-assignment";
 import { truckOptions } from "../data";
+import { truckStatusLabel, truckStatusTone } from "../../fleet/lib";
 import { AT_RISK_SCORE, DRIVER_TYPE_TONE, EMPLOYMENT_LABELS, clearance, riskReasons, scoreGrade, tenure } from "../shared";
 
 const TABS = ["overview", "documents", "fuel"] as const;
@@ -143,7 +144,7 @@ export default async function DriverDetail({ params, searchParams }: PageProps<"
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <Link href={`/fleet/${driver.truck.id}`} className="num text-[15px] font-semibold text-fg hover:underline">{driver.truck.unitNumber}</Link>
-                      <Badge value={driver.truck.status} />
+                      <Badge value={truckStatusTone(driver.truck.status, true)} label={truckStatusLabel(driver.truck.status, true)} />
                     </div>
                     <p className="mt-0.5 truncate text-[12px] text-fg-muted">{driver.truck.year} {driver.truck.make} {driver.truck.model} · <span className="num">{driver.truck.plate}</span></p>
                     <p className="mt-0.5 text-[11px] text-fg-subtle">

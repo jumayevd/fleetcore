@@ -30,7 +30,7 @@ import { CompletedRepairs } from "../repair-history";
 import { openDefects, openRepairs, truckTypeOptions, type OpenRepair } from "../data";
 import {
   compass, dayAsDate, daysSince, docExpiryByUnit, earliest, EXPIRY_SOON_DAYS, FUEL_TYPE_LABELS, fuelTone, intervalText, leaseStatus, missingDocs,
-  ODOMETER_JUMP_KM, OWNERSHIP_TONE, parseNotes, pingSourceLabel, pingStale, recordedExpiry, serviceSummary, TRUCK_STATUS_LABELS, type ServiceSummary,
+  ODOMETER_JUMP_KM, OWNERSHIP_TONE, parseNotes, pingSourceLabel, pingStale, recordedExpiry, serviceSummary, truckStatusLabel, truckStatusTone, type ServiceSummary,
 } from "../lib";
 
 const TABS = ["overview", "driver", "maintenance", "expenses", "history", "documents", "specs", "notes"] as const;
@@ -139,7 +139,7 @@ export default async function TruckDetail({ params, searchParams }: PageProps<"/
   if (missingOther.length) attention.push({ tone: "warn", text: `Not on file: ${missingOther.map((m) => DOC_KIND_LABELS[m].toLowerCase()).join(", ")}`, href: docsHref });
   if (truck.status === "ACTIVE" && !truck.driver) attention.push({ tone: "info", text: "No driver assigned", href: `/fleet/${id}?tab=driver` });
   if (truck.driver?.hold) attention.push({ tone: "warn", text: `${truck.driver.name} is on hold${truck.driver.holdReason ? `: ${truck.driver.holdReason}` : ""}`, href: `/drivers/${truck.driver.id}` });
-  if (truck.status === "MAINTENANCE" && !repair) attention.push({ tone: "info", text: "In shop with no open repair order", href: editable ? `/maintenance/work-orders/new?truck=${id}` : maintHref });
+  if ((truck.status === "MAINTENANCE" || truck.status === "VENDOR") && !repair) attention.push({ tone: "info", text: `${truck.status === "VENDOR" ? "At a vendor" : "In maintenance"} with no open repair order`, href: editable ? `/maintenance/work-orders/new?truck=${id}` : maintHref });
 
   const openWork = (repair?.count ?? 0) + (defect?.open ?? 0);
   const tabs = TABS.map((t) => ({
@@ -153,7 +153,7 @@ export default async function TruckDetail({ params, searchParams }: PageProps<"/
         title={<span className="num">{truck.unitNumber}</span>}
         subtitle={
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            {!editable && <Badge value={truck.status} label={TRUCK_STATUS_LABELS[truck.status]} dot />}
+            {!editable && <Badge value={truckStatusTone(truck.status, Boolean(truck.driverId))} label={truckStatusLabel(truck.status, Boolean(truck.driverId))} dot />}
             <span>{truck.year} {truck.make} {truck.model}</span>
             {truck.truckType && <Chip className="normal-case tracking-normal">{truck.truckType.name}</Chip>}
             <Chip tone={OWNERSHIP_TONE[truck.ownership]} className="normal-case tracking-normal">{OWNERSHIP_LABELS[truck.ownership] ?? truck.ownership}</Chip>
@@ -163,7 +163,7 @@ export default async function TruckDetail({ params, searchParams }: PageProps<"/
         }
         actions={editable && (
           <>
-            <TruckStatusMenu id={id} status={truck.status} />
+            <TruckStatusMenu id={id} status={truck.status} hasDriver={Boolean(truck.driverId)} />
             <LinkButton href={`/fleet/${id}/edit`} variant="secondary"><Pencil />Edit</LinkButton>
             <LinkButton href={`/maintenance/oil?book=${id}`} variant="secondary"><CalendarClock />Schedule maintenance</LinkButton>
             <LinkButton href={`/maintenance/work-orders/new?truck=${id}`}><Wrench />Create repair</LinkButton>

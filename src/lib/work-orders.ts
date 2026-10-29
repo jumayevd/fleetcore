@@ -61,7 +61,8 @@ export async function releaseUnit(unit: Unit, workOrderId: string, now: Date) {
     const open = await db.workOrder.count({ where: { truckId: unit.truckId, status: "IN_PROGRESS", id: { not: workOrderId } } });
     if (!open) {
       const held = await truckHeldByDefects(unit.truckId);
-      await db.truck.updateMany({ where: { id: unit.truckId, status: "MAINTENANCE" }, data: { status: held ? "OUT_OF_SERVICE" : "ACTIVE" } });
+      // Back from the shop or from an outside vendor.
+      await db.truck.updateMany({ where: { id: unit.truckId, status: { in: ["MAINTENANCE", "VENDOR"] } }, data: { status: held ? "OUT_OF_SERVICE" : "ACTIVE" } });
     }
   }
   if (unit.trailerId) {
@@ -72,7 +73,7 @@ export async function releaseUnit(unit: Unit, workOrderId: string, now: Date) {
 
 /**
  * What a repair order reaching `status` (from `prevStatus`) does:
- *  - into the shop: the downtime clock starts (inAt), the stage pipeline starts at Diagnosing, the truck goes to In shop
+ *  - into the shop: the downtime clock starts (inAt), the stage pipeline starts at Diagnosing, the truck goes to In maintenance
  *    (a truck held out of service stays held), a trailer goes to Shop and leaves its tractor;
  *  - back to scheduled, or cancelled while in: the unit is released;
  *  - completed: the clock stops (outAt), the unit is released, a newer odometer reading moves the truck's odometer

@@ -218,7 +218,7 @@ model Truck {
   year               Int
   vin                String?
   plate              String
-  /// ACTIVE | MAINTENANCE | OUT_OF_SERVICE | INACTIVE
+  /// ACTIVE (Available, or Assigned with a driver) | MAINTENANCE | VENDOR (at an outside vendor) | OUT_OF_SERVICE | INACTIVE
   status             String               @default("ACTIVE")
   /// COMPANY | OWNER_OPERATOR | LEASED
   ownership          String               @default("COMPANY")

@@ -40,7 +40,11 @@ export const EQUIPMENT_LABELS: Record<string, string> = {
   CONTAINER: "Container",
 };
 
-export const TRUCK_STATUSES = ["ACTIVE", "MAINTENANCE", "OUT_OF_SERVICE", "INACTIVE"] as const;
+/**
+ * ACTIVE: in service (shown as Available without a driver, Assigned with one) · MAINTENANCE: in the shop ·
+ * VENDOR: left at an outside vendor (dealer, body shop) · OUT_OF_SERVICE: held · INACTIVE: sold or parked for good.
+ */
+export const TRUCK_STATUSES = ["ACTIVE", "MAINTENANCE", "VENDOR", "OUT_OF_SERVICE", "INACTIVE"] as const;
 export const OWNERSHIP = ["COMPANY", "OWNER_OPERATOR", "LEASED"] as const;
 export const OWNERSHIP_LABELS: Record<string, string> = { COMPANY: "Company", OWNER_OPERATOR: "Owner-operator", LEASED: "Leased" };
 

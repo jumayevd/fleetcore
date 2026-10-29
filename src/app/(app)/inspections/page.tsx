@@ -34,7 +34,7 @@ function stateLabel(r: BoardRow) {
     case "missing": return r.walk?.video === "MISSING" ? "Missing" : r.walk?.video === "RECEIVED" ? "Nothing seen" : "Nothing sent";
     case "partial": return `Reviewed · ${r.walk?.unseen ?? 0} not seen`;
     case "clean": return "Clean";
-    case "not_expected": return r.truck.status === "MAINTENANCE" ? "In the shop" : r.driver ? "Not expected" : "No driver";
+    case "not_expected": return r.truck.status === "MAINTENANCE" ? "In the shop" : r.truck.status === "VENDOR" ? "At a vendor" : r.driver ? "Not expected" : "No driver";
   }
 }
 
@@ -46,6 +46,7 @@ function videoLine(r: BoardRow, f: Formatter) {
   if (w?.video === "MISSING") return "Marked missing";
   if (r.expected) return "No video yet";
   if (r.truck.status === "MAINTENANCE") return "In the shop, no video expected";
+  if (r.truck.status === "VENDOR") return "At a vendor, no video expected";
   return "No video expected";
 }
 

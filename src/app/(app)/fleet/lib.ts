@@ -11,8 +11,14 @@ import { SERVICE_STATE_TONE, type ServiceStatus } from "@/lib/service";
 /* ------------------------------------------------------------------ */
 
 export const TRUCK_STATUS_LABELS: Record<string, string> = {
-  ACTIVE: "Available", MAINTENANCE: "In shop", OUT_OF_SERVICE: "Out of service", INACTIVE: "Inactive",
+  ACTIVE: "Available", MAINTENANCE: "In maintenance", VENDOR: "Vendor", OUT_OF_SERVICE: "Out of service", INACTIVE: "Inactive",
 };
+
+/** A truck in service reads Assigned when it has a driver and Available when it has none. */
+export const truckStatusLabel = (status: string, hasDriver: boolean) =>
+  status === "ACTIVE" && hasDriver ? "Assigned" : TRUCK_STATUS_LABELS[status] ?? status;
+/** The badge colour key for the same (STATUS_TONE). */
+export const truckStatusTone = (status: string, hasDriver: boolean) => (status === "ACTIVE" && hasDriver ? "ASSIGNED" : status);
 
 export const OWNERSHIP_TONE: Record<string, Tone> = { COMPANY: "neutral", OWNER_OPERATOR: "progress", LEASED: "info" };
 export const OWNERSHIP_SHORT: Record<string, string> = { COMPANY: "Company", OWNER_OPERATOR: "Owner-op", LEASED: "Leased" };
@@ -49,8 +55,8 @@ export type TruckView = (typeof TRUCK_VIEWS)[number];
 export const TRUCK_VIEW_LABELS: Record<TruckView, string> = { fleet: "The fleet", off: "Off the road", archived: "Archived" };
 /** Which statuses each view lists. */
 export const TRUCK_VIEW_STATUSES: Record<TruckView, readonly string[]> = {
-  fleet: ["ACTIVE", "MAINTENANCE", "OUT_OF_SERVICE"],
-  off: ["MAINTENANCE", "OUT_OF_SERVICE"],
+  fleet: ["ACTIVE", "MAINTENANCE", "VENDOR", "OUT_OF_SERVICE"],
+  off: ["MAINTENANCE", "VENDOR", "OUT_OF_SERVICE"],
   archived: ["INACTIVE"],
 };
 

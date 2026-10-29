@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
-import { Activity, Archive, Ban, Container, Plus, TriangleAlert, Truck as TruckIcon, Wrench, X } from "lucide-react";
+import { Archive, Ban, CircleCheck, Container, Plus, Store, TriangleAlert, Truck as TruckIcon, Users, Wrench, X } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { db } from "@/lib/db";
@@ -16,6 +16,7 @@ import { isTrackerSource, LIVE_FIX_MS, ROLLING_KMH } from "@/components/map/flee
 import { ListFilters } from "./filters";
 import { LinkRow } from "./link-row";
 import { ColumnChooser, type ColumnDef } from "./column-chooser";
+import { TruckStatusPill } from "./status-pill";
 import { openDefects, openRepairs, truckTypeOptions, unitDocRows } from "./data";
 import {
   docExpiryByUnit, docsByUnit, earliest, EXPIRY_SOON_DAYS, fuelTone, LIST_LIMIT, missingDocs, OWNERSHIP_SHORT, OWNERSHIP_TONE, pingStale,
@@ -132,9 +133,11 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
   }));
   const fact = (id: string) => facts.get(id)!;
 
-  // Fleet-wide counters (independent of the filters below).
+  // Fleet-wide counters (independent of the filters below). In service splits into Available (no driver) and Assigned.
   const count = (s: string) => all.filter((t) => t.status === s).length;
   const working = all.filter((t) => t.status !== "INACTIVE");
+  const available = all.filter((t) => t.status === "ACTIVE" && !t.driverId).length;
+  const assigned = all.filter((t) => t.status === "ACTIVE" && t.driverId).length;
   const attentionCount = working.filter((t) => fact(t.id).reasons.length > 0).length;
   const viewCount = (v: TruckView) => all.filter((t) => TRUCK_VIEW_STATUSES[v].includes(t.status)).length;
   const groups = [...new Set(all.flatMap((t) => [t.group, t.homeTerminal]).filter((g): g is string => Boolean(g)))].sort();
@@ -189,13 +192,14 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
   const filtered = Object.entries(params).some(([k, v]) => k !== "view" && v);
   // A counter filters the list to what it counts; a second click clears it.
   const counter = (on: boolean, href: string, node: React.ReactNode) => (
-    <Link href={on ? qs({ status: undefined, attention: undefined, view: undefined }) : href} aria-current={on || undefined}
+    <Link href={on ? qs({ status: undefined, attention: undefined, view: undefined, driver: undefined }) : href} aria-current={on || undefined}
       className={cn("group block rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40", on && "ring-2 ring-accent/40")}>
       {node}
     </Link>
   );
   const tileClass = "h-full transition-[border-color,box-shadow] group-hover:border-line-strong group-hover:shadow-lift";
-  const only = (patch: Partial<typeof params>) => qs({ status: undefined, attention: undefined, view: undefined, ...patch });
+  const only = (patch: Partial<typeof params>) => qs({ status: undefined, attention: undefined, view: undefined, driver: undefined, ...patch });
+  const statusChip = status === "ACTIVE" ? (driver === "none" ? "Available" : driver === "assigned" ? "Assigned" : "In service") : status ? TRUCK_STATUS_LABELS[status] : null;
   const chipClass = "inline-flex h-7 items-center gap-1 rounded-full bg-accent-soft px-2.5 text-[12px] font-medium text-accent-text hover:opacity-80";
   const col = (key: string, label: React.ReactNode) => <span key={key} data-col={key} className="inline-flex items-center gap-1">{label}</span>;
   const typeOptions = [{ value: "none", label: "No type" }, ...types.map((t) => ({ value: t.id, label: `${t.name} · ${f.dist(t.oilIntervalKm)}` }))];
@@ -212,21 +216,27 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
         }
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-5">
-        {counter(status === "ACTIVE", only({ status: "ACTIVE" }),
-          <Stat className={tileClass} label="Available" value={count("ACTIVE")} icon={<Activity />} tone="ok"
-            hint={`${all.filter((t) => t.status === "ACTIVE" && !t.driverId).length} without a driver`} />)}
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4 2xl:grid-cols-7">
+        {counter(status === "ACTIVE" && driver === "none", only({ status: "ACTIVE", driver: "none" }),
+          <Stat className={tileClass} label="Available" value={available} icon={<CircleCheck />} tone="ok"
+            hint={`no driver · of ${working.length} in the fleet`} />)}
+        {counter(status === "ACTIVE" && driver === "assigned", only({ status: "ACTIVE", driver: "assigned" }),
+          <Stat className={tileClass} label="Assigned" value={assigned} icon={<Users />} tone="info"
+            hint="in service with a driver" />)}
+        {counter(view === "archived", only({ view: "archived" }),
+          <Stat className={tileClass} label="Inactive" value={count("INACTIVE")} icon={<Archive />} hint="sold, retired or parked for good" />)}
         {counter(status === "MAINTENANCE", only({ status: "MAINTENANCE" }),
-          <Stat className={tileClass} label="In shop" value={count("MAINTENANCE")} icon={<Wrench />} tone={count("MAINTENANCE") ? "warn" : "neutral"}
+          <Stat className={tileClass} label="In maintenance" value={count("MAINTENANCE")} icon={<Wrench />} tone={count("MAINTENANCE") ? "warn" : "neutral"}
             hint={count("MAINTENANCE") ? "open the repair from the Repair column" : "nothing in the shop"} />)}
         {counter(status === "OUT_OF_SERVICE", only({ status: "OUT_OF_SERVICE" }),
           <Stat className={tileClass} label="Out of service" value={count("OUT_OF_SERVICE")} icon={<Ban />} tone={count("OUT_OF_SERVICE") ? "danger" : "neutral"}
             hint={count("OUT_OF_SERVICE") ? "held until a repair is verified or paperwork is fixed" : "every truck can run"} />)}
-        {counter(view === "archived", only({ view: "archived" }),
-          <Stat className={tileClass} label="Inactive" value={count("INACTIVE")} icon={<Archive />} hint="sold, retired or parked for good" />)}
         {counter(Boolean(attention), only({ attention: "1" }),
           <Stat className={tileClass} label="Needs attention" value={attentionCount} icon={<TriangleAlert />} tone={attentionCount ? "danger" : "ok"}
             hint={attentionCount ? "defects to fix now, oil overdue or papers expired" : "no urgent defects, overdue oil or expired papers"} />)}
+        {counter(status === "VENDOR", only({ status: "VENDOR" }),
+          <Stat className={tileClass} label="Vendor" value={count("VENDOR")} icon={<Store />} tone={count("VENDOR") ? "progress" : "neutral"}
+            hint="at an outside shop, dealer or body shop" />)}
       </div>
 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -234,7 +244,7 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
           <Segmented active={status && status !== "INACTIVE" ? "" : view} items={TRUCK_VIEWS.map((v) => ({
             key: v, label: TRUCK_VIEW_LABELS[v], count: viewCount(v), href: qs({ view: v === "fleet" ? undefined : v, status: undefined }),
           }))} />
-          {status && status !== "INACTIVE" && <Link href={qs({ status: undefined })} className={chipClass}>{TRUCK_STATUS_LABELS[status]}<X className="h-3 w-3" /></Link>}
+          {status && status !== "INACTIVE" && <Link href={qs({ status: undefined, ...(status === "ACTIVE" ? { driver: undefined } : {}) })} className={chipClass}>{statusChip}<X className="h-3 w-3" /></Link>}
           {attention && <Link href={qs({ attention: undefined })} className={chipClass}>Needs attention<X className="h-3 w-3" /></Link>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -304,7 +314,7 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
                       secondary={<span title={`${t.year} ${t.make} ${t.model}`}><span className="num">{t.year}</span> {t.make} {t.model}</span>} />
                   </td>
                   <td data-col="type" className="whitespace-nowrap text-fg-muted">{t.truckType?.name ?? <span className="text-fg-faint">No type</span>}</td>
-                  <td data-col="status"><Badge value={t.status} label={TRUCK_STATUS_LABELS[t.status]} dot /></td>
+                  <td data-col="status"><TruckStatusPill id={t.id} status={t.status} hasDriver={Boolean(t.driverId)} editable={editable} /></td>
                   <td data-col="driver">
                     {t.driver ? (
                       <Cell primary={<span className="inline-flex items-center gap-1.5"><Link href={`/drivers/${t.driver.id}`} className="hover:underline">{t.driver.name}</Link>{t.driver.hold && <Chip tone="warn">Hold</Chip>}</span>}

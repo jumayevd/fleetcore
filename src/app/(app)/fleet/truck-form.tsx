@@ -73,8 +73,8 @@ export function TruckForm({ action, truck, drivers, groups, types, cancelHref }:
               <Field label="In service since" hint="The day the truck started working for you.">
                 <Input name="inServiceAt" type="date" defaultValue={f.dateInput(truck?.inServiceAt)} />
               </Field>
-              <Field label="Status" hint="Starting a repair moves the truck to In shop; finishing it brings it back.">
-                <Select name="status" defaultValue={truck?.status ?? "ACTIVE"} options={TRUCK_STATUSES.map((st) => ({ value: st, label: TRUCK_STATUS_LABELS[st] }))} />
+              <Field label="Status" hint="In service shows as Available, or Assigned once it has a driver. Starting a repair moves it to In maintenance; finishing it brings it back.">
+                <Select name="status" defaultValue={truck?.status ?? "ACTIVE"} options={TRUCK_STATUSES.map((st) => ({ value: st, label: st === "ACTIVE" ? "In service (Available / Assigned)" : TRUCK_STATUS_LABELS[st] }))} />
               </Field>
               <Field label="Home terminal" hint="Where the truck is based.">
                 <Input name="homeTerminal" list="truck-terminals" defaultValue={truck?.homeTerminal ?? ""} placeholder="Joliet, IL" />

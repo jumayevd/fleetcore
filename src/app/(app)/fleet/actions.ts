@@ -9,7 +9,7 @@ import { audit } from "@/lib/audit";
 import { attempt, fields, FormError, type ActionState } from "@/lib/action";
 import { EQUIPMENT, TRAILER_STATUSES, TRAILER_STATUS_LABELS, TRUCK_STATUSES, humanize } from "@/lib/constants";
 import { getFormat } from "@/lib/format-server";
-import { placeFromText, TRUCK_STATUS_LABELS, UNHOOKED_TRAILER_STATUSES } from "./lib";
+import { placeFromText, truckStatusLabel, UNHOOKED_TRAILER_STATUSES } from "./lib";
 
 /*
  * Fleet module actions: truck status, trailer create / edit / status / one-click fixes. The truck form saves through
@@ -24,12 +24,12 @@ import { placeFromText, TRUCK_STATUS_LABELS, UNHOOKED_TRAILER_STATUSES } from ".
 /* Trucks                                                              */
 /* ------------------------------------------------------------------ */
 
-/** Status menu on the truck page. */
+/** Status menu on the truck page and the status pill on the trucks list. */
 export async function setTruckStatus(truckId: string, status: string): Promise<ActionState> {
   const me = await requireUser("fleet.edit");
   return attempt(async () => {
     if (!TRUCK_STATUSES.includes(status as never)) throw new FormError("Pick a valid status");
-    const truck = await db.truck.findUnique({ where: { id: truckId }, select: { unitNumber: true, status: true } });
+    const truck = await db.truck.findUnique({ where: { id: truckId }, select: { unitNumber: true, status: true, driverId: true } });
     if (!truck) throw new FormError("This truck no longer exists. Refresh the page.");
     if (truck.status !== status) {
       await db.truck.update({ where: { id: truckId }, data: { status } });
@@ -38,7 +38,8 @@ export async function setTruckStatus(truckId: string, status: string): Promise<A
     revalidatePath("/fleet");
     revalidatePath(`/fleet/${truckId}`);
     revalidatePath("/dashboard");
-    return { ok: `${truck.unitNumber} is now ${(TRUCK_STATUS_LABELS[status] ?? humanize(status)).toLowerCase()}` };
+    revalidatePath("/tracking");
+    return { ok: `${truck.unitNumber} is now ${(truckStatusLabel(status, Boolean(truck.driverId)) ?? humanize(status)).toLowerCase()}` };
   });
 }
 

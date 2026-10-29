@@ -179,7 +179,7 @@ export const STATUS_TONE: Record<string, Tone> = {
   // billing stage
   MISSING_DOCS: "warn", READY_TO_INVOICE: "info",
   // assets
-  ACTIVE: "ok", MAINTENANCE: "warn", OUT_OF_SERVICE: "danger", INACTIVE: "neutral",
+  ACTIVE: "ok", MAINTENANCE: "warn", VENDOR: "progress", OUT_OF_SERVICE: "danger", INACTIVE: "neutral",
   // trailers
   IN_USE: "progress", EMPTY: "ok", DROPPED: "info", YARD: "neutral", SHOP: "warn",
   // driver employment / board statuses

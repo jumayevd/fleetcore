@@ -1,17 +1,18 @@
 "use client";
 
 import { useId, useState, useTransition } from "react";
-import { ChevronDown, ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { TRAILER_STATUSES, TRAILER_STATUS_LABELS } from "@/lib/constants";
 import { Badge, STATUS_TONE, StatusDot, buttonClass, cn, inputClass } from "@/components/ui";
 import { setTrailerStatus } from "../actions";
 import { Popover, menuItemClass, useMenuKeys } from "../menu";
+import { StatusPillFace, statusPillClass } from "../status-pill";
 
 /** Statuses that describe where the trailer is, so we ask for the place. */
 const ASKS_LOCATION = new Set(["DROPPED", "YARD"]);
 
 /**
- * Inline status change: the badge is the trigger, a quiet popover lists the other statuses.
+ * Inline status change: a pill that reads like a select is the trigger, a quiet popover lists the other statuses.
  * Dropped / Yard ask where the unit is (one input, Enter to confirm). Errors stay inside the popover.
  */
 export function TrailerStatusControl({ id, status, locationName, editable, since }: {
@@ -28,10 +29,9 @@ export function TrailerStatusControl({ id, status, locationName, editable, since
   return (
     <Popover width={232} align="start" trigger={({ open, toggle }) => (
       <span className="inline-flex items-center gap-1.5">
-        <button type="button" onClick={toggle} aria-haspopup="menu" aria-expanded={open} title="Change status"
-          className={cn("inline-flex items-center gap-1 rounded-md py-0.5 pl-0.5 pr-1 transition-colors hover:bg-raised focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40", open && "bg-raised")}>
-          <Badge value={status} label={TRAILER_STATUS_LABELS[status] ?? status} dot />
-          <ChevronDown className="h-3 w-3 text-fg-subtle" />
+        <button type="button" onClick={toggle} aria-haspopup="menu" aria-expanded={open} aria-label={`Status: ${TRAILER_STATUS_LABELS[status] ?? status}. Change status`}
+          className={cn(statusPillClass(STATUS_TONE[status] ?? "neutral"), open && "ring-2 ring-accent/30")}>
+          <StatusPillFace tone={STATUS_TONE[status] ?? "neutral"} label={TRAILER_STATUS_LABELS[status] ?? status} />
         </button>
         {since && <span className="num text-[11px] text-fg-subtle" title="Time in this status">{since}</span>}
       </span>
