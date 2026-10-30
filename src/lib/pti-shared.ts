@@ -4,7 +4,7 @@
  */
 import type { Tone } from "@/components/ui";
 import {
-  DEFECT_SEVERITY_LABELS, DEFECT_STATUS_LABELS, PTI_COMPONENT_LABELS, PTI_COMPONENTS, ROADSIDE_RESULT_LABELS, ROADSIDE_STATUS_LABELS, humanize,
+  DEFECT_SEVERITY_LABELS, DEFECT_STATUS_LABELS, PTI_COMPONENT_LABELS, PTI_COMPONENTS, PTI_RATINGS, ROADSIDE_RESULT_LABELS, ROADSIDE_STATUS_LABELS, humanize,
 } from "./constants";
 
 export const DAY_MS = 86_400_000;
@@ -37,6 +37,16 @@ export const RATING_HINTS: Record<string, string> = {
 };
 /** A rating that becomes a defect, and its severity. GOOD and UNSEEN make none. */
 export const RATING_SEVERITY: Record<string, "NOW" | "SOON" | undefined> = { SOON: "SOON", NOW: "NOW" };
+
+/**
+ * Ratings a review saved again may give a component. A Soon or Now mark stays on the week's record: it can be raised
+ * from Soon to Now while its defect is open, never taken back to Good or Not seen, and once its defect is confirmed
+ * fixed it stays exactly as it was.
+ */
+export function allowedRatings(saved: string | undefined, resolved: boolean): readonly string[] {
+  if (!saved || !RATING_SEVERITY[saved]) return PTI_RATINGS;
+  return resolved || saved === "NOW" ? [saved] : ["SOON", "NOW"];
+}
 
 export const SEVERITY_SHORT: Record<string, string> = { NOW: "Now", SOON: "Soon", WATCH: "Watch" };
 export const SEVERITY_TONE: Record<string, Tone> = { NOW: "danger", SOON: "warn", WATCH: "info" };

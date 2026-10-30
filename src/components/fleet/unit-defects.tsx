@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth";
+import { can } from "@/lib/permissions";
 import { getFormat } from "@/lib/format-server";
 import { defectLabel } from "@/lib/service";
 import { openRepairsFor } from "@/lib/pti";
@@ -16,6 +18,8 @@ import { ReportDefect } from "@/components/inspections/report-defect";
  */
 export async function UnitDefects({ unit, editable }: { unit: { type: "truck" | "trailer"; id: string }; editable: boolean }) {
   const f = await getFormat();
+  const me = await getCurrentUser();
+  const noteOptional = can(me?.role, "defects.closeWithoutNote");
   const now = new Date();
   const where = unit.type === "truck" ? { truckId: unit.id } : { trailerId: unit.id };
   const [open, closed, closedCount, self] = await Promise.all([
@@ -73,7 +77,7 @@ export async function UnitDefects({ unit, editable }: { unit: { type: "truck" | 
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   <RepairCell id={d.id} workOrder={d.workOrder} editable={editable} openOrders={repairs.get(unit.id) ?? []} newHref={newRepairHref(d)} />
-                  {editable && <DefectActions id={d.id} number={d.number} status={d.status} severity={d.severity} holdsUnit={d.holdsUnit} compact />}
+                  {editable && <DefectActions id={d.id} number={d.number} status={d.status} severity={d.severity} holdsUnit={d.holdsUnit} hasOwner={Boolean(d.ownerId)} noteOptional={noteOptional} compact />}
                 </div>
               </li>
             );
@@ -92,7 +96,7 @@ export async function UnitDefects({ unit, editable }: { unit: { type: "truck" | 
                 </span>
                 <span className="shrink-0 text-right text-[11px] text-fg-subtle">
                   {f.day(d.closedAt)}{d.closedBy ? ` · ${d.closedBy.name}` : ""}
-                  {editable && <span className="mt-0.5 block"><DefectActions id={d.id} number={d.number} status={d.status} severity={d.severity} holdsUnit={d.holdsUnit} compact /></span>}
+                  {editable && <span className="mt-0.5 block"><DefectActions id={d.id} number={d.number} status={d.status} severity={d.severity} holdsUnit={d.holdsUnit} hasOwner={Boolean(d.ownerId)} noteOptional={noteOptional} compact /></span>}
                 </span>
               </li>
             ))}

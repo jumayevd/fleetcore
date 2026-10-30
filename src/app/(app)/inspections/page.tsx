@@ -7,9 +7,9 @@ import { db } from "@/lib/db";
 import { getFormat } from "@/lib/format-server";
 import { dateOnly, type Formatter } from "@/lib/locale";
 import { defectLabel, roLabel } from "@/lib/service";
-import { loadBoard, loadReview, needsSomething, resolveWeek, type BoardRow, type Week } from "@/lib/pti";
+import { companyMembers, loadBoard, loadReview, needsSomething, resolveWeek, type BoardRow, type Week } from "@/lib/pti";
 import {
-  BOARD_FILTERS, BOARD_STATE_TONE, SEVERITY_SHORT, SEVERITY_TONE, boardHref, chaseMessage, componentLabel, defectsHref, one, plural,
+  BOARD_FILTERS, BOARD_STATE_TONE, SEVERITY_SHORT, SEVERITY_TONE, WITHDRAWN_NOTE, boardHref, chaseMessage, componentLabel, defectsHref, one, plural,
   type BoardFilter,
 } from "@/lib/pti-shared";
 import { Badge, Card, Chip, Disclosure, EmptyState, IconButton, InfoTip, LinkButton, PageHeader, Stat, Table, buttonClass, cn } from "@/components/ui";
@@ -50,13 +50,13 @@ function videoLine(r: BoardRow, f: Formatter) {
   return "No video expected";
 }
 
-function RowAction({ r, week, show, f, sender }: { r: BoardRow; week: Week; show: BoardFilter; f: Formatter; sender: string }) {
+function RowAction({ r, week, show, f, sender, noteOptional }: { r: BoardRow; week: Week; show: BoardFilter; f: Formatter; sender: string; noteOptional: boolean }) {
   const reviewHref = boardHref({ week: week.isCurrent ? undefined : week.key, show, review: r.truck.id });
   if (r.action === "review") return <LinkButton href={reviewHref} size="sm" scroll={false}><ClipboardCheck />Review</LinkButton>;
   if (r.action === "confirm") {
     const repaired = r.defects.filter((d) => d.status === "REPAIRED");
-    return <ConfirmClearButton truckId={r.truck.id} unitNumber={r.truck.unitNumber} holds={repaired.some((d) => d.holdsUnit)}
-      defects={repaired.map((d) => ({ id: d.id, number: d.number, component: d.component, description: d.description }))} />;
+    return <ConfirmClearButton truckId={r.truck.id} unitNumber={r.truck.unitNumber} holds={repaired.some((d) => d.holdsUnit)} noteOptional={noteOptional}
+      defects={repaired.map((d) => ({ id: d.id, number: d.number, component: d.component, description: d.description, ownerId: d.ownerId }))} />;
   }
   if (r.action === "chase") {
     return (
@@ -97,7 +97,9 @@ function Issues({ r }: { r: BoardRow }) {
   );
 }
 
-function BoardTable({ rows, week, show, f, editable, sender }: { rows: BoardRow[]; week: Week; show: BoardFilter; f: Formatter; editable: boolean; sender: string }) {
+function BoardTable({ rows, week, show, f, editable, sender, noteOptional }: {
+  rows: BoardRow[]; week: Week; show: BoardFilter; f: Formatter; editable: boolean; sender: string; noteOptional: boolean;
+}) {
   return (
     <Table stickyHead={false} head={["Unit", "Status", "Last inspection", "Open issues", ""]}>
       {rows.map((r) => {
@@ -123,7 +125,7 @@ function BoardTable({ rows, week, show, f, editable, sender }: { rows: BoardRow[
               ) : <span className="text-fg-faint">Never reviewed</span>}
             </td>
             <td><Issues r={r} /></td>
-            <td className="whitespace-nowrap text-right">{editable && <RowAction r={r} week={week} show={show} f={f} sender={sender} />}</td>
+            <td className="whitespace-nowrap text-right">{editable && <RowAction r={r} week={week} show={show} f={f} sender={sender} noteOptional={noteOptional} />}</td>
           </tr>
         );
       })}
@@ -167,6 +169,7 @@ async function SavedNotice({ truckId, week, closeHref }: { truckId: string; week
 export default async function PreTripBoard({ searchParams }: PageProps<"/inspections">) {
   const me = await requireUser("fleet.view");
   const editable = can(me.role, "fleet.edit");
+  const noteOptional = can(me.role, "defects.closeWithoutNote");
   const f = await getFormat();
   const sp = await searchParams;
   const now = new Date();
@@ -194,7 +197,7 @@ export default async function PreTripBoard({ searchParams }: PageProps<"/inspect
   const reviewId = one(sp.review);
   let review: (ReviewFormProps & { title: string; subtitle: string }) | null = null;
   if (reviewId && editable) {
-    const data = await loadReview(reviewId, week, f, now);
+    const [data, members] = await Promise.all([loadReview(reviewId, week, f, now), companyMembers(me.company.id)]);
     if (data) {
       const queue = main.filter((r) => r.action === "review" && r.truck.id !== reviewId);
       const at = main.findIndex((r) => r.truck.id === reviewId);
@@ -210,11 +213,17 @@ export default async function PreTripBoard({ searchParams }: PageProps<"/inspect
         reviewed: w?.reviewedAt ? { by: w.reviewedBy?.name ?? null, on: f.dateTime(w.reviewedAt), stamp: w.reviewedAt.toISOString() } : null,
         notes: w?.notes ?? "",
         ratings: Object.fromEntries((w?.ratings ?? []).map((r) => [r.component, r.rating])),
-        thisWeek: Object.fromEntries((w?.defects ?? []).map((d) => [d.component, { number: d.number, description: d.description, severity: d.severity }])),
+        thisWeek: Object.fromEntries((w?.defects ?? []).map((d) => [d.component, {
+          number: d.number, description: d.description, severity: d.severity,
+          resolved: d.status === "CLOSED" && !d.closeNote?.startsWith(WITHDRAWN_NOTE),
+        }])),
         earlier: data.earlier.map((d) => ({
           id: d.id, number: d.number, component: d.component, description: d.description, severity: d.severity, status: d.status,
-          holdsUnit: d.holdsUnit, daysOpen: d.daysOpen, repair: d.workOrder ? `${roLabel(d.workOrder.number)} ${WO_STATUS[d.workOrder.status] ?? ""}`.trim() : null,
+          holdsUnit: d.holdsUnit, daysOpen: d.daysOpen, ownerId: d.ownerId,
+          repair: d.workOrder ? `${roLabel(d.workOrder.number)} ${WO_STATUS[d.workOrder.status] ?? ""}`.trim() : null,
         })),
+        members: members.map((m) => ({ id: m.id, name: m.name })),
+        noteOptional,
         history: data.history.map((h) => ({
           key: h.key, label: f.day(h.at), current: h.key === week.key,
           video: h.walk?.video ?? null, result: h.walk?.reviewedAt ? h.walk.result : null,
@@ -264,24 +273,19 @@ export default async function PreTripBoard({ searchParams }: PageProps<"/inspect
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         <Counter href={href("missing")} active={show === "missing"}>
-          <Stat label="Nothing sent" value={counts.missing} tone={missingTone}
-            hint={week.isCurrent ? `Missing, not marked or nothing seen · due by ${due}` : "Missing, never marked, or nothing could be seen"} />
+          <Stat label="Nothing sent" value={counts.missing} tone={missingTone} />
         </Counter>
         <Counter href={href("review")} active={show === "review"}>
-          <Stat label="To review" value={counts.review} tone={counts.review ? "info" : "ok"} hint="Video in and not reviewed, or something not seen" />
+          <Stat label="To review" value={counts.review} tone={counts.review ? "info" : "ok"} />
         </Counter>
         <Counter href={href("issues")} active={show === "issues"}>
-          <Stat label="Open issues" value={counts.issues} tone={counts.holdingTrucks ? "danger" : counts.issues ? "warn" : "ok"}
-            hint={counts.holdingTrucks
-              ? `Marked soon or now · ${plural(counts.holdingTrucks, "truck")} held`
-              : counts.toConfirm ? `Marked soon or now · ${counts.toConfirm} repaired, to confirm` : "Something marked soon or now"} />
+          <Stat label="Open issues" value={counts.issues} tone={counts.holdingTrucks ? "danger" : counts.issues ? "warn" : "ok"} />
         </Counter>
         <Counter href={href("clean")} active={show === "clean"}>
-          <Stat label="Clean" value={counts.clean} hint="Every item marked good" />
+          <Stat label="Clean" value={counts.clean} />
         </Counter>
         <Counter href={href("all")} active={show === "all"}>
-          <Stat label="Drivers sent" value={<>{counts.sent}<span className="text-[15px] font-medium text-fg-subtle">/{counts.expected}</span></>}
-            hint="Videos marked received, whatever the marks" />
+          <Stat label="Drivers sent" value={<>{counts.sent}<span className="text-[15px] font-medium text-fg-subtle">/{counts.expected}</span></>} />
         </Counter>
       </div>
 
@@ -297,13 +301,13 @@ export default async function PreTripBoard({ searchParams }: PageProps<"/inspect
             description={rows.length === 0 ? "Add trucks under Fleet; each one with a driver is expected to send a walk-around video every week."
               : show === "needs" ? "Every expected video is in and reviewed, and no defect is open." : "Pick another counter above."} />
         ) : (
-          <BoardTable rows={main} week={week} show={show} f={f} editable={editable} sender={me.name} />
+          <BoardTable rows={main} week={week} show={show} f={f} editable={editable} sender={me.name} noteOptional={noteOptional} />
         )}
         {rest.length > 0 && (
           <Disclosure className="border-t border-line" title="Clean and not expected" count={rest.length}
             meta={<span className="hidden text-[11px] text-fg-subtle sm:inline">{plural(rest.filter((r) => r.state === "clean").length, "clean")} · {plural(rest.filter((r) => r.state === "not_expected").length, "not expected", "not expected")}</span>}>
             <div className="border-t border-line">
-              <BoardTable rows={rest} week={week} show={show} f={f} editable={editable} sender={me.name} />
+              <BoardTable rows={rest} week={week} show={show} f={f} editable={editable} sender={me.name} noteOptional={noteOptional} />
             </div>
           </Disclosure>
         )}

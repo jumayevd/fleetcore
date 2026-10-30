@@ -39,6 +39,7 @@ type Row = Prisma.DefectGetPayload<{ include: typeof include }>;
 export default async function DefectsPage({ searchParams }: PageProps<"/inspections/defects">) {
   const me = await requireUser("fleet.view");
   const editable = can(me.role, "fleet.edit");
+  const noteOptional = can(me.role, "defects.closeWithoutNote");
   const f = await getFormat();
   const sp = await searchParams;
   const now = new Date();
@@ -219,7 +220,7 @@ export default async function DefectsPage({ searchParams }: PageProps<"/inspecti
                 </td>
                 <td className="whitespace-nowrap">
                   {editable && d.status !== "CLOSED"
-                    ? <OwnerSelect id={d.id} ownerId={d.ownerId} members={members} />
+                    ? <OwnerSelect id={d.id} ownerId={d.ownerId} members={members} keep={d.status === "REPAIRED"} />
                     : <span className={d.owner ? "text-fg-muted" : "text-fg-faint"}>{d.owner?.name ?? "—"}</span>}
                 </td>
                 <td className="whitespace-nowrap">
@@ -227,7 +228,7 @@ export default async function DefectsPage({ searchParams }: PageProps<"/inspecti
                     openOrders={repairs.get(d.truckId ?? d.trailerId ?? "") ?? []} newHref={newRepairHref(d)} />
                 </td>
                 <td className="whitespace-nowrap text-right">
-                  {editable && <DefectActions id={d.id} number={d.number} status={d.status} severity={d.severity} holdsUnit={d.holdsUnit} compact />}
+                  {editable && <DefectActions id={d.id} number={d.number} status={d.status} severity={d.severity} holdsUnit={d.holdsUnit} hasOwner={Boolean(d.ownerId)} noteOptional={noteOptional} compact />}
                 </td>
               </tr>
             );

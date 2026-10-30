@@ -29,25 +29,28 @@ function useRun() {
 
 /**
  * Status moves for one defect: Mark repaired (open), Confirm & close (open or repaired, with a note), Reopen
- * (repaired or closed). Closing the last defect that holds a unit puts the unit back in service.
+ * (repaired or closed). Closing the last defect that holds a unit puts the unit back in service. Marking repaired and
+ * confirming need an owner first; the note is required unless `noteOptional` (admins).
  */
-export function DefectActions({ id, number, status, severity, holdsUnit, compact }: {
-  id: string; number: number; status: string; severity: string; holdsUnit: boolean; compact?: boolean;
+export function DefectActions({ id, number, status, severity, holdsUnit, hasOwner, noteOptional, compact }: {
+  id: string; number: number; status: string; severity: string; holdsUnit: boolean; hasOwner: boolean; noteOptional: boolean; compact?: boolean;
 }) {
-  const { pending, msg, run } = useRun();
+  const { pending, msg, run, setMsg } = useRun();
   const [closing, setClosing] = useState(false);
   const [note, setNote] = useState("");
   const label = defectLabel(number);
+  const ownerFirst = (step: string) => setMsg({ tone: "error", text: `Give ${label} an owner before ${step}.` });
   return (
     <span className="inline-flex flex-wrap items-center justify-end gap-1">
       {status === "OPEN" && (
-        <Button size="sm" variant="ghost" disabled={pending} onClick={() => run(() => markDefectRepaired(id))} title="The shop says it is fixed; someone still confirms it">
+        <Button size="sm" variant="ghost" disabled={pending} onClick={() => (hasOwner ? run(() => markDefectRepaired(id)) : ownerFirst("marking it repaired"))}
+          title={hasOwner ? "The shop says it is fixed; someone still confirms it" : "Pick an owner first"}>
           <Wrench />{compact ? "Repaired" : "Mark repaired"}
         </Button>
       )}
       {status !== "CLOSED" && (
-        <Button size="sm" variant={status === "REPAIRED" ? "secondary" : "ghost"} disabled={pending} onClick={() => setClosing(true)}
-          title={holdsUnit ? "Confirm the repair, close it and release the unit" : "Confirm the repair and close it"}>
+        <Button size="sm" variant={status === "REPAIRED" ? "secondary" : "ghost"} disabled={pending} onClick={() => (hasOwner ? (setMsg(null), setClosing(true)) : ownerFirst("confirming the repair"))}
+          title={!hasOwner ? "Pick an owner first" : holdsUnit ? "Confirm the repair, close it and release the unit" : "Confirm the repair and close it"}>
           <CheckCheck />Confirm &amp; close
         </Button>
       )}
@@ -65,15 +68,15 @@ export function DefectActions({ id, number, status, severity, holdsUnit, compact
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setClosing(false)}>Cancel</Button>
-            <Button disabled={pending} onClick={() => run(() => closeDefect(id, note || null), () => { setClosing(false); setNote(""); })}>
+            <Button disabled={pending || (!noteOptional && !note.trim())} onClick={() => run(() => closeDefect(id, note || null), () => { setClosing(false); setNote(""); })}>
               <CheckCheck />{pending ? "Saving…" : "Confirm and close"}
             </Button>
           </div>
         }>
         <label className="block">
-          <span className="mb-1 block text-[12px] font-medium text-fg-muted">How you checked</span>
-          <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="e.g. Invoice RO-0142 attached, tire replaced; seen on today's photo" />
-          <span className="mt-1 block text-[11px] text-fg-subtle">Optional, kept with the defect.</span>
+          <span className="mb-1 block text-[12px] font-medium text-fg-muted">How you checked{!noteOptional && <span className="text-danger"> *</span>}</span>
+          <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} required={!noteOptional} placeholder="e.g. Invoice RO-0142 attached, tire replaced; seen on today's photo" />
+          <span className="mt-1 block text-[11px] text-fg-subtle">{noteOptional ? "Optional for admins, kept with the defect." : "Required, kept with the defect."}</span>
         </label>
         {msg?.tone === "error" && <FormMessage tone="error" className="mt-3">{msg.text}</FormMessage>}
       </Overlay>
@@ -81,18 +84,18 @@ export function DefectActions({ id, number, status, severity, holdsUnit, compact
   );
 }
 
-/** Owner of a defect, changeable in place. */
-export function OwnerSelect({ id, ownerId, members, disabled }: {
-  id: string; ownerId: string | null; members: { id: string; name: string }[]; disabled?: boolean;
+/** Owner of a defect, changeable in place. A defect marked repaired keeps an owner until it is closed (`keep`). */
+export function OwnerSelect({ id, ownerId, members, disabled, keep }: {
+  id: string; ownerId: string | null; members: { id: string; name: string }[]; disabled?: boolean; keep?: boolean;
 }) {
   const { pending, msg, run } = useRun();
   const [value, setValue] = useState(ownerId ?? "");
   return (
     <span className="inline-flex flex-col gap-0.5">
       <select aria-label="Owner" value={value} disabled={disabled || pending}
-        onChange={(e) => { const v = e.target.value; setValue(v); run(() => assignDefectOwner(id, v || null)); }}
+        onChange={(e) => { const v = e.target.value; const was = value; setValue(v); run(() => assignDefectOwner(id, v || null).then((r) => { if (r?.error) setValue(was); return r; })); }}
         className={cn(inputClass, "h-7 w-40 text-[12px]", !value && "text-fg-subtle")}>
-        <option value="">Nobody yet</option>
+        <option value="" disabled={keep && Boolean(value)}>Nobody yet</option>
         {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
       </select>
       {msg?.tone === "error" && <span role="alert" className="text-[11px] text-danger">{msg.text}</span>}

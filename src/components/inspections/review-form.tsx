@@ -2,20 +2,20 @@
 
 import Link from "next/link";
 import { useRef, useState } from "react";
-import { CheckCheck, Video, VideoOff } from "lucide-react";
+import { CheckCheck, Lock, Video, VideoOff } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
-import { Chip, Field, Input, Textarea, TONE_SOFT, buttonClass, cn, type Tone } from "@/components/ui";
+import { Chip, Field, Input, Textarea, TONE_SOFT, buttonClass, cn, inputClass, type Tone } from "@/components/ui";
 import { PTI_COMPONENTS, PTI_RATINGS, PTI_RATING_LABELS } from "@/lib/constants";
 import { defectLabel } from "@/lib/service";
 import {
   RATING_HINTS, RATING_SEVERITY, RATING_TONE, SEVERITY_SHORT, SEVERITY_TONE, VERDICTS, VERDICT_HINTS, VERDICT_LABELS, VERDICT_TONE,
-  componentLabel, plural, type Verdict,
+  allowedRatings, componentLabel, plural, type Verdict,
 } from "@/lib/pti-shared";
 import { saveWalkAroundReview } from "@/app/actions/inspections";
 
 export type ReviewEarlierDefect = {
   id: string; number: number; component: string; description: string; severity: string; status: string;
-  holdsUnit: boolean; daysOpen: number; repair: string | null;
+  holdsUnit: boolean; daysOpen: number; repair: string | null; ownerId: string | null;
 };
 export type ReviewHistoryWeek = {
   key: string; label: string; current: boolean;
@@ -33,15 +33,19 @@ export type ReviewFormProps = {
   reviewed: { by: string | null; on: string; stamp: string } | null;
   notes: string;
   ratings: Record<string, string>;
-  /** Defects this walk-around already raised (a second save updates them instead of adding new ones). */
-  thisWeek: Record<string, { number: number; description: string; severity: string }>;
+  /** Defects this walk-around already raised (a second save updates them instead of adding new ones); `resolved`: confirmed fixed. */
+  thisWeek: Record<string, { number: number; description: string; severity: string; resolved: boolean }>;
   earlier: ReviewEarlierDefect[];
   history: ReviewHistoryWeek[];
   next: { truckId: string; unitNumber: string } | null;
   closeHref: string;
+  /** Who can own a defect: an earlier defect needs one before it is marked fixed or repaired here. */
+  members: { id: string; name: string }[];
+  /** Admins may mark an earlier defect fixed without saying how they can tell. */
+  noteOptional: boolean;
 };
 
-type Opt = { value: string; label: string; tone: Tone; hint?: string };
+type Opt = { value: string; label: string; tone: Tone; hint?: string; disabled?: boolean };
 
 /** A row of radio pills: the choice reads as a tinted tile in its tone. */
 function RadioPills({ name, value, onChange, options, label, size = "md" }: {
@@ -53,10 +57,11 @@ function RadioPills({ name, value, onChange, options, label, size = "md" }: {
         const on = o.value === value;
         return (
           <label key={o.value} title={o.hint}
-            className={cn("inline-flex cursor-pointer items-center rounded-[7px] font-medium transition-[color,background-color,box-shadow] duration-150 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-accent",
+            className={cn("inline-flex items-center rounded-[7px] font-medium transition-[color,background-color,box-shadow] duration-150 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-accent",
               size === "sm" ? "h-6 px-2 text-[11.5px]" : "h-7 px-2.5 text-[12px]",
-              on ? cn(o.tone === "neutral" ? "bg-surface text-fg" : TONE_SOFT[o.tone], "shadow-card") : "text-fg-muted hover:text-fg")}>
-            <input type="radio" name={name} value={o.value} checked={on} onChange={() => onChange(o.value)} className="sr-only" />
+              o.disabled && !on ? "cursor-not-allowed text-fg-faint" : "cursor-pointer",
+              on ? cn(o.tone === "neutral" ? "bg-surface text-fg" : TONE_SOFT[o.tone], "shadow-card") : !o.disabled && "text-fg-muted hover:text-fg")}>
+            <input type="radio" name={name} value={o.value} checked={on} disabled={o.disabled && !on} onChange={() => onChange(o.value)} className="sr-only" />
             {o.label}
           </label>
         );
@@ -92,8 +97,13 @@ export function ReviewForm(p: ReviewFormProps) {
   const counts = PTI_RATINGS.map((r) => [r, PTI_COMPONENTS.filter((c) => ratings[c] === r).length] as const).filter(([, n]) => n > 0);
   /** Earlier defects still open for a component once the verdicts are applied: rating it again keeps that one open. */
   const trackedFor = (c: string) => p.earlier.find((d) => d.component === c && verdicts[d.id] !== "FIXED");
-  const allGood = PTI_COMPONENTS.every((c) => ratings[c] === "GOOD");
-  const newNow = PTI_COMPONENTS.some((c) => ratings[c] === "NOW");
+  /** Soon / Now marks already saved this week stay on the record (only Soon → Now is still possible). */
+  const allowedFor = (c: string) => allowedRatings(p.ratings[c], Boolean(p.thisWeek[c]?.resolved));
+  const lockedFor = (c: string) => allowedFor(c).length < PTI_RATINGS.length;
+  const allGood = PTI_COMPONENTS.every((c) => ratings[c] === "GOOD" || !allowedFor(c).includes("GOOD"));
+  const newNow = PTI_COMPONENTS.some((c) => ratings[c] === "NOW" && p.ratings[c] !== "NOW");
+  const recorded = Boolean(p.reviewed) && PTI_COMPONENTS.some(lockedFor);
+  const [fixOwners, setFixOwners] = useState<Record<string, string>>({});
 
   return (
     <ActionForm action={saveWalkAroundReview} className="space-y-6">
@@ -106,7 +116,8 @@ export function ReviewForm(p: ReviewFormProps) {
 
       {p.reviewed && (
         <p className="rounded-md bg-info-soft px-3 py-2 text-[12px] text-info">
-          Reviewed {p.reviewed.on}{p.reviewed.by ? ` by ${p.reviewed.by}` : ""}. Saving again replaces this week&apos;s ratings; defects it raised are updated, not duplicated.
+          Reviewed {p.reviewed.on}{p.reviewed.by ? ` by ${p.reviewed.by}` : ""}.
+          {recorded ? " Soon and Now marks stay on this week's record: saving again can add marks or raise Soon to Now, not take one back." : " Saving again replaces this week's ratings; defects it raised are updated, not duplicated."}
         </p>
       )}
 
@@ -114,7 +125,7 @@ export function ReviewForm(p: ReviewFormProps) {
         <div className="flex flex-wrap items-center gap-3">
           <RadioPills name="video" label="Video" value={video} onChange={setVideo} options={[
             { value: "RECEIVED", label: "Received", tone: "ok" },
-            { value: "MISSING", label: "Missing", tone: "warn" },
+            { value: "MISSING", label: "Missing", tone: "warn", disabled: recorded, hint: recorded ? "This week's Soon / Now marks stay on the record, so the video can't be marked missing" : undefined },
           ]} />
           <span className="inline-flex items-center gap-1.5 text-[12px] text-fg-subtle">
             {video === "RECEIVED" ? <Video className="h-3.5 w-3.5" /> : <VideoOff className="h-3.5 w-3.5" />}
@@ -124,7 +135,7 @@ export function ReviewForm(p: ReviewFormProps) {
         {video === "MISSING" && p.reviewed && (
           <p className="mt-2 rounded-md bg-warn-soft px-3 py-2 text-[12px] text-warn">
             This withdraws the review of {p.reviewed.on}
-            {Object.keys(p.thisWeek).length ? ` and closes ${Object.values(p.thisWeek).map((d) => defectLabel(d.number)).join(", ")}, which it raised` : ""}.
+            {Object.values(p.thisWeek).some((d) => !d.resolved) ? ` and closes ${Object.values(p.thisWeek).filter((d) => !d.resolved).map((d) => defectLabel(d.number)).join(", ")}, which it raised` : ""}.
             {" "}The marks are kept: switch back to Received and save to restore it.
           </p>
         )}
@@ -153,8 +164,19 @@ export function ReviewForm(p: ReviewFormProps) {
                   <RadioPills name={`verdict_${d.id}`} label={`What you saw for ${defectLabel(d.number)}`} size="sm" value={verdicts[d.id]}
                     onChange={(v) => setVerdicts((s) => ({ ...s, [d.id]: v as Verdict }))} options={VERDICT_OPTIONS} />
                 </div>
+                {!d.ownerId && (verdicts[d.id] === "FIXED" || (verdicts[d.id] === "LOOKS_FIXED" && d.status === "OPEN")) && (
+                  <label className="flex flex-wrap items-center gap-2 text-[12px] text-fg-muted">
+                    <span>Owner <span className="text-danger">*</span> <span className="text-fg-subtle">(it has none yet)</span></span>
+                    <select name={`owner_${d.id}`} required value={fixOwners[d.id] ?? ""} onChange={(e) => setFixOwners((s) => ({ ...s, [d.id]: e.target.value }))}
+                      aria-label={`Owner of ${defectLabel(d.number)}`} className={cn(inputClass, "h-7 w-48 text-[12px]", !fixOwners[d.id] && "text-fg-subtle")}>
+                      <option value="" disabled>Pick who owns it</option>
+                      {p.members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                    </select>
+                  </label>
+                )}
                 {verdicts[d.id] === "FIXED" && (
-                  <Input name={`fixNote_${d.id}`} placeholder="How you can tell (optional), e.g. new tire visible at 0:42" aria-label={`Note for ${defectLabel(d.number)}`} />
+                  <Input name={`fixNote_${d.id}`} required={!p.noteOptional} aria-label={`Note for ${defectLabel(d.number)}`}
+                    placeholder={`How you can tell${p.noteOptional ? " (optional for admins)" : ""}, e.g. new tire visible at 0:42`} />
                 )}
               </li>
             ))}
@@ -166,7 +188,7 @@ export function ReviewForm(p: ReviewFormProps) {
         <Section title="What the video shows" aside={
           <span className="flex items-center gap-2">
             <span className="hidden text-[11px] text-fg-subtle sm:inline">{counts.map(([r, n]) => `${n} ${(PTI_RATING_LABELS[r] ?? r).toLowerCase()}`).join(" · ")}</span>
-            <button type="button" disabled={allGood} onClick={() => setRatings(Object.fromEntries(PTI_COMPONENTS.map((c) => [c, "GOOD"])))}
+            <button type="button" disabled={allGood} onClick={() => setRatings((s) => Object.fromEntries(PTI_COMPONENTS.map((c) => [c, allowedFor(c).includes("GOOD") ? "GOOD" : s[c]])))}
               className={buttonClass("secondary", "sm")}><CheckCheck />Mark all good</button>
           </span>
         }>
@@ -176,17 +198,24 @@ export function ReviewForm(p: ReviewFormProps) {
               const bad = Boolean(RATING_SEVERITY[r]);
               const own = p.thisWeek[c];
               const tracked = trackedFor(c);
+              const allowed = allowedFor(c);
+              const locked = allowed.length < PTI_RATINGS.length;
+              const lockHint = own?.resolved
+                ? `Marked ${PTI_RATING_LABELS[p.ratings[c]]} this week and ${defectLabel(own.number)} is confirmed fixed: the mark stays on the record`
+                : `Marked ${PTI_RATING_LABELS[p.ratings[c]]} this week: it stays on the record${allowed.length > 1 ? " and can only be raised to Now" : ""}`;
               return (
                 <li key={c} className={cn("px-3 py-2", r === "NOW" ? "bg-danger-soft/60" : r === "SOON" ? "bg-warn-soft/60" : undefined)}>
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="flex min-w-0 items-center gap-2 text-[13px] text-fg">
                       {componentLabel(c)}
+                      {locked && <span title={lockHint} className="inline-flex shrink-0 text-fg-subtle"><Lock className="h-3 w-3" aria-hidden /><span className="sr-only">{lockHint}</span></span>}
                       {tracked && <Chip tone={SEVERITY_TONE[tracked.severity] ?? "neutral"} title={tracked.description}>{defectLabel(tracked.number)} open</Chip>}
-                      {own && !tracked && <Chip tone="neutral" title={own.description}>{defectLabel(own.number)}</Chip>}
+                      {own && !tracked && <Chip tone={own.resolved ? "ok" : "neutral"} title={own.description}>{defectLabel(own.number)}{own.resolved ? " fixed" : ""}</Chip>}
                     </span>
-                    <RadioPills name={`rating_${c}`} label={componentLabel(c)} size="sm" value={r} onChange={(v) => setRatings((s) => ({ ...s, [c]: v }))} options={RATING_OPTIONS} />
+                    <RadioPills name={`rating_${c}`} label={componentLabel(c)} size="sm" value={r} onChange={(v) => setRatings((s) => ({ ...s, [c]: v }))}
+                      options={RATING_OPTIONS.map((o) => (allowed.includes(o.value) ? o : { ...o, disabled: true, hint: lockHint }))} />
                   </div>
-                  {bad && (
+                  {bad && !own?.resolved && (
                     <Input name={`desc_${c}`} value={descs[c]} onChange={(e) => setDescs((s) => ({ ...s, [c]: e.target.value }))}
                       required={!own && !tracked} aria-label={`What is wrong with the ${componentLabel(c).toLowerCase()}`}
                       placeholder={tracked ? `Already tracked as ${defectLabel(tracked.number)}; add a note only if it changed` : "What you saw, e.g. cut on the sidewall, cords showing"}

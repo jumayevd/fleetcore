@@ -121,8 +121,9 @@ export async function applyWorkOrderSideEffects(id: string, status: string, user
       }
       if (Object.keys(data).length) await db.truck.update({ where: { id: t.id }, data });
     }
-    // Never closed here: someone confirms the repair on the next walk-around.
-    await db.defect.updateMany({ where: { workOrderId: id, status: "OPEN" }, data: { status: "REPAIRED", repairedAt: now } });
+    // Never closed here: someone confirms the repair on the next walk-around. A defect with no owner stays open until
+    // someone takes it (only an owned defect can be marked repaired).
+    await db.defect.updateMany({ where: { workOrderId: id, status: "OPEN", ownerId: { not: null } }, data: { status: "REPAIRED", repairedAt: now } });
   }
   if (prevStatus !== status) {
     const from = prevStatus ? REPAIR_STATUS_LABELS[prevStatus] ?? prevStatus : null;

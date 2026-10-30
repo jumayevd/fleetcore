@@ -5,7 +5,7 @@ import { DEFECT_DUE_DAYS } from "./constants";
 import { dateOnly, type Formatter } from "./locale";
 import { roLabel } from "./service";
 import {
-  BOARD_STATE_RANK, DAY_MS, NEEDS_STATES, WITHDRAWN_NOTE, byUnit, categorize, countMarks, daysBetween,
+  BOARD_STATE_RANK, DAY_MS, NEEDS_STATES, byUnit, categorize, countMarks, daysBetween,
   type BoardAction, type BoardCategories, type BoardMarks, type BoardState,
 } from "./pti-shared";
 
@@ -163,7 +163,7 @@ export async function openRepairsFor(units: UnitRef[]) {
 
 export type BoardDefect = {
   id: string; number: number; component: string; description: string; severity: string; status: string;
-  holdsUnit: boolean; daysOpen: number; overdue: boolean; repairedAt: Date | null;
+  holdsUnit: boolean; daysOpen: number; overdue: boolean; repairedAt: Date | null; ownerId: string | null;
   workOrder: { id: string; number: number; status: string } | null;
 };
 
@@ -221,7 +221,7 @@ export async function loadBoard(week: Week, now = new Date()): Promise<{ rows: B
       orderBy: [{ foundAt: "asc" }],
       select: {
         id: true, number: true, truckId: true, component: true, description: true, severity: true, status: true, holdsUnit: true,
-        foundAt: true, dueAt: true, repairedAt: true, workOrder: { select: { id: true, number: true, status: true } },
+        foundAt: true, dueAt: true, repairedAt: true, ownerId: true, workOrder: { select: { id: true, number: true, status: true } },
       },
     }),
   ]);
@@ -233,7 +233,7 @@ export async function loadBoard(week: Week, now = new Date()): Promise<{ rows: B
     list.push({
       id: d.id, number: d.number, component: d.component, description: d.description, severity: d.severity, status: d.status,
       holdsUnit: d.holdsUnit, daysOpen: daysBetween(d.foundAt, now), overdue: d.status === "OPEN" && !!d.dueAt && d.dueAt.getTime() < now.getTime(),
-      repairedAt: d.repairedAt, workOrder: d.workOrder,
+      repairedAt: d.repairedAt, ownerId: d.ownerId, workOrder: d.workOrder,
     });
     defectsBy.set(d.truckId!, list);
   }
@@ -323,11 +323,9 @@ export async function loadReview(truckId: string, week: Week, f: Formatter, now 
       include: {
         ratings: { select: { component: true, rating: true } },
         reviewedBy: { select: { name: true } },
-        // Including the ones a "missing" mark withdrew: saving the review again reopens them.
-        defects: {
-          where: { OR: [{ status: { not: "CLOSED" } }, { closeNote: { startsWith: WITHDRAWN_NOTE } }] },
-          select: { id: true, number: true, component: true, description: true, severity: true, status: true },
-        },
+        // Every defect it raised: open ones, the ones a "missing" mark withdrew (saving again reopens them), and the
+        // ones already confirmed fixed (their marks stay as they are).
+        defects: { select: { id: true, number: true, component: true, description: true, severity: true, status: true, closeNote: true } },
       },
     }),
     db.defect.findMany({
@@ -335,7 +333,7 @@ export async function loadReview(truckId: string, week: Week, f: Formatter, now 
       orderBy: { number: "asc" },
       select: {
         id: true, number: true, component: true, description: true, severity: true, status: true, holdsUnit: true, foundAt: true,
-        walkAroundId: true, workOrder: { select: { number: true, status: true } },
+        walkAroundId: true, ownerId: true, workOrder: { select: { number: true, status: true } },
       },
     }),
     db.walkAround.findMany({

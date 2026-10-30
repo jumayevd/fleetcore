@@ -19,6 +19,8 @@ export const PERMISSIONS = {
   "company.manage": ADMINS,
   "members.manage": ADMINS,
   "audit.view": ADMINS,
+  /** Confirm and close a defect without saying how the repair was checked. Everyone else writes a note. */
+  "defects.closeWithoutNote": ADMINS,
   "company.delete": ["OWNER"],
 } as const satisfies Record<string, readonly Role[]>;
 

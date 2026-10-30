@@ -6,18 +6,25 @@ import { db } from "@/lib/db";
 import { requireUser, type CurrentUser } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import { attempt, fields, FormError, type ActionState } from "@/lib/action";
-import { DEFECT_SEVERITIES, PTI_COMPONENTS, PTI_RATINGS } from "@/lib/constants";
+import { can } from "@/lib/permissions";
+import { DEFECT_SEVERITIES, PTI_COMPONENTS, PTI_RATINGS, PTI_RATING_LABELS } from "@/lib/constants";
 import { dateOnly, makeFormat, normalizeLocale } from "@/lib/locale";
 import { defectLabel, roLabel } from "@/lib/service";
 import { companyMembers, createDefect, dueFor, resolveWeek, syncUnitHold, type HoldChange, type UnitRef } from "@/lib/pti";
 import {
-  BOARD_FILTERS, DEFECT_COMPONENTS, RATING_SEVERITY, SEVERITY_RANK, VERDICTS, WITHDRAWN_NOTE, boardHref, componentLabel, type Verdict,
+  BOARD_FILTERS, DEFECT_COMPONENTS, RATING_SEVERITY, SEVERITY_RANK, VERDICTS, WITHDRAWN_NOTE, allowedRatings, boardHref, componentLabel, type Verdict,
 } from "@/lib/pti-shared";
 
 /*
  * Weekly walk-around reviews and defects. Every change is audited; anything that touches a holding defect goes
  * through syncUnitHold (src/lib/pti.ts), which applies the out-of-service rule to the unit.
+ *  - a defect needs an owner before it is marked repaired or confirmed and closed;
+ *  - confirming and closing needs a note saying how the repair was checked, except for admins;
+ *  - a Soon / Now mark stays on its week's record (allowedRatings in src/lib/pti-shared.ts).
  */
+
+const OWNER_FIRST = (n: number, step: string) => `Give ${defectLabel(n)} an owner before ${step}.`;
+const NOTE_FIRST = "Say how you checked the repair. Only an admin can confirm and close without a note.";
 
 const formatFor = (me: CurrentUser) => makeFormat(normalizeLocale(me.company));
 
@@ -83,24 +90,32 @@ export async function saveWalkAroundReview(_: ActionState, fd: FormData): Promis
     const now = new Date();
     const notes = v.str("notes");
     const back = { week: week.isCurrent ? undefined : week.key, show: show && (BOARD_FILTERS as readonly string[]).includes(show) ? show : undefined };
+    // This week's saved marks and every defect the walk-around raised: Soon / Now marks stay on the record.
+    const saved = new Map((existing ? await db.walkAroundRating.findMany({ where: { walkAroundId: existing.id }, select: { component: true, rating: true } }) : [])
+      .map((r) => [r.component, r.rating]));
+    const raised = existing ? await db.defect.findMany({ where: { walkAroundId: existing.id }, orderBy: { number: "asc" } }) : [];
+    const withdrawnOwn = raised.filter((d) => d.status === "CLOSED" && d.closeNote?.startsWith(WITHDRAWN_NOTE));
+    const resolved = raised.filter((d) => d.status === "CLOSED" && !d.closeNote?.startsWith(WITHDRAWN_NOTE));
+    const recorded = PTI_COMPONENTS.filter((c) => RATING_SEVERITY[saved.get(c) ?? ""]);
 
     if (video === "MISSING") {
+      if (existing?.reviewedAt && recorded.length) {
+        throw new FormError(`This week's review of ${truck.unitNumber} recorded ${recorded.map((c) => `${componentLabel(c).toLowerCase()} as ${PTI_RATING_LABELS[saved.get(c)!]}`).join(", ")}. Those marks stay on the record, so the video can't be marked missing now.`);
+      }
       // Also after a review (it was marked received by mistake): the review is withdrawn. Defects it raised close with
       // WITHDRAWN_NOTE (and release the truck if they held it); the marks stay, so switching back to received and
       // saving restores the review and reopens those same defects.
       let withdrawn: number[] = [];
       let hold: HoldChange = { held: [], released: [] };
-      if (existing) {
-        const raised = await db.defect.findMany({ where: { walkAroundId: existing.id, status: { in: ["OPEN", "REPAIRED"] } }, select: { id: true, number: true, holdsUnit: true } });
-        if (raised.length) {
-          await db.defect.updateMany({
-            where: { id: { in: raised.map((d) => d.id) } },
-            data: { status: "CLOSED", holdsUnit: false, closedAt: now, closedById: me.id, closeNote: `${WITHDRAWN_NOTE} (week of ${f.day(week.at)})` },
-          });
-          for (const d of raised) await audit(me.id, "close", "defect", d.id, `${defectLabel(d.number)} withdrawn: ${truck.unitNumber}'s video marked missing`);
-          withdrawn = raised.map((d) => d.number);
-          hold = await syncUnitHold({ truckId }, { released: raised.some((d) => d.holdsUnit) });
-        }
+      const live = raised.filter((d) => d.status === "OPEN" || d.status === "REPAIRED");
+      if (live.length) {
+        await db.defect.updateMany({
+          where: { id: { in: live.map((d) => d.id) } },
+          data: { status: "CLOSED", holdsUnit: false, closedAt: now, closedById: me.id, closeNote: `${WITHDRAWN_NOTE} (week of ${f.day(week.at)})` },
+        });
+        for (const d of live) await audit(me.id, "close", "defect", d.id, `${defectLabel(d.number)} withdrawn: ${truck.unitNumber}'s video marked missing`);
+        withdrawn = live.map((d) => d.number);
+        hold = await syncUnitHold({ truckId }, { released: live.some((d) => d.holdsUnit) });
       }
       const wa = await db.walkAround.upsert({
         where,
@@ -122,25 +137,46 @@ export async function saveWalkAroundReview(_: ActionState, fd: FormData): Promis
     for (const c of PTI_COMPONENTS) {
       const r = v.str(`rating_${c}`) ?? "GOOD";
       if (!(PTI_RATINGS as readonly string[]).includes(r)) throw new FormError(`Pick a rating for ${componentLabel(c).toLowerCase()}.`);
+      const was = saved.get(c);
+      const fixed = resolved.find((d) => d.component === c);
+      if (!allowedRatings(was, Boolean(fixed)).includes(r)) {
+        const label = `${componentLabel(c)} was marked ${PTI_RATING_LABELS[was!]} this week`;
+        throw new FormError(fixed
+          ? `${label} and ${defectLabel(fixed.number)} is already confirmed fixed, so the mark stays as it is.`
+          : `${label}. Soon and Now marks stay on the week's record: they can be raised to Now, not taken back.`);
+      }
       ratings[c] = r;
     }
     const open = await db.defect.findMany({ where: { truckId, status: { in: ["OPEN", "REPAIRED"] } }, orderBy: { number: "asc" } });
     // This walk-around's own defects, including those a "missing" mark withdrew (saving again reopens them).
-    const withdrawnOwn = existing
-      ? await db.defect.findMany({ where: { walkAroundId: existing.id, status: "CLOSED", closeNote: { startsWith: WITHDRAWN_NOTE } }, orderBy: { number: "asc" } })
-      : [];
     const mine = [...open.filter((d) => existing && d.walkAroundId === existing.id), ...withdrawnOwn];
     const earlier = open.filter((d) => !existing || d.walkAroundId !== existing.id);
     const verdicts = new Map<string, Verdict>();
+    /** Owners picked in the review for earlier defects that had none (needed to mark them fixed or repaired). */
+    const owners = new Map<string, string>();
+    const mayCloseBare = can(me.role, "defects.closeWithoutNote");
+    let members: Awaited<ReturnType<typeof companyMembers>> | null = null;
     for (const d of earlier) {
       const raw = v.str(`verdict_${d.id}`) ?? "UNSEEN";
       if (!(VERDICTS as readonly string[]).includes(raw)) throw new FormError(`Pick what you saw for ${defectLabel(d.number)}.`);
-      verdicts.set(d.id, raw as Verdict);
+      // Rated Soon / Now again on the same video: the rating wins over "looks fixed".
+      const verdict: Verdict = raw === "LOOKS_FIXED" && RATING_SEVERITY[ratings[d.component]] ? "STILL" : (raw as Verdict);
+      if (verdict === "FIXED" || (verdict === "LOOKS_FIXED" && d.status === "OPEN")) {
+        if (!d.ownerId) {
+          const ownerId = v.str(`owner_${d.id}`);
+          if (!ownerId) throw new FormError(OWNER_FIRST(d.number, verdict === "FIXED" ? "marking it fixed" : "marking it repaired"));
+          members ??= await companyMembers(me.company.id);
+          if (!members.some((m) => m.id === ownerId)) throw new FormError("Pick an owner from this company.");
+          owners.set(d.id, ownerId);
+        }
+        if (verdict === "FIXED" && !v.str(`fixNote_${d.id}`) && !mayCloseBare) throw new FormError(`Say how you can tell ${defectLabel(d.number)} is fixed. Only an admin can close a defect without a note.`);
+      }
+      verdicts.set(d.id, verdict);
     }
     const stillTracked = (component: string) => earlier.find((d) => d.component === component && verdicts.get(d.id) !== "FIXED");
     for (const c of PTI_COMPONENTS) {
       if (!RATING_SEVERITY[ratings[c]]) continue;
-      if (mine.some((d) => d.component === c) || stillTracked(c)) continue;
+      if (mine.some((d) => d.component === c) || resolved.some((d) => d.component === c) || stillTracked(c)) continue;
       if (!v.str(`desc_${c}`)) throw new FormError(`Say what you saw on the ${componentLabel(c).toLowerCase()} (rated ${ratings[c] === "NOW" ? "Now" : "Soon"}).`);
     }
 
@@ -157,17 +193,14 @@ export async function saveWalkAroundReview(_: ActionState, fd: FormData): Promis
     /** Status of each earlier defect once its verdict is applied. */
     const statusAfter = new Map(earlier.map((d) => [d.id, d.status]));
     for (const d of earlier) {
-      let verdict = verdicts.get(d.id) ?? "UNSEEN";
-      if (verdict === "LOOKS_FIXED" && RATING_SEVERITY[ratings[d.component]]) {
-        // Rated Soon / Now again on the same video: the rating wins over "looks fixed".
-        verdict = "STILL";
-        verdicts.set(d.id, verdict);
-      }
+      const verdict = verdicts.get(d.id) ?? "UNSEEN";
+      const owner = owners.has(d.id) ? { ownerId: owners.get(d.id) } : {};
+      if (owners.has(d.id)) await audit(me.id, "assign", "defect", d.id, `${defectLabel(d.number)} → ${members?.find((m) => m.id === owners.get(d.id))?.name ?? "owner"} on ${truck.unitNumber}'s walk-around`);
       if (verdict === "FIXED") {
         const note = v.str(`fixNote_${d.id}`);
         await db.defect.update({
           where: { id: d.id },
-          data: { status: "CLOSED", holdsUnit: false, closedAt: now, closedById: me.id, repairedAt: d.repairedAt ?? now, closeNote: note ?? `Fixed: seen on the walk-around of the week of ${weekOf}` },
+          data: { ...owner, status: "CLOSED", holdsUnit: false, closedAt: now, closedById: me.id, repairedAt: d.repairedAt ?? now, closeNote: note ?? `Fixed: seen on the walk-around of the week of ${weekOf}` },
         });
         await audit(me.id, "close", "defect", d.id, `${defectLabel(d.number)} fixed on ${truck.unitNumber}'s walk-around`);
         if (d.holdsUnit) released = true;
@@ -180,7 +213,7 @@ export async function saveWalkAroundReview(_: ActionState, fd: FormData): Promis
           statusAfter.set(d.id, "OPEN");
         }
       } else if (verdict === "LOOKS_FIXED" && d.status === "OPEN") {
-        await db.defect.update({ where: { id: d.id }, data: { status: "REPAIRED", repairedAt: now } });
+        await db.defect.update({ where: { id: d.id }, data: { ...owner, status: "REPAIRED", repairedAt: now } });
         await audit(me.id, "repaired", "defect", d.id, `${defectLabel(d.number)} looks fixed on ${truck.unitNumber}'s walk-around`);
         statusAfter.set(d.id, "REPAIRED");
       }
@@ -203,6 +236,8 @@ export async function saveWalkAroundReview(_: ActionState, fd: FormData): Promis
         }
         continue;
       }
+      // Raised this week and already confirmed fixed: the issue is on the record and solved; nothing reopens.
+      if (!own && resolved.some((d) => d.component === c)) continue;
       if (own) {
         if (own.holdsUnit && severity !== "NOW") released = true;
         const reopen = own.status === "CLOSED"; // withdrawn by a "missing" mark, now back
@@ -299,7 +334,7 @@ export async function reportDefect(_: ActionState, fd: FormData): Promise<Action
 async function findDefect(id: string) {
   const d = await db.defect.findUnique({
     where: { id },
-    select: { id: true, number: true, status: true, severity: true, holdsUnit: true, repairedAt: true, truckId: true, trailerId: true },
+    select: { id: true, number: true, status: true, severity: true, holdsUnit: true, repairedAt: true, ownerId: true, truckId: true, trailerId: true },
   });
   if (!d) throw new FormError("This defect no longer exists. Refresh the page.");
   return d;
@@ -313,6 +348,7 @@ export async function assignDefectOwner(id: string, ownerId: string | null): Pro
     const members = await companyMembers(me.company.id);
     const owner = ownerId ? members.find((m) => m.id === ownerId) : null;
     if (ownerId && !owner) throw new FormError("Pick an owner from this company.");
+    if (!owner && d.status === "REPAIRED") throw new FormError(`${defectLabel(d.number)} is marked repaired, so it keeps an owner until it is closed. Pick someone else instead.`);
     await db.defect.update({ where: { id }, data: { ownerId: owner?.id ?? null } });
     await audit(me.id, "assign", "defect", id, `${defectLabel(d.number)} → ${owner?.name ?? "nobody"}`);
     revalidateInspections([d]);
@@ -347,6 +383,7 @@ export async function markDefectRepaired(id: string): Promise<ActionState> {
   return attempt(async () => {
     const d = await findDefect(id);
     if (d.status !== "OPEN") throw new FormError(`${defectLabel(d.number)} is already ${d.status === "CLOSED" ? "closed" : "marked repaired"}.`);
+    if (!d.ownerId) throw new FormError(OWNER_FIRST(d.number, "marking it repaired"));
     await db.defect.update({ where: { id }, data: { status: "REPAIRED", repairedAt: new Date() } });
     await audit(me.id, "repaired", "defect", id, defectLabel(d.number));
     revalidateInspections([d]);
@@ -368,7 +405,10 @@ export async function closeDefect(id: string, note: string | null): Promise<Acti
   return attempt(async () => {
     const d = await findDefect(id);
     if (d.status === "CLOSED") throw new FormError(`${defectLabel(d.number)} is already closed.`);
-    await closeOne(me, d, note?.trim() || null, new Date());
+    if (!d.ownerId) throw new FormError(OWNER_FIRST(d.number, "confirming the repair"));
+    const why = note?.trim() || null;
+    if (!why && !can(me.role, "defects.closeWithoutNote")) throw new FormError(NOTE_FIRST);
+    await closeOne(me, d, why, new Date());
     const hold = await syncUnitHold(d, { released: d.holdsUnit });
     revalidateInspections([d]);
     return { ok: `${defectLabel(d.number)} closed.${holdNote(hold)}` };
@@ -381,11 +421,15 @@ export async function confirmTruckRepairs(truckId: string, note: string | null):
   return attempt(async () => {
     const list = await db.defect.findMany({
       where: { truckId, status: "REPAIRED" },
-      select: { id: true, number: true, status: true, severity: true, holdsUnit: true, repairedAt: true, truckId: true, trailerId: true },
+      select: { id: true, number: true, status: true, severity: true, holdsUnit: true, repairedAt: true, ownerId: true, truckId: true, trailerId: true },
     });
     if (!list.length) throw new FormError("Nothing on this truck is waiting to be confirmed. Refresh the page.");
+    const unowned = list.filter((d) => !d.ownerId);
+    if (unowned.length) throw new FormError(`Give ${unowned.map((d) => defectLabel(d.number)).join(", ")} an owner before confirming the repair.`);
+    const why = note?.trim() || null;
+    if (!why && !can(me.role, "defects.closeWithoutNote")) throw new FormError(NOTE_FIRST);
     const now = new Date();
-    for (const d of list) await closeOne(me, d, note?.trim() || null, now);
+    for (const d of list) await closeOne(me, d, why, now);
     let hold = await syncUnitHold({ truckId }, { released: list.some((d) => d.holdsUnit) });
     for (const t of new Set(list.map((d) => d.trailerId).filter((x): x is string => Boolean(x)))) {
       hold = merge(hold, await syncUnitHold({ trailerId: t }, { released: true }));
