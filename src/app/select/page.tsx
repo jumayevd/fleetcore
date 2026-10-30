@@ -52,6 +52,8 @@ export default async function SelectCompanyPage({ searchParams }: PageProps<"/se
   ]);
   const focus = typeof sp.account === "string" ? sp.account : undefined;
   const total = accounts.reduce((a, x) => a + x.companies.length, 0);
+  // Only the platform owner (from the console) and the accounts they allow create companies.
+  const canCreate = accounts.some((a) => a.canCreate && !a.platform);
 
   return (
     <div className="min-h-dvh bg-canvas">
@@ -65,11 +67,13 @@ export default async function SelectCompanyPage({ searchParams }: PageProps<"/se
       </header>
 
       <main className="mx-auto w-full max-w-5xl px-4 pb-16 pt-6 lg:px-8">
-        <h1 className="text-[24px] font-semibold tracking-[-0.015em] text-fg">{total ? "Choose a company" : "Create your first company"}</h1>
+        <h1 className="text-[24px] font-semibold tracking-[-0.015em] text-fg">{total ? "Choose a company" : canCreate ? "Create your first company" : "No company yet"}</h1>
         <p className="mt-1 text-[13px] text-fg-subtle">
           {total
             ? <>Each company keeps its own trucks, drivers and documents. Switch any time from All companies in your account menu (top right), or with <span className="num">Alt+1…9</span>.</>
-            : "A company is one fleet's workspace. Create one for the fleet you manage, or open an invitation from your manager."}
+            : canCreate
+              ? "A company is one fleet's workspace. Create one for the fleet you manage, or open an invitation."
+              : "You'll see the companies you work for here once one invites you. Ask your manager for an invitation link."}
         </p>
 
         {invites.length > 0 && (
@@ -146,7 +150,7 @@ export default async function SelectCompanyPage({ searchParams }: PageProps<"/se
                     </form>
                   );
                 })}
-                {!a.platform && (
+                {a.canCreate && !a.platform && (
                   <div id={a.userId === (ctx.active?.user.id ?? accounts[0].userId) ? "new" : undefined} className="scroll-mt-20">
                     <NewCompanyForm userId={a.userId} first={a.companies.length === 0} />
                   </div>

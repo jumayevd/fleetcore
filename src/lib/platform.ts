@@ -15,6 +15,10 @@ export const PLATFORM_OWNER = "OWNER";
 
 export const isPlatformOwner = (u: { platformRole?: string | null } | null | undefined) => u?.platformRole === PLATFORM_OWNER;
 
+/** Who may create a company: platform owners, and the accounts they allow (User.canCreateCompanies). */
+export const mayCreateCompanies = (u: { platformRole?: string | null; canCreateCompanies?: boolean } | null | undefined) =>
+  isPlatformOwner(u) || Boolean(u?.canCreateCompanies);
+
 /** The signed-in platform owner (the account working now if it is one, else any signed-in one). */
 export async function requirePlatformOwner() {
   const ctx = await getSessionContext();

@@ -28,7 +28,6 @@ export default async function InvitePage({ params }: PageProps<"/invite/[token]"
           <p className="mt-4 text-[13px] text-fg-muted">Ask the person who invited you for a new link. If you already joined, just sign in.</p>
           <div className="mt-5 flex gap-2">
             <LinkButton href="/login">Sign in</LinkButton>
-            <LinkButton href="/signup" variant="secondary">Create an account</LinkButton>
           </div>
         </AuthCard>
       </AuthFrame>

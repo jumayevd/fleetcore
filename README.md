@@ -43,7 +43,10 @@ companies** added so one specialist can work for several fleets — each in its 
   asked once (`/profile`) before working. They are the same in every company, editable in My account, and shown to
   owners and admins under Members (`src/lib/profile.ts`). Nobody in a company can see or reset another person's password
   (platform owners can send a password link, below).
-- New here? `/signup` creates the account and its first company; the overview then shows a set-up checklist.
+- **Accounts are by invitation** (`/signup` only works with an invite link), and only platform owners and the accounts
+  they allow (`User.canCreateCompanies`, the switch on the Platform console) create companies: a platform owner from
+  the console (no membership for them), an allowed account from All companies (it becomes the owner). A new company's
+  overview shows a set-up checklist.
 
 ### How data is kept apart
 
@@ -173,7 +176,8 @@ it elsewhere):
 3. Set `AUTH_SECRET` (random 32-byte hex) and `DEMO_MODE=false`; optionally `APP_URL` for invitation links.
 4. Deploy. The production build runs `prisma migrate deploy`, which applies `prisma/migrations` (`0_init` onwards).
    Other branches don't deploy (`git.deploymentEnabled`), since Preview shares the production database.
-5. Open `/signup` to create the first account and company. Seed demo data into production only on purpose:
+5. Make the first account a platform owner (`npm run user:password-link -- <email> --create "Full name" --platform-owner`),
+   then create companies from the Platform console. Seed demo data into production only on purpose:
    `CONFIRM_SEED=yes` (it wipes the database).
 
 ## Architecture

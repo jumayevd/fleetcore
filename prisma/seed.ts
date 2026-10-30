@@ -712,6 +712,8 @@ async function main() {
   reseed(7);
   // Aziza is the fleet specialist. Her own account works for two companies; Nomad Trucking gave her a separate login.
   const aziza = await user("Aziza Karimova", "aziza@demo.local", 0.1);
+  // Only allowed accounts create companies; the demo owner is one, so New company can be tried.
+  await db.user.update({ where: { id: aziza.id }, data: { canCreateCompanies: true } });
   const azizaNomad = await user("Aziza Karimova", "aziza@nomadtrucking.demo", 1.5);
   const kamron = await user("Kamron Rakhimov", "owner@demo.local", 0.8);
   const timur = await user("Timur Aliev", "timur@nomadtrucking.demo", 2.2);

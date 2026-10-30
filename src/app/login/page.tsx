@@ -34,7 +34,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   ]);
   const usable = invite && !invite.acceptedAt && invite.expiresAt > new Date() ? invite : null;
   const demo = process.env.DEMO_MODE === "true";
-  const signupHref = usable ? `/signup?invite=${encodeURIComponent(usable.token)}` : "/signup";
+  const signupHref = usable ? `/signup?invite=${encodeURIComponent(usable.token)}` : null;
 
   const title = usable ? `Join ${usable.company.name}` : adding ? "Add another account" : "Welcome back";
   const subtitle = usable
@@ -61,8 +61,9 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
           submitLabel={adding ? "Add account" : usable ? "Sign in and join" : "Sign in"}
         />
         <p className="mt-5 border-t border-line pt-4 text-[12px] text-fg-muted">
-          {usable ? "No FleetCore account for this email yet? " : "New to FleetCore? "}
-          <Link href={signupHref} className="font-medium text-accent-text hover:underline">{usable ? "Create one and join" : "Create an account"}</Link>
+          {usable
+            ? <>No FleetCore account for this email yet? <Link href={signupHref!} className="font-medium text-accent-text hover:underline">Create one and join</Link></>
+            : "New to FleetCore? Accounts are by invitation: ask the company you work for to send you a link."}
         </p>
       </AuthCard>
     </AuthFrame>

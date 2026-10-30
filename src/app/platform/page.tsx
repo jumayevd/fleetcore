@@ -11,7 +11,8 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { CompanyBadge } from "@/components/workspace-switcher";
 import { Wordmark } from "@/components/brand";
 import { ROLE_TONE } from "../(app)/admin/shared";
-import { PasswordLinkButton } from "./controls";
+import { CompanyCreatorToggle, PasswordLinkButton } from "./controls";
+import { NewCompanyForm } from "../select/forms";
 
 export const metadata = { title: "Platform console" };
 
@@ -39,7 +40,7 @@ export default async function PlatformPage() {
     rootDb.user.findMany({
       orderBy: [{ active: "desc" }, { name: "asc" }],
       select: {
-        id: true, name: true, email: true, active: true, platformRole: true, lastLoginAt: true, createdAt: true,
+        id: true, name: true, email: true, active: true, platformRole: true, canCreateCompanies: true, lastLoginAt: true, createdAt: true,
         memberships: { where: { active: true }, orderBy: { company: { name: "asc" } }, select: { role: true, company: { select: { name: true } } } },
       },
     }),
@@ -83,7 +84,7 @@ export default async function PlatformPage() {
 
         <Card flush title="Companies">
           <Table head={["Company", "Members", "Trucks", "Drivers", "Open repairs", "Documents", "TrackPro", "Last activity", ""]} empty={companies.length === 0}
-            emptyTitle="No companies yet" emptyDescription="A company appears here when someone signs up and creates one.">
+            emptyTitle="No companies yet" emptyDescription="Create one below, or allow an account to create companies.">
             {companies.map((c) => {
               const eld = c.eldLinks[0];
               const seen = lastSeen.get(c.id);
@@ -121,6 +122,11 @@ export default async function PlatformPage() {
           </Table>
         </Card>
 
+        {/* Only you and the accounts you allow create companies; yours has no members until you invite its people. */}
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <NewCompanyForm userId={me.id} first={false} />
+        </div>
+
         <Card flush title="Accounts">
           <Table head={["Person", "Companies", "Last sign-in", "Since", ""]} empty={users.length === 0}>
             {users.map((u) => (
@@ -129,6 +135,7 @@ export default async function PlatformPage() {
                   <div className="flex items-center gap-1.5">
                     <span className="font-medium text-fg">{u.name}</span>
                     {u.platformRole && <Chip tone="accent">Platform owner</Chip>}
+                    {!u.platformRole && u.canCreateCompanies && <Chip tone="info">Creates companies</Chip>}
                     {u.id === me.id && <Chip>You</Chip>}
                     {!u.active && <Chip>Switched off</Chip>}
                   </div>
@@ -143,7 +150,14 @@ export default async function PlatformPage() {
                 </td>
                 <td className="whitespace-nowrap text-[12px]">{u.lastLoginAt ? ago(u.lastLoginAt) : <span className="text-fg-faint">never</span>}</td>
                 <td className="whitespace-nowrap text-[12px] text-fg-muted">{day(u.createdAt)}</td>
-                <td className="text-right">{u.active && <PasswordLinkButton userId={u.id} email={u.email} />}</td>
+                <td className="text-right">
+                  {u.active && (
+                    <span className="inline-flex items-start justify-end gap-1">
+                      {!u.platformRole && <CompanyCreatorToggle userId={u.id} email={u.email} allowed={u.canCreateCompanies} />}
+                      <PasswordLinkButton userId={u.id} email={u.email} />
+                    </span>
+                  )}
+                </td>
               </tr>
             ))}
           </Table>

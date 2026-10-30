@@ -185,7 +185,7 @@ export async function listWorkspaces(accounts: SessionAccount[]): Promise<Worksp
   const users = await rootDb.user.findMany({
     where: { id: { in: accounts.map((a) => a.userId) }, active: true },
     select: {
-      id: true, name: true, email: true, platformRole: true,
+      id: true, name: true, email: true, platformRole: true, canCreateCompanies: true,
       memberships: {
         where: { active: true },
         orderBy: { company: { name: "asc" } },
@@ -202,7 +202,7 @@ export async function listWorkspaces(accounts: SessionAccount[]): Promise<Worksp
     if (!u) return [];
     const platform = u.platformRole === PLATFORM_OWNER;
     return [{
-      userId: u.id, name: u.name, email: u.email, platform,
+      userId: u.id, name: u.name, email: u.email, platform, canCreate: platform || u.canCreateCompanies,
       companies: platform
         ? everyCompany.map((c) => ({ ...c, role: "OWNER" as Role }))
         : u.memberships.filter((m) => isRole(m.role)).map((m) => ({ ...m.company, role: m.role as Role })),

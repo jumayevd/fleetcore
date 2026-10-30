@@ -5,21 +5,17 @@ import { Eye, EyeOff } from "lucide-react";
 import { signup } from "@/app/actions/auth";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Field, Input } from "@/components/ui";
-import { RegionPicker } from "@/components/region-picker";
 import { ProfileFields } from "@/components/profile-fields";
 
-export function SignupForm({ invite }: { invite: { token: string; email: string } | null }) {
+/** Create an account to accept an invitation (accounts are by invitation: new companies are set up by the platform owner). */
+export function SignupForm({ invite }: { invite: { token: string; email: string } }) {
   const [show, setShow] = useState(false);
   return (
     <ActionForm action={signup} className="mt-6 space-y-4">
-      {invite && <input type="hidden" name="invite" value={invite.token} />}
-      {invite ? <ProfileFields autoFocus /> : (
-        <Field label="Your name" required>
-          <Input name="name" required autoComplete="name" placeholder="First and last name" autoFocus />
-        </Field>
-      )}
+      <input type="hidden" name="invite" value={invite.token} />
+      <ProfileFields autoFocus />
       <Field label="Email" required>
-        <Input name="email" type="email" required autoComplete="email" placeholder="you@company.com" defaultValue={invite?.email} readOnly={Boolean(invite)} />
+        <Input name="email" type="email" required autoComplete="email" defaultValue={invite.email} readOnly />
       </Field>
       <Field label="Password" required hint="At least 8 characters">
         <div className="relative">
@@ -30,13 +26,7 @@ export function SignupForm({ invite }: { invite: { token: string; email: string 
           </button>
         </div>
       </Field>
-      {!invite && (
-        <Field label="Company you manage" required hint="The fleet's name as your team knows it. You can rename it later.">
-          <Input name="company" required maxLength={80} placeholder="Blue Ridge Freight" autoComplete="organization" />
-        </Field>
-      )}
-      {!invite && <RegionPicker />}
-      <SubmitButton className="w-full" pendingText="Creating your workspace…">{invite ? "Create account and join" : "Create account"}</SubmitButton>
+      <SubmitButton className="w-full" pendingText="Creating your account…">Create account and join</SubmitButton>
     </ActionForm>
   );
 }

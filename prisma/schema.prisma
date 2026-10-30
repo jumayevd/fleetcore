@@ -29,39 +29,41 @@ datasource db {
  */
 
 model User {
-  id                String               @id @default(cuid())
+  id                 String               @id @default(cuid())
   /// Display name: first and last name together.
-  name              String
-  email             String               @unique
-  passwordHash      String
-  phone             String?
+  name               String
+  email              String               @unique
+  passwordHash       String
+  phone              String?
   /// Personal details, asked of everyone who joins a company by invitation (src/lib/profile.ts).
-  firstName         String?
-  lastName          String?
+  firstName          String?
+  lastName           String?
   /// Passport, national ID or employee number, as written.
-  idNumber          String?
-  birthDate         DateTime?            @db.Date
+  idNumber           String?
+  birthDate          DateTime?            @db.Date
   /// "OWNER": runs FleetCore itself (the Platform console, every company), without being a member of any. Set by an
   /// operator only (src/lib/platform.ts).
-  platformRole      String?
-  passwordLinks     PasswordLink[]
-  active            Boolean              @default(true)
+  platformRole       String?
+  /// May create new companies (set by an operator for the platform owner's team). Platform owners always may.
+  canCreateCompanies Boolean              @default(false)
+  passwordLinks      PasswordLink[]
+  active             Boolean              @default(true)
   /// Sign-ins older than this no longer count (set when the password changes, so other browsers are signed out).
-  sessionsValidFrom DateTime?
-  lastLoginAt       DateTime?
-  createdAt         DateTime             @default(now())
-  memberships       Membership[]
-  invitesSent       Invite[]
-  workOrders        WorkOrder[]
-  documents         Document[]
-  audits            AuditLog[]
-  woEvents          WorkOrderEvent[]
-  walkReviews       WalkAround[]
-  defectsOwned      Defect[]             @relation("DefectOwner")
-  defectsClosed     Defect[]             @relation("DefectCloser")
-  roadside          RoadsideInspection[]
-  assignmentsMade   DriverAssignment[]   @relation("AssignmentCreator")
-  assignmentsEnded  DriverAssignment[]   @relation("AssignmentEnder")
+  sessionsValidFrom  DateTime?
+  lastLoginAt        DateTime?
+  createdAt          DateTime             @default(now())
+  memberships        Membership[]
+  invitesSent        Invite[]
+  workOrders         WorkOrder[]
+  documents          Document[]
+  audits             AuditLog[]
+  woEvents           WorkOrderEvent[]
+  walkReviews        WalkAround[]
+  defectsOwned       Defect[]             @relation("DefectOwner")
+  defectsClosed      Defect[]             @relation("DefectCloser")
+  roadside           RoadsideInspection[]
+  assignmentsMade    DriverAssignment[]   @relation("AssignmentCreator")
+  assignmentsEnded   DriverAssignment[]   @relation("AssignmentEnder")
 }
 
 /// One fleet's workspace. Everything a fleet specialist works with belongs to exactly one company.

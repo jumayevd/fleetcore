@@ -6,6 +6,7 @@ import { SignupForm } from "./signup-form";
 
 export const metadata = { title: "Create an account" };
 
+/** Accounts are by invitation: the form only appears for a usable invite link; new companies come from the platform owner. */
 export default async function SignupPage({ searchParams }: PageProps<"/signup">) {
   const sp = await searchParams;
   const token = typeof sp.invite === "string" ? sp.invite : undefined;
@@ -16,14 +17,14 @@ export default async function SignupPage({ searchParams }: PageProps<"/signup">)
   return (
     <AuthFrame>
       <AuthCard
-        title={usable ? `Join ${usable.company.name}` : "Create your account"}
+        title={usable ? `Join ${usable.company.name}` : "Accounts are by invitation"}
         subtitle={usable
           ? <>You were invited as {role}. Create your FleetCore account for <span className="font-medium text-fg">{usable.email}</span>.</>
-          : "Set up your account and your first company. You can add more companies, or join others, any time."}>
+          : "Ask the company you work for to invite you: open the link they send and create your account there."}>
         {token && !usable && (
-          <p className="mt-4 rounded-md bg-warn-soft px-3 py-2 text-[12px] text-warn">This invitation link has expired or was already used. You can still create an account with your own company.</p>
+          <p className="mt-4 rounded-md bg-warn-soft px-3 py-2 text-[12px] text-warn">This invitation link has expired or was already used. Ask for a new one.</p>
         )}
-        <SignupForm invite={usable ? { token: usable.token, email: usable.email } : null} />
+        {usable && <SignupForm invite={{ token: usable.token, email: usable.email }} />}
         <p className="mt-5 border-t border-line pt-4 text-[12px] text-fg-muted">
           Already have an account?{" "}
           <Link href={usable ? `/login?invite=${encodeURIComponent(usable.token)}` : "/login"} className="font-medium text-accent-text hover:underline">Sign in</Link>

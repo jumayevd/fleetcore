@@ -12,7 +12,7 @@ import { COMPANY_COLORS, isRole } from "@/lib/constants";
 import { landingAfterSwitch } from "@/lib/nav";
 import { HOME } from "@/lib/permissions";
 import { guessLocale, isUnitSystem } from "@/lib/locale";
-import { isPlatformOwner, usablePasswordLink } from "@/lib/platform";
+import { isPlatformOwner, mayCreateCompanies, usablePasswordLink } from "@/lib/platform";
 import { readProfile } from "@/lib/profile";
 
 // bcrypt hash of a random string; only used to equalise timing for unknown emails.
@@ -124,41 +124,33 @@ export async function login(_: ActionState, fd: FormData): Promise<ActionState> 
   redirect(`/select?account=${user.id}`);
 }
 
+/**
+ * Create an account to accept an invitation. Accounts are by invitation only: signing up never creates a company
+ * (new companies come from the platform owner and the accounts they allow, see createCompany).
+ */
 export async function signup(_: ActionState, fd: FormData): Promise<ActionState> {
-  let dest = HOME;
   const res = await attempt(async () => {
     const f = fields(fd);
     const inviteToken = f.str("invite");
-    // Joining by invitation: the person's details are part of signing up. Starting a company: just a name.
-    const profile = inviteToken ? readProfile(f, true) : { name: f.req("name", "Your name") };
+    if (!inviteToken) throw new FormError("FleetCore accounts are by invitation. Ask the company you work for to invite you, then open their link.");
+    // The person's details are part of signing up.
+    const profile = readProfile(f, true);
     const email = f.req("email", "Email").toLowerCase();
     const password = f.req("password", "Password");
     if (!EMAIL.test(email)) throw new FormError("Enter a valid email address.");
     if (password.length < 8) throw new FormError("Use at least 8 characters for the password.");
-    const invite = inviteToken ? await usableInvite(inviteToken, email) : null;
-    const companyName = invite ? null : f.req("company", "Company name");
+    const invite = await usableInvite(inviteToken, email);
     if (await rootDb.user.findUnique({ where: { email }, select: { id: true } })) {
-      throw new FormError("An account with this email already exists. Sign in instead — you can add more companies to it.");
+      throw new FormError("An account with this email already exists. Sign in instead to accept the invitation.");
     }
 
     const user = await rootDb.user.create({ data: { ...profile, email, passwordHash: await bcrypt.hash(password, 10), lastLoginAt: new Date() } });
-    let companyId: string;
-    if (invite) {
-      await joinWithInvite(user.id, invite);
-      companyId = invite.companyId;
-    } else {
-      const company = await rootDb.company.create({
-        data: { name: companyName!, color: pickColor(), ...regionOf(f), memberships: { create: { userId: user.id, role: "OWNER" } } },
-      });
-      companyId = company.id;
-      await rootDb.auditLog.create({ data: { companyId, userId: user.id, action: "create", entity: "company", entityId: companyId, details: company.name } });
-      dest = `${HOME}?welcome=1`;
-    }
+    await joinWithInvite(user.id, invite);
     await addAccount(user.id);
-    await activate(user.id, companyId);
+    await activate(user.id, invite.companyId);
   });
   if (res?.error) return res;
-  redirect(dest);
+  redirect(HOME);
 }
 
 /* ------------------------------------------------------------------ */
@@ -182,7 +174,11 @@ export async function switchCompany(fd: FormData) {
   redirect(landingAfterSwitch(path));
 }
 
-/** New company for a signed-in account (the active one unless the form names another). The creator becomes its owner. */
+/**
+ * New company for a signed-in account (the active one unless the form names another). Only platform owners and the
+ * accounts they allow may (mayCreateCompanies). An allowed account becomes its owner; a platform owner creates it
+ * without a membership (from the console) and opens it as platform owner.
+ */
 export async function createCompany(_: ActionState, fd: FormData): Promise<ActionState> {
   const res = await attempt(async () => {
     const f = fields(fd);
@@ -191,10 +187,13 @@ export async function createCompany(_: ActionState, fd: FormData): Promise<Actio
     const ctx = await getSessionContext();
     const userId = f.str("userId") ?? ctx.active?.user.id ?? ctx.accounts[0]?.userId;
     if (!userId || !(await signedIn(userId))) throw new FormError("Sign in first.");
+    const account = await rootDb.user.findUnique({ where: { id: userId }, select: { platformRole: true, canCreateCompanies: true } });
+    if (!mayCreateCompanies(account)) throw new FormError("New companies are set up by the platform owner. Ask to be invited into the company you work for.");
+    const platform = isPlatformOwner(account);
     const company = await rootDb.company.create({
-      data: { name, color: f.str("color") ?? pickColor(), ...regionOf(f), memberships: { create: { userId, role: "OWNER" } } },
+      data: { name, color: f.str("color") ?? pickColor(), ...regionOf(f), ...(platform ? {} : { memberships: { create: { userId, role: "OWNER" } } }) },
     });
-    await rootDb.auditLog.create({ data: { companyId: company.id, userId, action: "create", entity: "company", entityId: company.id, details: name } });
+    await rootDb.auditLog.create({ data: { companyId: company.id, userId, action: "create", entity: "company", entityId: company.id, details: platform ? `${name} (platform owner, no membership)` : name } });
     await activate(userId, company.id);
   });
   if (res?.error) return res;

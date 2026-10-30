@@ -1,9 +1,32 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, Copy, KeyRound } from "lucide-react";
-import { makePasswordLink } from "@/app/actions/platform";
+import { Building2, Check, Copy, KeyRound } from "lucide-react";
+import { makePasswordLink, setCompanyCreator } from "@/app/actions/platform";
 import { buttonClass, cn, inputClass } from "@/components/ui";
+
+/** Allow (or stop) an account creating companies. */
+export function CompanyCreatorToggle({ userId, email, allowed }: { userId: string; email: string; allowed: boolean }) {
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  return (
+    <span className="inline-flex flex-col items-end gap-1">
+      <button type="button" disabled={pending} aria-pressed={allowed} className={buttonClass("ghost", "sm")}
+        title={allowed ? `${email} can create companies` : `Let ${email} create companies`}
+        onClick={() => {
+          if (!allowed && !window.confirm(`Let ${email} create new companies on FleetCore? They become the owner of each company they create.`)) return;
+          setError(null);
+          start(async () => {
+            const res = await setCompanyCreator(userId, !allowed);
+            if (res.error) setError(res.error);
+          });
+        }}>
+        <Building2 />{pending ? "Saving…" : allowed ? "Stop creating companies" : "Allow creating companies"}
+      </button>
+      {error && <span role="alert" className="max-w-56 text-[11px] text-danger">{error}</span>}
+    </span>
+  );
+}
 
 /** Make a one-time "set your password" link for an account and show it once, to copy and send. */
 export function PasswordLinkButton({ userId, email }: { userId: string; email: string }) {

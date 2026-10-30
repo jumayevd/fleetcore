@@ -12,7 +12,13 @@ export const WORKSPACE_CHANNEL = "fleetcore-workspace";
 
 export type WorkspaceCompany = { id: string; name: string; color: string | null; role: Role };
 /** One signed-in account and the companies it can open. */
-export type WorkspaceAccount = { userId: string; name: string; email: string; companies: WorkspaceCompany[]; /** Runs FleetCore: every company, the Platform console. */ platform?: boolean };
+export type WorkspaceAccount = {
+  userId: string; name: string; email: string; companies: WorkspaceCompany[];
+  /** Runs FleetCore: every company, the Platform console. */
+  platform?: boolean;
+  /** May create a new company (User.canCreateCompanies; platform owners do it from the console). */
+  canCreate?: boolean;
+};
 export type ActiveWorkspace = { userId: string; companyId: string; companyName: string; color: string | null; role: Role; email: string };
 
 export const workspaceKey = (userId: string, companyId: string) => `${userId}.${companyId}`;
