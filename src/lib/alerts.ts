@@ -438,10 +438,10 @@ export const getToday = cache(async (): Promise<Today> => {
     }
   }
   for (const t of trucks) {
-    if ((t.status === "MAINTENANCE" || t.status === "VENDOR" || t.status === "OUT_OF_SERVICE") && !openByTruck.get(t.id)?.length && !heldTrucks.has(t.id)) {
+    if ((t.status === "MAINTENANCE" || t.status === "OUT_OF_SERVICE") && !openByTruck.get(t.id)?.length && !heldTrucks.has(t.id)) {
       push({
         key: `noro:${t.id}`, category: "shop", priority: "normal", unit: truckUnit(t), driver: driverLink(t.driver),
-        issue: t.status === "MAINTENANCE" ? "In the shop, no repair order" : t.status === "VENDOR" ? "At a vendor, no repair order" : "Out of service, no repair order",
+        issue: t.status === "MAINTENANCE" ? "In shop, no repair order" : "Out of service, no repair order",
         detail: "Open a repair so the work, the downtime and the cost are tracked",
         action: { label: "Create repair", href: `/maintenance/work-orders/new?truck=${t.id}` }, view: { label: "Open truck", href: `/fleet/${t.id}` }, age: null,
       });

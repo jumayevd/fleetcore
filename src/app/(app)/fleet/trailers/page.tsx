@@ -160,13 +160,13 @@ export default async function TrailersPage({ searchParams }: PageProps<"/fleet/t
 
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         {tile(filtered ? "/fleet/trailers" : null, <Stat className={tileClass} label="Trailers" value={working.length} hint={`${pairedCount} paired · ${truckCount} trucks`} icon={<Container />} />)}
-        {counter(paired === "no", only({ paired: "no" }), <Stat className={tileClass} label="Not paired" value={unpaired} hint="in the yard, dropped, in maintenance or loose" icon={<Unlink />} />)}
+        {counter(paired === "no", only({ paired: "no" }), <Stat className={tileClass} label="Not paired" value={unpaired} hint="in the yard, dropped, in shop or loose" icon={<Unlink />} />)}
         {counter(status === "DROPPED", only({ status: "DROPPED" }), <Stat className={tileClass} label="Dropped" value={byStatus("DROPPED").length}
           hint={dropOldest ? `oldest ${daysSince(dropOldest.statusSince)}d · ${dropOldest.unitNumber}` : "none left at a site"} tone={dropOldest && daysSince(dropOldest.statusSince) > 14 ? "warn" : "neutral"} icon={<MapPinned />} />)}
         {counter(status === "INACTIVE", only({ status: "INACTIVE" }),
           <Stat className={tileClass} label="Inactive" value={byStatus("INACTIVE").length} icon={<Archive />} hint="sold, retired or parked for good" />)}
         {counter(status === "SHOP", only({ status: "SHOP" }),
-          <Stat className={tileClass} label="In maintenance" value={inShop} icon={<Wrench />} tone={inShop ? "warn" : "neutral"}
+          <Stat className={tileClass} label="In shop" value={inShop} icon={<Wrench />} tone={inShop ? "warn" : "neutral"}
             hint={inShop ? "open the repair from the Repair column" : "nothing in the shop"} />)}
         {counter(docsFilter === "expiring", only({ docs: "expiring" }), <Stat className={tileClass} label="Paperwork expiring" value={expiringUnits} hint={expiringHint} tone={expiredUnits ? "danger" : expiringUnits ? "warn" : "ok"} icon={<CalendarClock />} />)}
       </div>

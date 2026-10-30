@@ -100,7 +100,7 @@ export type HolderType = "truck" | "trailer" | "driver" | "company";
 /** Something that must keep paperwork: a truck, a trailer, a driver, or the company itself. */
 export type Holder = { owner: HolderType; id: string; name: string; status: string; active: boolean; assigned: string | null; onHold?: boolean; href: string | undefined; papers: Paper[] };
 
-const truckStatusLabel = (s: string) => (s === "MAINTENANCE" ? "In maintenance" : s === "VENDOR" ? "At a vendor" : humanize(s));
+const truckStatusLabel = (s: string) => (s === "MAINTENANCE" ? "In shop" : s === "VENDOR" ? "Vendor (another owner's truck)" : humanize(s));
 
 /** Every unit and driver still in use with its papers. Inactive trucks, out-of-service and inactive trailers and former drivers are left out. */
 export async function loadPaperwork(kit: Kit, now: number) {

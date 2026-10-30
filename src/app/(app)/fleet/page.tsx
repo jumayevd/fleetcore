@@ -1,10 +1,10 @@
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
-import { Archive, Ban, CircleCheck, Container, Plus, Store, TriangleAlert, Truck as TruckIcon, Users, Wrench, X } from "lucide-react";
+import { Archive, CircleCheck, Container, Plus, Store, TriangleAlert, Truck as TruckIcon, Users, Wrench, X } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { db } from "@/lib/db";
-import { OWNERSHIP, OWNERSHIP_LABELS, REPAIR_STAGE_LABELS, TRUCK_STATUSES } from "@/lib/constants";
+import { INACTIVE_REASON_LABELS, OWNERSHIP, OWNERSHIP_LABELS, REPAIR_STAGE_LABELS, TRUCK_STATUSES } from "@/lib/constants";
 import { DOC_KIND_LABELS, REQUIRED_UNIT_DOCS, UNIT_DOC_SLOTS } from "@/lib/documents";
 import { ago, daysUntil } from "@/lib/format";
 import { getFormat } from "@/lib/format-server";
@@ -80,7 +80,7 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
   const q = str(sp.q);
   const params = { view: view === "fleet" ? undefined : view, status, attention, service, docs: docsFilter, ownership, driver, group, type, q };
 
-  const [all, docRows, defects, trailerCount, types] = await Promise.all([
+  const [all, docRows, defects, trailerCount, types, inShopRows] = await Promise.all([
     db.truck.findMany({
       select: {
         id: true, status: true, group: true, homeTerminal: true, driverId: true, ownership: true, truckTypeId: true,
@@ -93,7 +93,10 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
     openDefects("truck"),
     db.trailer.count(),
     truckTypeOptions(),
+    // Trucks a repair order has in the shop: In shop without one needs a look.
+    db.workOrder.groupBy({ by: ["truckId"], where: { status: "IN_PROGRESS", voidedAt: null, truckId: { not: null } } }),
   ]);
+  const inShop = new Set(inShopRows.map((r) => r.truckId));
 
   if (all.length === 0) {
     return (
@@ -111,6 +114,7 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
   }
 
   const now = new Date();
+  const today = f.dateInput(now);
   const have = docsByUnit(docRows.map((d) => ({ id: d.truckId, kind: d.kind })));
   const docExpiry = docExpiryByUnit(docRows.map((d) => ({ id: d.truckId, kind: d.kind, expiresAt: d.expiresAt })));
   const RECORD: Record<string, "registrationExpiry" | "insuranceExpiry" | "inspectionExpiry"> = { REGISTRATION: "registrationExpiry", INSURANCE: "insuranceExpiry", INSPECTION: "inspectionExpiry" };
@@ -124,8 +128,11 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
     const expired = Object.entries(expiry).filter(([, d]) => d && d < now).map(([k]) => k);
     const missing = missingDocs(have.get(t.id), REQUIRED_UNIT_DOCS);
     const urgent = defects.get(t.id)?.urgent ?? 0;
+    // What needs following up. Out of service is here rather than a tile of its own: only a defect puts a truck there.
     const reasons = [
+      t.status === "OUT_OF_SERVICE" ? "out of service" : null,
       urgent ? `${urgent} defect${urgent > 1 ? "s" : ""} to fix now` : null,
+      t.status === "MAINTENANCE" && !inShop.has(t.id) ? "in shop, no repair order" : null,
       s.state === "overdue" ? "oil service overdue" : null,
       expired.length ? `${expired.map((k) => DOC_KIND_LABELS[k].toLowerCase()).join(", ")} expired` : null,
     ].filter((r): r is string => Boolean(r));
@@ -216,27 +223,24 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
         }
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4 2xl:grid-cols-7">
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 2xl:grid-cols-6">
         {counter(status === "ACTIVE" && driver === "none", only({ status: "ACTIVE", driver: "none" }),
           <Stat className={tileClass} label="Available" value={available} icon={<CircleCheck />} tone="ok"
-            hint={`no driver · of ${working.length} in the fleet`} />)}
+            hint={`no driver, not in shop · of ${working.length} in the fleet`} />)}
         {counter(status === "ACTIVE" && driver === "assigned", only({ status: "ACTIVE", driver: "assigned" }),
           <Stat className={tileClass} label="Assigned" value={assigned} icon={<Users />} tone="info"
             hint="in service with a driver" />)}
         {counter(view === "archived", only({ view: "archived" }),
-          <Stat className={tileClass} label="Inactive" value={count("INACTIVE")} icon={<Archive />} hint="sold, retired or parked for good" />)}
+          <Stat className={tileClass} label="Inactive" value={count("INACTIVE")} icon={<Archive />} hint="sold, stolen, total loss, returned…" />)}
         {counter(status === "MAINTENANCE", only({ status: "MAINTENANCE" }),
-          <Stat className={tileClass} label="In maintenance" value={count("MAINTENANCE")} icon={<Wrench />} tone={count("MAINTENANCE") ? "warn" : "neutral"}
+          <Stat className={tileClass} label="In shop" value={count("MAINTENANCE")} icon={<Wrench />} tone={count("MAINTENANCE") ? "warn" : "neutral"}
             hint={count("MAINTENANCE") ? "open the repair from the Repair column" : "nothing in the shop"} />)}
-        {counter(status === "OUT_OF_SERVICE", only({ status: "OUT_OF_SERVICE" }),
-          <Stat className={tileClass} label="Out of service" value={count("OUT_OF_SERVICE")} icon={<Ban />} tone={count("OUT_OF_SERVICE") ? "danger" : "neutral"}
-            hint={count("OUT_OF_SERVICE") ? "held until a repair is verified or paperwork is fixed" : "every truck can run"} />)}
         {counter(Boolean(attention), only({ attention: "1" }),
           <Stat className={tileClass} label="Needs attention" value={attentionCount} icon={<TriangleAlert />} tone={attentionCount ? "danger" : "ok"}
-            hint={attentionCount ? "defects to fix now, oil overdue or papers expired" : "no urgent defects, overdue oil or expired papers"} />)}
+            hint={attentionCount ? "out of service, defects to fix now, oil overdue or papers expired" : "nothing to follow up"} />)}
         {counter(status === "VENDOR", only({ status: "VENDOR" }),
           <Stat className={tileClass} label="Vendor" value={count("VENDOR")} icon={<Store />} tone={count("VENDOR") ? "progress" : "neutral"}
-            hint="at an outside shop, dealer or body shop" />)}
+            hint="belongs to another company or owner (not leased)" />)}
       </div>
 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -314,7 +318,15 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
                       secondary={<span title={`${t.year} ${t.make} ${t.model}`}><span className="num">{t.year}</span> {t.make} {t.model}</span>} />
                   </td>
                   <td data-col="type" className="whitespace-nowrap text-fg-muted">{t.truckType?.name ?? <span className="text-fg-faint">No type</span>}</td>
-                  <td data-col="status"><TruckStatusPill id={t.id} status={t.status} hasDriver={Boolean(t.driverId)} editable={editable} /></td>
+                  <td data-col="status">
+                    <TruckStatusPill id={t.id} unitNumber={t.unitNumber} status={t.status} hasDriver={Boolean(t.driverId)} editable={editable} today={today}
+                      scheduled={r && r.status !== "IN_PROGRESS" ? [{ id: r.id, number: r.number, title: r.title, when: f.day(r.scheduledAt) }] : []} />
+                    {t.status === "INACTIVE" && (t.statusReason || t.statusSince) && (
+                      <p className="mt-0.5 max-w-[164px] truncate text-[11px] text-fg-subtle" title={t.statusNote ?? undefined}>
+                        {[t.statusReason ? INACTIVE_REASON_LABELS[t.statusReason] ?? t.statusReason : null, t.statusSince ? f.day(t.statusSince) : null].filter(Boolean).join(" · ")}
+                      </p>
+                    )}
+                  </td>
                   <td data-col="driver">
                     {t.driver ? (
                       <Cell primary={<span className="inline-flex items-center gap-1.5"><Link href={`/drivers/${t.driver.id}`} className="hover:underline">{t.driver.name}</Link>{t.driver.hold && <Chip tone="warn">Hold</Chip>}</span>}

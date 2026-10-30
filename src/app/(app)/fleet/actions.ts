@@ -7,15 +7,18 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import { attempt, fields, FormError, type ActionState } from "@/lib/action";
-import { EQUIPMENT, TRAILER_STATUSES, TRAILER_STATUS_LABELS, TRUCK_STATUSES, humanize } from "@/lib/constants";
+import { EQUIPMENT, INACTIVE_REASONS, INACTIVE_REASON_LABELS, TRAILER_STATUSES, TRAILER_STATUS_LABELS, TRUCK_STATUSES, humanize } from "@/lib/constants";
 import { getFormat } from "@/lib/format-server";
+import { parseDateInput } from "@/lib/locale";
+import { defectLabel, roLabel } from "@/lib/service";
+import { setTruckDriver } from "@/lib/assignments";
 import { placeFromText, truckStatusLabel, UNHOOKED_TRAILER_STATUSES } from "./lib";
 
 /*
  * Fleet module actions: truck status, trailer create / edit / status / one-click fixes. The truck form saves through
  * saveTruck in src/app/actions/fleet.ts; repair orders live in src/app/actions/repairs.ts.
  *  - one rule for a trailer status change whichever control makes it: statuses that leave the tractor (Dropped, Yard,
- *    In maintenance, Out of service, Inactive) unpair it; In use and Empty stay paired;
+ *    In shop, Out of service, Inactive) unpair it; In use and Empty stay paired;
  *  - expected failures come back as ActionState. Thrown errors reach the client as a generic message in production
  *    builds, so a business rule's explanation would never be seen.
  */
@@ -24,22 +27,62 @@ import { placeFromText, truckStatusLabel, UNHOOKED_TRAILER_STATUSES } from "./li
 /* Trucks                                                              */
 /* ------------------------------------------------------------------ */
 
-/** Status menu on the truck page and the status pill on the trucks list. */
-export async function setTruckStatus(truckId: string, status: string): Promise<ActionState> {
+export type InactiveDetails = { reason?: string | null; note?: string | null; date?: string | null };
+
+/**
+ * Status menu on the truck page and the status pill on the trucks list. Available / Assigned follow the driver (ACTIVE
+ * either way). In shop only comes from a repair order in the shop (the menu opens one) and Out of service only from a
+ * defect that holds the truck; while either has the truck, its status changes through that repair or defect.
+ * Inactive needs a reason (details too for Other) and a day, and takes the driver off the truck that day.
+ */
+export async function setTruckStatus(truckId: string, status: string, details?: InactiveDetails): Promise<ActionState> {
   const me = await requireUser("fleet.edit");
+  const fmt = await getFormat();
   return attempt(async () => {
     if (!TRUCK_STATUSES.includes(status as never)) throw new FormError("Pick a valid status");
     const truck = await db.truck.findUnique({ where: { id: truckId }, select: { unitNumber: true, status: true, driverId: true } });
     if (!truck) throw new FormError("This truck no longer exists. Refresh the page.");
+    const u = truck.unitNumber;
+    if (truck.status === status && status !== "INACTIVE") return { ok: `${u} is already ${truckStatusLabel(status, Boolean(truck.driverId)).toLowerCase()}` };
+    if (status === "MAINTENANCE") throw new FormError(`Open a repair order to put ${u} in the shop.`);
+    if (status === "OUT_OF_SERVICE") throw new FormError(`Out of service comes from a defect to fix before the next load. Report one on ${u} to hold it.`);
     if (truck.status !== status) {
-      await db.truck.update({ where: { id: truckId }, data: { status } });
-      await audit(me.id, "status", "truck", truckId, `${truck.unitNumber} → ${status}`);
+      const [inShop, holding] = await Promise.all([
+        db.workOrder.findFirst({ where: { truckId, status: "IN_PROGRESS", voidedAt: null }, select: { number: true } }),
+        db.defect.findFirst({ where: { truckId, holdsUnit: true, status: { not: "CLOSED" } }, select: { number: true } }),
+      ]);
+      if (inShop) throw new FormError(`${roLabel(inShop.number)} has ${u} in the shop. Complete or void it to bring the truck back.`);
+      if (holding) throw new FormError(`${defectLabel(holding.number)} holds ${u} out of service until someone confirms the repair.`);
     }
+
+    const now = new Date();
+    let data: Prisma.TruckUncheckedUpdateInput = { status, statusReason: null, statusNote: null, statusSince: now };
+    let ended = false;
+    if (status === "INACTIVE") {
+      const reason = details?.reason ?? "";
+      if (!(INACTIVE_REASONS as readonly string[]).includes(reason)) throw new FormError(`Pick why ${u} is inactive.`);
+      const note = details?.note?.trim().slice(0, 500) || null;
+      if (reason === "OTHER" && !note) throw new FormError(`Say why ${u} is inactive.`);
+      const since = details?.date ? parseDateInput(details.date, me.company.timezone) : fmt.startOfDay(now);
+      if (!since) throw new FormError("Pick a valid date.");
+      if (since.getTime() > now.getTime()) throw new FormError("The date can't be in the future.");
+      // An inactive truck has no driver: their stint ends the day it went inactive.
+      if (truck.driverId) {
+        await setTruckDriver({ truckId, driverId: null, day: since, userId: me.id, endNote: `Truck set inactive: ${INACTIVE_REASON_LABELS[reason].toLowerCase()}`, dayLabel: (d) => fmt.date(d) });
+        ended = true;
+      }
+      data = { ...data, statusReason: reason, statusNote: note, statusSince: since };
+    }
+    await db.truck.update({ where: { id: truckId }, data });
+    await audit(me.id, "status", "truck", truckId, `${u} → ${status}${data.statusReason ? ` (${INACTIVE_REASON_LABELS[String(data.statusReason)]}${data.statusNote ? `: ${data.statusNote}` : ""})` : ""}${ended ? " · driver unassigned" : ""}`);
     revalidatePath("/fleet");
     revalidatePath(`/fleet/${truckId}`);
     revalidatePath("/dashboard");
     revalidatePath("/tracking");
-    return { ok: `${truck.unitNumber} is now ${(truckStatusLabel(status, Boolean(truck.driverId)) ?? humanize(status)).toLowerCase()}` };
+    revalidatePath("/inspections");
+    if (ended) revalidatePath("/drivers");
+    const label = (truckStatusLabel(status, Boolean(truck.driverId) && !ended) ?? humanize(status)).toLowerCase();
+    return { ok: `${u} is now ${label}${ended ? " and no longer has a driver" : ""}` };
   });
 }
 

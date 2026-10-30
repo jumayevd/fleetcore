@@ -5,7 +5,7 @@ import { CalendarClock, ChevronRight, Compass, Droplet, Fuel, Gauge, MapPin, Pen
 import { getCurrentUser, requireUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { db } from "@/lib/db";
-import { CITIES, DEFECT_SEVERITY_LABELS, DRIVER_TYPE_LABELS, EQUIPMENT_LABELS, OWNERSHIP_LABELS, REPAIR_STAGE_LABELS } from "@/lib/constants";
+import { CITIES, DEFECT_SEVERITY_LABELS, DRIVER_TYPE_LABELS, EQUIPMENT_LABELS, INACTIVE_REASON_LABELS, OWNERSHIP_LABELS, REPAIR_STAGE_LABELS } from "@/lib/constants";
 import { DOC_KIND_LABELS, REQUIRED_UNIT_DOCS, UNIT_DOC_SLOTS } from "@/lib/documents";
 import { ago, daysUntil } from "@/lib/format";
 import { getFormat } from "@/lib/format-server";
@@ -68,12 +68,14 @@ export default async function TruckDetail({ params, searchParams }: PageProps<"/
   if (!truck) notFound();
 
   const now = new Date();
-  const [docRows, repairs, defects, perDay, types] = await Promise.all([
+  const [docRows, repairs, defects, perDay, types, booked] = await Promise.all([
     db.document.findMany({ where: { truckId: id, kind: { in: [...UNIT_DOC_SLOTS.truck] } }, orderBy: { createdAt: "desc" }, select: { kind: true, expiresAt: true } }),
     openRepairs("truck", [id]),
     openDefects("truck", [id]),
     distancePerDay([id]),
     truckTypeOptions(),
+    // Booked and not in yet: the status menu's In shop can check one of these in.
+    db.workOrder.findMany({ where: { truckId: id, status: { in: ["DRAFT", "OPEN"] }, voidedAt: null }, orderBy: { scheduledAt: "asc" }, select: { id: true, number: true, title: true, scheduledAt: true } }),
   ]);
   const repair = repairs.get(id);
   const defect = defects.get(id);
@@ -139,7 +141,11 @@ export default async function TruckDetail({ params, searchParams }: PageProps<"/
   if (missingOther.length) attention.push({ tone: "warn", text: `Not on file: ${missingOther.map((m) => DOC_KIND_LABELS[m].toLowerCase()).join(", ")}`, href: docsHref });
   if (truck.status === "ACTIVE" && !truck.driver) attention.push({ tone: "info", text: "No driver assigned", href: `/fleet/${id}?tab=driver` });
   if (truck.driver?.hold) attention.push({ tone: "warn", text: `${truck.driver.name} is on hold${truck.driver.holdReason ? `: ${truck.driver.holdReason}` : ""}`, href: `/drivers/${truck.driver.id}` });
-  if ((truck.status === "MAINTENANCE" || truck.status === "VENDOR") && !repair) attention.push({ tone: "info", text: `${truck.status === "VENDOR" ? "At a vendor" : "In maintenance"} with no open repair order`, href: editable ? `/maintenance/work-orders/new?truck=${id}` : maintHref });
+  if (truck.status === "MAINTENANCE" && repair?.status !== "IN_PROGRESS") attention.push({ tone: "warn", text: "In shop with no repair order in the shop", href: editable ? `/maintenance/work-orders/new?truck=${id}&status=IN_PROGRESS` : maintHref });
+  if (truck.status === "INACTIVE") {
+    const why = truck.statusReason ? INACTIVE_REASON_LABELS[truck.statusReason] ?? truck.statusReason : null;
+    attention.push({ tone: "info", text: `Inactive${truck.statusSince ? ` since ${f.date(truck.statusSince)}` : ""}${why ? `: ${why}` : ""}${truck.statusNote ? ` — ${truck.statusNote}` : ""}`, href: "/fleet?view=archived" });
+  }
 
   const openWork = (repair?.count ?? 0) + (defect?.open ?? 0);
   const tabs = TABS.map((t) => ({
@@ -163,7 +169,8 @@ export default async function TruckDetail({ params, searchParams }: PageProps<"/
         }
         actions={editable && (
           <>
-            <TruckStatusMenu id={id} status={truck.status} hasDriver={Boolean(truck.driverId)} />
+            <TruckStatusMenu id={id} unitNumber={truck.unitNumber} status={truck.status} hasDriver={Boolean(truck.driverId)} today={f.dateInput(now)}
+              scheduled={booked.map((w) => ({ id: w.id, number: w.number, title: w.title, when: f.day(w.scheduledAt) }))} />
             <LinkButton href={`/fleet/${id}/edit`} variant="secondary"><Pencil />Edit</LinkButton>
             <LinkButton href={`/maintenance/oil?book=${id}`} variant="secondary"><CalendarClock />Schedule maintenance</LinkButton>
             <LinkButton href={`/maintenance/work-orders/new?truck=${id}`}><Wrench />Create repair</LinkButton>

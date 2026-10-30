@@ -41,17 +41,28 @@ export const EQUIPMENT_LABELS: Record<string, string> = {
 };
 
 /**
- * ACTIVE: in service (shown as Available without a driver, Assigned with one) · MAINTENANCE: in the shop ·
- * VENDOR: left at an outside vendor (dealer, body shop) · OUT_OF_SERVICE: held · INACTIVE: sold or parked for good.
+ * ACTIVE: in service, shown as Available without a driver and Assigned with one (both automatic) · MAINTENANCE: In shop,
+ * only through a repair order in the shop · VENDOR: belongs to another company or owner (not leased), set by hand ·
+ * OUT_OF_SERVICE: held by a "fix before next load" defect, never set by hand · INACTIVE: set by hand with a reason.
  */
 export const TRUCK_STATUSES = ["ACTIVE", "MAINTENANCE", "VENDOR", "OUT_OF_SERVICE", "INACTIVE"] as const;
+/** What the status menu offers. In shop opens a repair order; Out of service only comes from a defect. */
+export const PICKABLE_TRUCK_STATUSES = ["ACTIVE", "MAINTENANCE", "VENDOR", "INACTIVE"] as const;
+/** Why a truck is set Inactive (Truck.statusReason). */
+export const INACTIVE_REASONS = ["SOLD", "ACCIDENT", "STOLEN", "TOTAL_LOSS", "RETURNED", "MECHANICAL", "OTHER"] as const;
+export const INACTIVE_REASON_LABELS: Record<string, string> = {
+  SOLD: "Sold", ACCIDENT: "Accident", STOLEN: "Stolen", TOTAL_LOSS: "Total loss", RETURNED: "Returned (lease / owner)",
+  MECHANICAL: "Mechanical failure", OTHER: "Other",
+};
+/** Why a truck goes into the shop, and the repair type its repair order opens with. */
+export const IN_SHOP_REASONS = [{ value: "ACCIDENT", label: "Accident repair" }, { value: "REPAIR", label: "Repair" }] as const;
 export const OWNERSHIP = ["COMPANY", "OWNER_OPERATOR", "LEASED"] as const;
 export const OWNERSHIP_LABELS: Record<string, string> = { COMPANY: "Company", OWNER_OPERATOR: "Owner-operator", LEASED: "Leased" };
 
-/** As for trucks: SHOP is In maintenance; INACTIVE is sold or parked for good and stops counting in the fleet. */
+/** As for trucks: SHOP is In shop; INACTIVE is sold or parked for good and stops counting in the fleet. */
 export const TRAILER_STATUSES = ["IN_USE", "EMPTY", "DROPPED", "YARD", "SHOP", "OUT_OF_SERVICE", "INACTIVE"] as const;
 export const TRAILER_STATUS_LABELS: Record<string, string> = {
-  IN_USE: "In use", EMPTY: "Empty", DROPPED: "Dropped", YARD: "Yard", SHOP: "In maintenance", OUT_OF_SERVICE: "Out of service", INACTIVE: "Inactive",
+  IN_USE: "In use", EMPTY: "Empty", DROPPED: "Dropped", YARD: "Yard", SHOP: "In shop", OUT_OF_SERVICE: "Out of service", INACTIVE: "Inactive",
 };
 /** Trailers left out of paperwork checks: held out of service, or no longer in the fleet. */
 export const TRAILER_OFF_PAPERWORK = ["OUT_OF_SERVICE", "INACTIVE"];

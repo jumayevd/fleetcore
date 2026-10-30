@@ -6,10 +6,10 @@ import type { Truck } from "@prisma/client";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { useFormat } from "@/components/locale";
 import { Card, Field, InfoTip, Input, LinkButton, Progress, Select, Textarea, cn } from "@/components/ui";
-import { CITIES, OWNERSHIP, OWNERSHIP_LABELS, TRUCK_STATUSES } from "@/lib/constants";
+import { CITIES, OWNERSHIP, OWNERSHIP_LABELS } from "@/lib/constants";
 import type { ActionState } from "@/lib/action";
 import { serviceStatus } from "@/lib/service";
-import { FUEL_TYPES, intervalText, leaseStatus, serviceSummary, TRUCK_STATUS_LABELS } from "./lib";
+import { FUEL_TYPES, intervalText, leaseStatus, NEW_TRUCK_STATUSES, serviceSummary, truckStatusLabel, TRUCK_STATUS_LABELS } from "./lib";
 
 type NumKey = "odometerKm" | "pmIntervalKm" | "lastPmKm" | "nextServiceKm" | "leaseStartKm" | "leaseAnnualLimitKm" | "leaseBufferPct" | "leaseOverageRate";
 export type TruckTypeOption = { id: string; name: string; oilIntervalKm: number };
@@ -73,9 +73,15 @@ export function TruckForm({ action, truck, drivers, groups, types, cancelHref }:
               <Field label="In service since" hint="The day the truck started working for you.">
                 <Input name="inServiceAt" type="date" defaultValue={f.dateInput(truck?.inServiceAt)} />
               </Field>
-              <Field label="Status" hint="In service shows as Available, or Assigned once it has a driver. Starting a repair moves it to In maintenance; finishing it brings it back.">
-                <Select name="status" defaultValue={truck?.status ?? "ACTIVE"} options={TRUCK_STATUSES.map((st) => ({ value: st, label: st === "ACTIVE" ? "In service (Available / Assigned)" : TRUCK_STATUS_LABELS[st] }))} />
-              </Field>
+              {truck ? (
+                <Field label="Status" hint="Change it from the status menu at the top of the truck page: In shop opens a repair order, Inactive asks why.">
+                  <Input value={truckStatusLabel(truck.status, Boolean(truck.driverId))} readOnly disabled />
+                </Field>
+              ) : (
+                <Field label="Status" hint="In service shows as Available, or Assigned once it has a driver. Vendor: another company's or owner's truck (not leased).">
+                  <Select name="status" defaultValue="ACTIVE" options={NEW_TRUCK_STATUSES.map((st) => ({ value: st, label: st === "ACTIVE" ? "In service (Available / Assigned)" : TRUCK_STATUS_LABELS[st] }))} />
+                </Field>
+              )}
               <Field label="Home terminal" hint="Where the truck is based.">
                 <Input name="homeTerminal" list="truck-terminals" defaultValue={truck?.homeTerminal ?? ""} placeholder="Joliet, IL" />
                 <datalist id="truck-terminals">{[...new Set([...groups, ...CITIES.map((c) => c.name)])].map((g) => <option key={g} value={g} />)}</datalist>

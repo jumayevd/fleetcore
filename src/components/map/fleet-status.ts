@@ -63,8 +63,8 @@ export const FLEET_STATUS_HINT: Record<FleetStatus, string> = {
   rolling: "Moving, live tracker fix",
   idle: "Engine on, not moving",
   stopped: "Parked, or last reported position",
-  shop: "In maintenance, or a repair in progress",
-  oos: "Held by a defect until someone verifies the repair, or marked out of service",
+  shop: "In shop: a repair in progress",
+  oos: "Held by a defect until someone verifies the repair",
   nosignal: "No position yet, or the tracker has gone quiet",
 };
 /** A status colour that is both a UI `Tone` and a map marker tone. */

@@ -100,7 +100,7 @@ export function TruckCostTable({ f, money, rows, totals, trailers, fleetCostPerD
             <td className="whitespace-nowrap">
               <div className="flex items-center gap-1.5">
                 <UnitCell unit={{ type: "truck", id: r.id, unitNumber: r.unitNumber }} secondary={r.model} />
-                {r.status !== "ACTIVE" && <Badge value={r.status} label={r.status === "MAINTENANCE" ? "In maintenance" : undefined} />}
+                {r.status !== "ACTIVE" && <Badge value={r.status} label={r.status === "MAINTENANCE" ? "In shop" : undefined} />}
               </div>
             </td>
             <td className="num text-right text-fg-muted" title={r.km ? undefined : "No odometer readings to compare in this period"}>{r.km ? f.number(r.km) : dash}</td>

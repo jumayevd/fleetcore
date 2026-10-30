@@ -44,7 +44,7 @@ const SEVERITY_RANK: Record<string, number> = { NOW: 0, SOON: 1, WATCH: 2 };
 
 const like = (q: string) => ({ contains: q, mode: "insensitive" as const });
 const exact = (q: string) => ({ equals: q, mode: "insensitive" as const });
-const truckStatusLabel = (s: string) => (s === "MAINTENANCE" ? "In maintenance" : s === "VENDOR" ? "At a vendor" : humanize(s));
+const truckStatusLabel = (s: string) => (s === "MAINTENANCE" ? "In shop" : s === "VENDOR" ? "Vendor (another owner's truck)" : humanize(s));
 const RO_STATUS: Record<string, string> = { DRAFT: "Draft", OPEN: "Scheduled", IN_PROGRESS: "In the shop", DONE: "Completed", CANCELLED: "Cancelled" };
 /** What a repair order cost: its cost, or the invoice total when no cost was entered (same rule as Reports). */
 const roAmount = (w: { cost: number; invoiceTotal: number | null }) => (w.cost > 0 ? w.cost : (w.invoiceTotal ?? 0));
@@ -464,7 +464,7 @@ export function buildAssistantTools(ctx: ToolContext) {
     }),
 
     unitsDown: tool({
-      description: "Trucks and trailers that cannot run right now, and why: status Out of service, In maintenance or Vendor, or held by a 'fix before next load' defect. Each comes with its reasons: defects holding it (DEF number, component, how long), repair orders in the shop (RO number, stage, downtime, promised date, vendor), open roadside out-of-service orders, and the driver's hold. Answers 'which trucks are out of service and why'.",
+      description: "Trucks and trailers that cannot run right now, and why: status Out of service or In shop, or held by a 'fix before next load' defect. Each comes with its reasons: defects holding it (DEF number, component, how long), repair orders in the shop (RO number, stage, downtime, promised date, vendor), open roadside out-of-service orders, and the driver's hold. Answers 'which trucks are out of service and why'.",
       inputSchema: z.object({ include: z.enum(["trucks", "trailers", "both"]).optional().describe("Default both") }),
       execute: ({ include }) => safely("unitsDown", async () => {
         const now = Date.now();
@@ -475,7 +475,7 @@ export function buildAssistantTools(ctx: ToolContext) {
         const heldTrailers = holding.map((d) => d.trailerId).filter((x): x is string => Boolean(x));
         const [trucks, trailers] = await Promise.all([
           which === "trailers" ? [] : db.truck.findMany({
-            where: { OR: [{ status: { in: ["OUT_OF_SERVICE", "MAINTENANCE", "VENDOR"] } }, { id: { in: heldTrucks } }] }, orderBy: { unitNumber: "asc" }, take: SCAN,
+            where: { OR: [{ status: { in: ["OUT_OF_SERVICE", "MAINTENANCE"] } }, { id: { in: heldTrucks } }] }, orderBy: { unitNumber: "asc" }, take: SCAN,
             select: { id: true, unitNumber: true, make: true, model: true, status: true, notes: true, driver: { select: { id: true, name: true, hold: true, holdReason: true } } },
           }),
           which === "trucks" ? [] : db.trailer.findMany({
@@ -536,7 +536,7 @@ export function buildAssistantTools(ctx: ToolContext) {
     listTrucks: tool({
       description: "List trucks with filters: status, ownership, fleet group, truck type, make, hasDriver, oil (overdue / due_now / due_soon / due = any of those / no_reading / unknown), paperwork (expired / expiring within 30 days / missing required file), lease (over_cap / near_or_over_cap). Inactive trucks are left out unless status=INACTIVE or includeInactive. Returns the total that match and up to 25 trucks with driver and dispatcher, trailers, odometer and when it was read, oil status, paperwork dates, lease cap, last known location, open repair orders and open defects.",
       inputSchema: z.object({
-        status: z.enum(TRUCK_STATUSES).optional().describe("ACTIVE (in service: Available without a driver, Assigned with one) | MAINTENANCE (in maintenance) | VENDOR (at an outside vendor) | OUT_OF_SERVICE | INACTIVE"),
+        status: z.enum(TRUCK_STATUSES).optional().describe("ACTIVE (in service: Available without a driver, Assigned with one) | MAINTENANCE (In shop: a repair order has it) | VENDOR (belongs to another company or owner) | OUT_OF_SERVICE (held by a defect) | INACTIVE"),
         ownership: z.enum(OWNERSHIP).optional().describe("COMPANY | OWNER_OPERATOR | LEASED"),
         group: filterText("Fleet group / terminal (case-insensitive contains)"),
         truckType: filterText("Truck type name (case-insensitive contains)"),
