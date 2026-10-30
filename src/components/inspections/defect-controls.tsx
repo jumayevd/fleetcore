@@ -67,10 +67,10 @@ export function DefectActions({ id, number, status, severity, holdsUnit, hasOwne
         </Button>
       )}
       {canDelete && (
-        <Button size="sm" variant="ghost" disabled={pending} onClick={() => { setMsg(null); setDeleting(true); }} aria-label={`Delete ${label}`} title="Delete it for good: reported by mistake or twice"
-          className="text-fg-subtle hover:text-danger">
-          <Trash2 />{compact ? null : "Delete"}
-        </Button>
+        <button type="button" disabled={pending} onClick={() => { setMsg(null); setDeleting(true); }} aria-label={`Delete ${label}`} title="Delete it for good: reported by mistake or twice"
+          className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-[12px] font-medium text-danger transition-colors hover:bg-danger-soft disabled:opacity-50 [&_svg]:h-3.5 [&_svg]:w-3.5">
+          <Trash2 />Delete
+        </button>
       )}
       {msg && <span role={msg.tone === "error" ? "alert" : "status"} className={cn("basis-full text-right text-[11px]", msg.tone === "error" ? "text-danger" : "text-ok")}>{msg.text}</span>}
       <Overlay variant="dialog" open={deleting} onClose={() => setDeleting(false)} title={`Delete ${label}?`} subtitle="It is removed for good"
