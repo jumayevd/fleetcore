@@ -149,18 +149,17 @@ export function sortRepairs(rows: RepairRow[], view: RepairView) {
 export const unitDriver = (w: Pick<RepairRow, "truck" | "trailer">) => w.truck?.driver ?? w.trailer?.truck?.driver ?? null;
 
 /** Tile counts (every repair, not just the filtered ones). */
-export async function repairCounts(now: Date, todayStart: Date, monthStart: Date) {
-  const [byStatus, overdue, completedMonth, notTold, all] = await Promise.all([
+export async function repairCounts(now: Date, todayStart: Date) {
+  const [byStatus, overdue, notTold, all] = await Promise.all([
     db.workOrder.groupBy({ by: ["status"], where: { voidedAt: null }, _count: { _all: true } }),
     db.workOrder.count({ where: overdueWhere(now, todayStart) }),
-    db.workOrder.count({ where: { status: "DONE", voidedAt: null, completedAt: { gte: monthStart } } }),
     db.workOrder.count({ where: notToldWhere }),
     db.workOrder.count({ where: viewWhere("all", now, todayStart) }),
   ]);
   const of = (s: string) => byStatus.find((b) => b.status === s)?._count._all ?? 0;
   return {
     scheduled: of("DRAFT") + of("OPEN"), shop: of("IN_PROGRESS"), active: of("DRAFT") + of("OPEN") + of("IN_PROGRESS"),
-    completed: of("DONE"), completedMonth, overdue, notTold, all,
+    completed: of("DONE"), overdue, notTold, all,
   };
 }
 

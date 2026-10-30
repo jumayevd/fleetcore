@@ -24,7 +24,6 @@ import { UnitLink } from "../_components/unit-link";
 export const metadata = { title: "Repairs" };
 
 const PAGE = 250;
-const DAY = 86_400_000;
 
 export default async function RepairsPage({ searchParams }: PageProps<"/maintenance/work-orders">) {
   const user = await requireUser("fleet.view");
@@ -34,11 +33,10 @@ export default async function RepairsPage({ searchParams }: PageProps<"/maintena
   const filters = parseRepairFilters(await searchParams);
   const now = new Date();
   const todayStart = f.startOfDay(now);
-  const since30 = new Date(now.getTime() - 30 * DAY);
 
   const [fetched, counts, notTold, vendors, typedShops, unitRow] = await Promise.all([
     db.workOrder.findMany({ where: repairWhere(filters, now, todayStart), include: repairRowInclude, take: PAGE, orderBy: { createdAt: "desc" } }),
-    repairCounts(now, todayStart, since30),
+    repairCounts(now, todayStart),
     db.workOrder.findMany({
       where: notToldWhere, orderBy: { createdAt: "asc" }, take: 5,
       select: { id: true, number: true, title: true, cost: true, invoiceTotal: true, chargeDriver: { select: { name: true } }, truck: { select: { unitNumber: true } }, trailer: { select: { unitNumber: true } } },
@@ -97,7 +95,7 @@ export default async function RepairsPage({ searchParams }: PageProps<"/maintena
         {tile("active", <Stat label="Active" value={counts.active} hint="Scheduled or in the shop" />)}
         {tile("scheduled", <Stat label="Scheduled" value={counts.scheduled} tone={counts.scheduled ? "info" : "neutral"} hint="Booked into a shop, unit still in service" />)}
         {tile("shop", <Stat label="In the shop" value={counts.shop} tone={counts.shop ? "warn" : "ok"} hint={counts.shop ? `${plural(counts.shop, "unit")} off the road` : "nothing off the road"} />)}
-        {tile("completed", <Stat label="Completed" value={counts.completedMonth} tone="ok" hint="Back in service in the last 30 days" />)}
+        {tile("completed", <Stat label="Completed" value={counts.completed} tone="ok" hint="Done and back in service" />)}
         {tile("overdue", <Stat label="Overdue" value={counts.overdue} tone={counts.overdue ? "danger" : "ok"} hint={counts.overdue ? "past the promised date, or booked and not in" : "everything on time"} />)}
       </div>
 
