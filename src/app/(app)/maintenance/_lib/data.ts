@@ -2,7 +2,7 @@ import "server-only";
 import type { Trailer, Truck } from "@prisma/client";
 import { db } from "@/lib/db";
 import { REQUIRED_UNIT_DOCS } from "@/lib/documents";
-import { EQUIPMENT_LABELS } from "@/lib/constants";
+import { EQUIPMENT_LABELS, TRAILER_OFF_PAPERWORK } from "@/lib/constants";
 import { daysUntil } from "@/lib/format";
 import type { Tone } from "@/components/ui";
 import { unitComplianceHref } from "./links";
@@ -204,7 +204,7 @@ export async function unitCompliance(trucks: Truck[], trailers: Trailer[]) {
 
   const rows = [
     ...trucks.filter((t) => t.status !== "INACTIVE").map((t) => build(t, "truck", `${t.make} ${t.model}`)),
-    ...trailers.filter((t) => t.status !== "OUT_OF_SERVICE").map((t) => build(t, "trailer", `${(EQUIPMENT_LABELS[t.type] ?? t.type).toLowerCase()} trailer`)),
+    ...trailers.filter((t) => !TRAILER_OFF_PAPERWORK.includes(t.status)).map((t) => build(t, "trailer", `${(EQUIPMENT_LABELS[t.type] ?? t.type).toLowerCase()} trailer`)),
   ].sort((a, b) => DOC_STATE_RANK[a.worst] - DOC_STATE_RANK[b.worst] || a.soonest - b.soonest || a.unitNumber.localeCompare(b.unitNumber));
 
   const units: Record<DocState, number> = { expired: 0, expiring: 0, missing: 0, ok: 0 };

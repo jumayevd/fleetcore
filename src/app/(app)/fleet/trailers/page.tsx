@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
-import { Plus, Truck as TruckIcon, Container, FileCheck, CalendarClock, MapPinned, Unlink, Wrench, X } from "lucide-react";
+import { Archive, Plus, Truck as TruckIcon, Container, CalendarClock, MapPinned, Unlink, Wrench, X } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { db } from "@/lib/db";
@@ -57,9 +57,10 @@ export default async function TrailersPage({ searchParams }: PageProps<"/fleet/t
   const params = { status, type, q, docs: docsFilter, paired };
 
   const like = { contains: q ?? "", mode: "insensitive" as const };
+  // As with trucks, inactive trailers (sold, retired) leave the list unless the Inactive filter asks for them.
   const where: Prisma.TrailerWhereInput = {
     AND: [
-      status ? { status } : {},
+      status ? { status } : { status: { not: "INACTIVE" } },
       type ? { type } : {},
       paired === "no" ? { truckId: null } : paired === "yes" ? { truckId: { not: null } } : {},
       q ? { OR: [{ unitNumber: like }, { plate: like }, { locationName: like }, { gpsProvider: like }, { truck: { unitNumber: like } }, { truck: { driver: { name: like } } }] } : {},
@@ -91,8 +92,9 @@ export default async function TrailersPage({ searchParams }: PageProps<"/fleet/t
   const docs = docsByUnit(docRows.map((d) => ({ id: d.trailerId, kind: d.kind })));
   const docExpiry = docExpiryByUnit(docRows.map((d) => ({ id: d.trailerId, kind: d.kind, expiresAt: d.expiresAt })));
   const missingFor = (id: string) => missingDocs(docs.get(id), REQUIRED_UNIT_DOCS);
-  // Expired / expiring papers per trailer, each dated by the record or the newest uploaded document, whichever is earlier.
-  const expiry = all.map((t) => ({ id: t.id, ...expiryCounts(Object.values(paperworkExpiry(t, docExpiry.get(t.id)))) }));
+  const working = all.filter((t) => t.status !== "INACTIVE");
+  // Expired / expiring papers per trailer in the fleet, each dated by the record or the newest uploaded document, whichever is earlier.
+  const expiry = working.map((t) => ({ id: t.id, ...expiryCounts(Object.values(paperworkExpiry(t, docExpiry.get(t.id)))) }));
   const expiredUnits = expiry.filter((e) => e.expired > 0).length;
   const expiringUnits = expiry.filter((e) => e.expired + e.soon > 0).length;
 
@@ -114,12 +116,10 @@ export default async function TrailersPage({ searchParams }: PageProps<"/fleet/t
 
   const byStatus = (s: string) => all.filter((t) => t.status === s);
   const oldest = (s: string) => byStatus(s).sort((a, b) => a.statusSince.getTime() - b.statusSince.getTime())[0];
-  const incomplete = all.filter((t) => missingFor(t.id).length > 0).length;
-  const shopOldest = oldest("SHOP");
   const dropOldest = oldest("DROPPED");
-  const pairedCount = all.filter((t) => t.truckId).length;
-  const unpaired = all.length - pairedCount;
-  const outOfService = byStatus("OUT_OF_SERVICE").length;
+  const inShop = byStatus("SHOP").length;
+  const pairedCount = working.filter((t) => t.truckId).length;
+  const unpaired = working.length - pairedCount;
   const expiringHint = [
     expiredUnits ? `${expiredUnits} expired` : null,
     expiringUnits > expiredUnits ? `${expiringUnits - expiredUnits} within ${EXPIRY_SOON_DAYS} days` : null,
@@ -136,7 +136,14 @@ export default async function TrailersPage({ searchParams }: PageProps<"/fleet/t
   const filtered = Boolean(status || docsFilter || type || q || paired);
   const tile = (href: string | null, node: React.ReactNode) =>
     href ? <Link href={href} className="group block rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">{node}</Link> : node;
-  const tileClass = "h-full transition-colors group-hover:border-line-strong";
+  // As on Trucks: a counter filters the list to what it counts; a second click clears it.
+  const counter = (on: boolean, href: string, node: React.ReactNode) => (
+    <Link href={on ? only({}) : href} aria-current={on || undefined}
+      className={cn("group block rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40", on && "ring-2 ring-accent/40")}>
+      {node}
+    </Link>
+  );
+  const tileClass = "h-full transition-[border-color,box-shadow] group-hover:border-line-strong group-hover:shadow-lift";
   const col = (key: string, label: React.ReactNode) => <span key={key} data-col={key} className="inline-flex items-center gap-1">{label}</span>;
 
   return (
@@ -152,21 +159,22 @@ export default async function TrailersPage({ searchParams }: PageProps<"/fleet/t
       />
 
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        {tile(filtered ? "/fleet/trailers" : null, <Stat className={tileClass} label="Trailers" value={all.length} hint={`${pairedCount} paired · ${truckCount} trucks`} icon={<Container />} />)}
-        {tile(only({ paired: "no" }), <Stat className={tileClass} label="Not paired" value={unpaired} hint="in the yard, dropped, in the shop or loose" icon={<Unlink />} />)}
-        {tile(only({ status: "DROPPED" }), <Stat className={tileClass} label="Dropped" value={byStatus("DROPPED").length}
+        {tile(filtered ? "/fleet/trailers" : null, <Stat className={tileClass} label="Trailers" value={working.length} hint={`${pairedCount} paired · ${truckCount} trucks`} icon={<Container />} />)}
+        {counter(paired === "no", only({ paired: "no" }), <Stat className={tileClass} label="Not paired" value={unpaired} hint="in the yard, dropped, in maintenance or loose" icon={<Unlink />} />)}
+        {counter(status === "DROPPED", only({ status: "DROPPED" }), <Stat className={tileClass} label="Dropped" value={byStatus("DROPPED").length}
           hint={dropOldest ? `oldest ${daysSince(dropOldest.statusSince)}d · ${dropOldest.unitNumber}` : "none left at a site"} tone={dropOldest && daysSince(dropOldest.statusSince) > 14 ? "warn" : "neutral"} icon={<MapPinned />} />)}
-        {tile(only({ status: "SHOP" }), <Stat className={tileClass} label="In shop" value={byStatus("SHOP").length}
-          hint={[shopOldest ? `${shopOldest.unitNumber} in ${daysSince(shopOldest.statusSince)}d` : null, outOfService ? `${outOfService} out of service` : null].filter(Boolean).join(" · ") || "none in repair"}
-          tone={byStatus("SHOP").length || outOfService ? "warn" : "neutral"} icon={<Wrench />} />)}
-        {tile(only({ docs: "incomplete" }), <Stat className={tileClass} label="Paperwork incomplete" value={incomplete} hint="registration, insurance, annual inspection" tone={incomplete ? "warn" : "ok"} icon={<FileCheck />} />)}
-        {tile(only({ docs: "expiring" }), <Stat className={tileClass} label="Paperwork expiring" value={expiringUnits} hint={expiringHint} tone={expiredUnits ? "danger" : expiringUnits ? "warn" : "ok"} icon={<CalendarClock />} />)}
+        {counter(status === "INACTIVE", only({ status: "INACTIVE" }),
+          <Stat className={tileClass} label="Inactive" value={byStatus("INACTIVE").length} icon={<Archive />} hint="sold, retired or parked for good" />)}
+        {counter(status === "SHOP", only({ status: "SHOP" }),
+          <Stat className={tileClass} label="In maintenance" value={inShop} icon={<Wrench />} tone={inShop ? "warn" : "neutral"}
+            hint={inShop ? "open the repair from the Repair column" : "nothing in the shop"} />)}
+        {counter(docsFilter === "expiring", only({ docs: "expiring" }), <Stat className={tileClass} label="Paperwork expiring" value={expiringUnits} hint={expiringHint} tone={expiredUnits ? "danger" : expiringUnits ? "warn" : "ok"} icon={<CalendarClock />} />)}
       </div>
 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <FilterPills active={status ?? "all"} items={[
-            { key: "all", label: "All", href: qs({ status: undefined }), count: all.length },
+            { key: "all", label: "All", href: qs({ status: undefined }), count: working.length },
             ...TRAILER_STATUSES.map((s) => ({ key: s, label: TRAILER_STATUS_LABELS[s], href: qs({ status: s }), count: byStatus(s).length })),
           ]} />
           {docsFilter && <Link href={qs({ docs: undefined })} className="inline-flex h-6 items-center gap-1 rounded-full bg-accent-soft px-2.5 text-[12px] font-medium text-accent-text hover:opacity-80">{docsFilter === "expiring" ? "Paperwork expiring" : "Paperwork incomplete"}<X className="h-3 w-3" /></Link>}
@@ -199,7 +207,7 @@ export default async function TrailersPage({ searchParams }: PageProps<"/fleet/t
               const r = repairs.get(t.id);
               const d = defects.get(t.id);
               return (
-                <LinkRow key={t.id} href={`/fleet/trailers/${t.id}`}>
+                <LinkRow key={t.id} href={`/fleet/trailers/${t.id}`} className={t.status === "INACTIVE" ? "opacity-70" : undefined}>
                   <td title={[t.year, t.plate].filter(Boolean).join(" · ") || undefined}>
                     <Cell mono primary={<Link href={`/fleet/trailers/${t.id}`} className="unit-no font-semibold hover:underline">{t.unitNumber}</Link>}
                       secondary={EQUIPMENT_LABELS[t.type] ?? t.type} />
@@ -248,8 +256,9 @@ export default async function TrailersPage({ searchParams }: PageProps<"/fleet/t
               );
             })}
           </Table>
-          {trailers.length === 0 && (
-            <EmptyState title="No trailers match" description="Try another status, type or pairing, or clear the search." action={<LinkButton href="/fleet/trailers" variant="secondary">Clear filters</LinkButton>} />
+          {trailers.length === 0 && (status === "INACTIVE" && !type && !q && !paired && !docsFilter
+            ? <EmptyState title="No inactive trailers" description="Trailers you set to Inactive (sold, retired) move here and stop counting in the fleet." />
+            : <EmptyState title="No trailers match" description="Try another status, type or pairing, or clear the search." action={<LinkButton href="/fleet/trailers" variant="secondary">Clear filters</LinkButton>} />
           )}
         </div>
       </Card>

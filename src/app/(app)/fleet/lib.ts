@@ -35,7 +35,7 @@ export const GPS_PROVIDERS = ["Samsara", "Motive", "Geotab", "Omnitracs", "SkyBi
  * Trailer statuses that physically leave the tractor, so setting one clears the pairing. In use and Empty stay hooked:
  * an empty trailer usually stays on its truck until someone drops it.
  */
-export const UNHOOKED_TRAILER_STATUSES: readonly string[] = ["DROPPED", "YARD", "SHOP", "OUT_OF_SERVICE"];
+export const UNHOOKED_TRAILER_STATUSES: readonly string[] = ["DROPPED", "YARD", "SHOP", "OUT_OF_SERVICE", "INACTIVE"];
 
 /** Odometer readings this far above the last one need a second look before they are saved (an extra digit). */
 export const ODOMETER_JUMP_KM = 50_000;

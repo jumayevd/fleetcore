@@ -2,7 +2,7 @@ import "server-only";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { DOC_KIND_LABELS, REQUIRED_DRIVER_DOCS, REQUIRED_UNIT_DOCS } from "@/lib/documents";
-import { TRAILER_STATUS_LABELS, humanize } from "@/lib/constants";
+import { TRAILER_OFF_PAPERWORK, TRAILER_STATUS_LABELS, humanize } from "@/lib/constants";
 import { daysUntil, type Kit } from "./kit";
 
 /*
@@ -102,7 +102,7 @@ export type Holder = { owner: HolderType; id: string; name: string; status: stri
 
 const truckStatusLabel = (s: string) => (s === "MAINTENANCE" ? "In maintenance" : s === "VENDOR" ? "At a vendor" : humanize(s));
 
-/** Every unit and driver still in use with its papers. Inactive trucks, out-of-service trailers and former drivers are left out. */
+/** Every unit and driver still in use with its papers. Inactive trucks, out-of-service and inactive trailers and former drivers are left out. */
 export async function loadPaperwork(kit: Kit, now: number) {
   const { link, seesDrivers } = kit;
   const [trucks, trailers, drivers, truckDocs, trailerDocs, driverDocs, companyDocs] = await Promise.all([
@@ -111,7 +111,7 @@ export async function loadPaperwork(kit: Kit, now: number) {
       select: { id: true, unitNumber: true, status: true, insuranceExpiry: true, inspectionExpiry: true, registrationExpiry: true, driver: { select: { name: true } } },
     }),
     db.trailer.findMany({
-      where: { status: { not: "OUT_OF_SERVICE" } }, orderBy: { unitNumber: "asc" }, take: SCAN,
+      where: { status: { notIn: TRAILER_OFF_PAPERWORK } }, orderBy: { unitNumber: "asc" }, take: SCAN,
       select: { id: true, unitNumber: true, status: true, insuranceExpiry: true, inspectionExpiry: true, truck: { select: { unitNumber: true } } },
     }),
     seesDrivers

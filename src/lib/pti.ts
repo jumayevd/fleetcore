@@ -109,7 +109,7 @@ export async function syncUnitHold(unit: UnitRef, opts: { released?: boolean } =
       db.trailer.findUnique({ where: { id: unit.trailerId }, select: { id: true, unitNumber: true, status: true } }),
       db.defect.count({ where: { trailerId: unit.trailerId, holdsUnit: true, status: { not: "CLOSED" } } }),
     ]);
-    if (trailer) {
+    if (trailer && trailer.status !== "INACTIVE") {
       if (holding > 0 && trailer.status !== "OUT_OF_SERVICE") {
         // Out of service unhooks the trailer, as setting the status by hand does.
         await db.trailer.update({ where: { id: trailer.id }, data: { status: "OUT_OF_SERVICE", statusSince: now, truckId: null } });

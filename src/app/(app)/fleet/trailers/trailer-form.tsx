@@ -39,7 +39,7 @@ export function TrailerForm({ action, trailer, trucks, cancelHref }: {
 
           <Card title={
             <span className="flex items-center gap-1.5">Status &amp; pairing
-              <InfoTip>{trailer ? "Changing the status restarts its time-in-status counter. " : ""}Dropped, Yard, Shop and Out of service unpair the truck. Leave GPS provider empty if the trailer has no tracker.</InfoTip>
+              <InfoTip>{trailer ? "Changing the status restarts its time-in-status counter. " : ""}In use and Empty stay on the truck; the other statuses unpair it. Leave GPS provider empty if the trailer has no tracker.</InfoTip>
             </span>
           }>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

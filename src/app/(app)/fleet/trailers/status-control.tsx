@@ -85,7 +85,7 @@ function StatusList({ status, pending, error, onPick }: { status: string; pendin
         ))}
       </ul>
       {error && <p role="alert" className="mt-1 rounded bg-danger-soft px-2 py-1 text-[11px] text-danger">{error}</p>}
-      <p className="mt-1 border-t border-line px-2 pt-1.5 text-[10px] leading-4 text-fg-subtle">Dropped, Yard, Shop and Out of service unpair the truck.</p>
+      <p className="mt-1 border-t border-line px-2 pt-1.5 text-[10px] leading-4 text-fg-subtle">In use and Empty stay on the truck; the others unpair it.</p>
     </div>
   );
 }

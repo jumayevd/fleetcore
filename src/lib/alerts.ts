@@ -114,7 +114,7 @@ const loadToday = cache(async () => {
   const week = f.weekStart(now);
   const [trucks, trailers, drivers, docs, defects, walks, openWork, charges, roadside] = await Promise.all([
     db.truck.findMany({ where: { status: { not: "INACTIVE" } }, orderBy: { unitNumber: "asc" }, select: truckSelect }),
-    db.trailer.findMany({ orderBy: { unitNumber: "asc" }, select: trailerSelect }),
+    db.trailer.findMany({ where: { status: { not: "INACTIVE" } }, orderBy: { unitNumber: "asc" }, select: trailerSelect }),
     db.driver.findMany({
       where: { status: "ACTIVE" }, orderBy: { name: "asc" },
       select: { id: true, name: true, licenseExpiry: true, medicalExpiry: true, hold: true, holdReason: true, createdAt: true, truck: { select: { id: true, unitNumber: true } } },

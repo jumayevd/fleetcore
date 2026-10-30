@@ -15,7 +15,7 @@ import { placeFromText, truckStatusLabel, UNHOOKED_TRAILER_STATUSES } from "./li
  * Fleet module actions: truck status, trailer create / edit / status / one-click fixes. The truck form saves through
  * saveTruck in src/app/actions/fleet.ts; repair orders live in src/app/actions/repairs.ts.
  *  - one rule for a trailer status change whichever control makes it: statuses that leave the tractor (Dropped, Yard,
- *    Shop, Out of service) unpair it; In use and Empty stay paired;
+ *    In maintenance, Out of service, Inactive) unpair it; In use and Empty stay paired;
  *  - expected failures come back as ActionState. Thrown errors reach the client as a generic message in production
  *    builds, so a business rule's explanation would never be seen.
  */

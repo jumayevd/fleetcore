@@ -657,9 +657,9 @@ export function buildAssistantTools(ctx: ToolContext) {
     }),
 
     listTrailers: tool({
-      description: "List trailers with filters: status, body type, paired (hooked to a truck or not), paperwork (expired / expiring / missing file), q (unit number or plate). Returns the total that match and up to 25 trailers with type, capacity, status and days in it, paired truck, insurance and inspection dates, last known location, open repair orders and defects.",
+      description: "List trailers with filters: status, body type, paired (hooked to a truck or not), paperwork (expired / expiring / missing file), q (unit number or plate). Returns the total that match and up to 25 trailers with type, capacity, status and days in it, paired truck, insurance and inspection dates, last known location, open repair orders and defects. Inactive trailers are left out unless status INACTIVE is asked for.",
       inputSchema: z.object({
-        status: z.enum(TRAILER_STATUSES).optional().describe("IN_USE | EMPTY | DROPPED | YARD | SHOP | OUT_OF_SERVICE"),
+        status: z.enum(TRAILER_STATUSES).optional().describe("IN_USE | EMPTY | DROPPED | YARD | SHOP (in maintenance) | OUT_OF_SERVICE | INACTIVE (sold or parked for good)"),
         type: z.enum(EQUIPMENT).optional().describe("DRY_VAN | REEFER | FLATBED | TANKER | CONTAINER"),
         paired: z.boolean().optional().describe("true = hooked to a truck; false = not paired"),
         paperwork: PAPERWORK_FILTER.optional(),
@@ -669,7 +669,7 @@ export function buildAssistantTools(ctx: ToolContext) {
         const now = Date.now();
         const where: Prisma.TrailerWhereInput = {
           AND: [
-            q.status ? { status: q.status } : {},
+            q.status ? { status: q.status } : { status: { not: "INACTIVE" } },
             q.type ? { type: q.type } : {},
             q.paired === true ? { truckId: { not: null } } : q.paired === false ? { truckId: null } : {},
             q.q ? { OR: [{ unitNumber: like(q.q) }, { plate: like(q.q) }] } : {},

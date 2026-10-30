@@ -5,7 +5,7 @@ import { kmDriven } from "@/lib/mileage";
 import { shopDowntime, truckCosts, type TruckCostRow } from "@/lib/stats";
 import { REQUIRED_UNIT_DOCS } from "@/lib/documents";
 import { dateOnly, dayKey, makeFormat, type CompanyLocale } from "@/lib/locale";
-import { INSPECTION_LEVEL_LABELS, REPAIR_SYSTEM_LABELS, REPAIR_TYPE_LABELS, humanize } from "@/lib/constants";
+import { INSPECTION_LEVEL_LABELS, REPAIR_SYSTEM_LABELS, REPAIR_TYPE_LABELS, TRAILER_OFF_PAPERWORK, humanize } from "@/lib/constants";
 import {
   CHART_MONTHS, CHART_WEEKS, MIN_DISTANCE_TO_COMPARE, REPEAT_IGNORED_SYSTEMS, REPEAT_VISITS, REPEAT_WINDOW_DAYS,
   burnsHigh, daysBetween, monthBuckets, periodRange, ratio, share, shiftDays, weekBuckets, type Bucket, type ReportPeriod,
@@ -104,7 +104,7 @@ const stateByDate = (d: Date | null, now: number): DocState => {
 async function paperworkToday(now: number) {
   const [trucks, trailers, drivers, docs] = await Promise.all([
     db.truck.findMany({ where: { status: { not: "INACTIVE" } }, select: { id: true, insuranceExpiry: true, inspectionExpiry: true, registrationExpiry: true } }),
-    db.trailer.findMany({ where: { status: { not: "OUT_OF_SERVICE" } }, select: { id: true, insuranceExpiry: true, inspectionExpiry: true } }),
+    db.trailer.findMany({ where: { status: { notIn: TRAILER_OFF_PAPERWORK } }, select: { id: true, insuranceExpiry: true, inspectionExpiry: true } }),
     db.driver.findMany({ where: { status: { not: "INACTIVE" } }, select: { licenseExpiry: true, medicalExpiry: true } }),
     db.document.findMany({
       where: { OR: [{ truckId: { not: null } }, { trailerId: { not: null } }], kind: { in: [...REQUIRED_UNIT_DOCS] } },

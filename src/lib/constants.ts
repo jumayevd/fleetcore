@@ -48,10 +48,13 @@ export const TRUCK_STATUSES = ["ACTIVE", "MAINTENANCE", "VENDOR", "OUT_OF_SERVIC
 export const OWNERSHIP = ["COMPANY", "OWNER_OPERATOR", "LEASED"] as const;
 export const OWNERSHIP_LABELS: Record<string, string> = { COMPANY: "Company", OWNER_OPERATOR: "Owner-operator", LEASED: "Leased" };
 
-export const TRAILER_STATUSES = ["IN_USE", "EMPTY", "DROPPED", "YARD", "SHOP", "OUT_OF_SERVICE"] as const;
+/** As for trucks: SHOP is In maintenance; INACTIVE is sold or parked for good and stops counting in the fleet. */
+export const TRAILER_STATUSES = ["IN_USE", "EMPTY", "DROPPED", "YARD", "SHOP", "OUT_OF_SERVICE", "INACTIVE"] as const;
 export const TRAILER_STATUS_LABELS: Record<string, string> = {
-  IN_USE: "In use", EMPTY: "Empty", DROPPED: "Dropped", YARD: "Yard", SHOP: "Shop", OUT_OF_SERVICE: "Out of service",
+  IN_USE: "In use", EMPTY: "Empty", DROPPED: "Dropped", YARD: "Yard", SHOP: "In maintenance", OUT_OF_SERVICE: "Out of service", INACTIVE: "Inactive",
 };
+/** Trailers left out of paperwork checks: held out of service, or no longer in the fleet. */
+export const TRAILER_OFF_PAPERWORK = ["OUT_OF_SERVICE", "INACTIVE"];
 
 export const WORK_ORDER_CATEGORIES = ["PM", "ENGINE", "COOLING", "TIRES", "BRAKES", "ELECTRICAL", "BODY", "TOWING", "INSPECTION", "OTHER"] as const;
 export const WORK_ORDER_CATEGORY_LABELS: Record<string, string> = {

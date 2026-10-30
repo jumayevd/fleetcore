@@ -74,7 +74,7 @@ export async function releaseUnit(unit: Unit, workOrderId: string, now: Date) {
 /**
  * What a repair order reaching `status` (from `prevStatus`) does:
  *  - into the shop: the downtime clock starts (inAt), the stage pipeline starts at Diagnosing, the truck goes to In maintenance
- *    (a truck held out of service stays held), a trailer goes to Shop and leaves its tractor;
+ *    (a truck held out of service stays held), a trailer goes to In maintenance (SHOP) and leaves its tractor;
  *  - back to scheduled, or cancelled while in: the unit is released;
  *  - completed: the clock stops (outAt), the unit is released, a newer odometer reading moves the truck's odometer
  *    forward, an oil change restarts the oil interval (the truck type's, else the truck's own) and an annual DOT
@@ -89,7 +89,7 @@ export async function applyWorkOrderSideEffects(id: string, status: string, user
     if (!wo.stage) await logEvent(id, "STAGE", userId, { stage: "DIAGNOSING" });
     // A truck a defect holds out of service stays out of service while it is in the shop (src/lib/pti.ts owns that hold).
     if (wo.truckId) await db.truck.updateMany({ where: { id: wo.truckId, status: "ACTIVE" }, data: { status: "MAINTENANCE" } });
-    if (wo.trailerId) await db.trailer.updateMany({ where: { id: wo.trailerId, status: { not: "OUT_OF_SERVICE" } }, data: { status: "SHOP", statusSince: now, truckId: null } });
+    if (wo.trailerId) await db.trailer.updateMany({ where: { id: wo.trailerId, status: { notIn: ["OUT_OF_SERVICE", "INACTIVE"] } }, data: { status: "SHOP", statusSince: now, truckId: null } });
   }
   if ((status === "OPEN" || status === "DRAFT") && prevStatus === "IN_PROGRESS") await releaseUnit(wo, id, now);
   if (status === "CANCELLED" && (prevStatus === "IN_PROGRESS" || (wo.inAt && !wo.outAt))) {
