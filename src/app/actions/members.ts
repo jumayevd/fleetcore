@@ -9,6 +9,7 @@ import { forgetSessions } from "@/lib/session";
 import { attempt, fields, FormError, type ActionState } from "@/lib/action";
 import { assignableRoles } from "@/lib/permissions";
 import { ROLE_LABELS, isRole } from "@/lib/constants";
+import { domainsText, emailAllowed } from "@/lib/member-domains";
 
 /*
  * Members of the active company. Memberships live outside the company scope (one person can belong to many
@@ -30,6 +31,7 @@ export async function inviteMember(_: ActionState, fd: FormData): Promise<Action
     const email = f.req("email", "Email").toLowerCase();
     const role = f.req("role", "Role");
     if (!EMAIL.test(email)) throw new FormError("Enter a valid email address.");
+    if (!emailAllowed(email)) throw new FormError(`Invitations go to ${domainsText()} addresses only. Ask for the person's company email.`);
     if (!isRole(role) || !assignableRoles(me.role).includes(role)) throw new FormError("You can't give that role.");
     const existing = await rootDb.membership.findFirst({ where: { companyId: me.company.id, user: { email }, active: true }, select: { id: true } });
     if (existing) throw new FormError(`${email} is already a member of ${me.company.name}.`);

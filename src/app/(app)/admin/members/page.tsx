@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { rootDb } from "@/lib/db-root";
 import { assignableRoles } from "@/lib/permissions";
 import { birthDateLabel } from "@/lib/profile";
+import { domainsText, memberDomains } from "@/lib/member-domains";
 import { ROLES, ROLE_HINTS, ROLE_LABELS, isRole } from "@/lib/constants";
 import { ago, daysAgo } from "@/lib/format";
 import { getFormat } from "@/lib/format-server";
@@ -36,6 +37,7 @@ export default async function MembersPage() {
     origin(),
     getFormat(),
   ]);
+  const domains = memberDomains();
   const rank = (r: string) => ROLES.indexOf(r as (typeof ROLES)[number]);
   const rows = members.sort((a, b) => rank(a.role) - rank(b.role) || a.user.name.localeCompare(b.user.name));
   const now = new Date();
@@ -141,7 +143,9 @@ export default async function MembersPage() {
           </span>
         }>
           <ActionForm action={inviteMember} resetOnSuccess className="space-y-3">
-            <Field label="Email" required><Input name="email" type="email" required placeholder="name@company.com" /></Field>
+            <Field label="Email" required hint={domains.length ? `${domainsText(domains)} addresses only.` : undefined}>
+              <Input name="email" type="email" required placeholder={`name@${domains[0] ?? "company.com"}`} />
+            </Field>
             <Field label="Role" required hint={ROLE_HINTS.SPECIALIST}>
               <Select name="role" required defaultValue="SPECIALIST" options={grantable.map((r) => ({ value: r, label: ROLE_LABELS[r] }))} />
             </Field>

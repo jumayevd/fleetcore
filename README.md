@@ -36,7 +36,8 @@ companies** added so one specialist can work for several fleets — each in its 
   sets their own password. Only a hash of the token is stored. Making a platform owner:
   `npm run user:password-link -- <email> --create "Full name" --platform-owner` (production: the production
   `DATABASE_URL`, `CONFIRM=yes`, `APP_URL`).
-- People join by **invitation link** (Settings → Members → Invite). The link works once, for the invited email; an
+- People join by **invitation link** (Settings → Members → Invite), only at the domains in `MEMBER_EMAIL_DOMAINS` when
+  it is set (production: @fleetcore.com, `src/lib/member-domains.ts`). The link works once, for the invited email; an
   existing account just signs in and accepts. Joining by invitation asks for **first and last name, ID number
   (passport, national ID or employee number) and date of birth**; a member who isn't an owner and has none on file is
   asked once (`/profile`) before working. They are the same in every company, editable in My account, and shown to
@@ -197,5 +198,6 @@ it elsewhere):
 | `CRON_SECRET` | Random; Vercel Cron sends it to `/api/cron/eld` and `/api/cron/backup` |
 | `DEMO_MODE` | `true` locally, `false` in production |
 | `APP_URL` | Optional, base URL for invitation links |
+| `MEMBER_EMAIL_DOMAINS` | Optional, comma-separated: invitations only to these domains (`fleetcore.com` in production); unset = any address |
 | `AI_GATEWAY_API_KEY`, `ASSISTANT_MODEL` | Optional locally; OIDC on Vercel |
 | `NEXT_PUBLIC_MAP_TILE_URL`, `NEXT_PUBLIC_MAP_SATELLITE_URL` | Optional (street map; satellite imagery, Esri by default) |
