@@ -40,6 +40,7 @@ export default async function DefectsPage({ searchParams }: PageProps<"/inspecti
   const me = await requireUser("fleet.view");
   const editable = can(me.role, "fleet.edit");
   const noteOptional = can(me.role, "defects.closeWithoutNote");
+  const canDelete = can(me.role, "defects.delete");
   const f = await getFormat();
   const sp = await searchParams;
   const now = new Date();
@@ -228,7 +229,7 @@ export default async function DefectsPage({ searchParams }: PageProps<"/inspecti
                     openOrders={repairs.get(d.truckId ?? d.trailerId ?? "") ?? []} newHref={newRepairHref(d)} />
                 </td>
                 <td className="whitespace-nowrap text-right">
-                  {editable && <DefectActions id={d.id} number={d.number} status={d.status} severity={d.severity} holdsUnit={d.holdsUnit} hasOwner={Boolean(d.ownerId)} noteOptional={noteOptional} compact />}
+                  {editable && <DefectActions id={d.id} number={d.number} status={d.status} severity={d.severity} holdsUnit={d.holdsUnit} hasOwner={Boolean(d.ownerId)} noteOptional={noteOptional} canDelete={canDelete} compact />}
                 </td>
               </tr>
             );

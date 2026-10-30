@@ -9,7 +9,7 @@ import { dateOnly, type Formatter } from "@/lib/locale";
 import { defectLabel, roLabel } from "@/lib/service";
 import { companyMembers, loadBoard, loadReview, needsSomething, resolveWeek, type BoardRow, type Week } from "@/lib/pti";
 import {
-  BOARD_FILTERS, BOARD_STATE_TONE, SEVERITY_SHORT, SEVERITY_TONE, WITHDRAWN_NOTE, boardHref, chaseMessage, componentLabel, defectsHref, one, plural,
+  BOARD_FILTERS, BOARD_STATE_TONE, RATING_SEVERITY, SEVERITY_SHORT, SEVERITY_TONE, WITHDRAWN_NOTE, boardHref, chaseMessage, componentLabel, defectsHref, one, plural,
   type BoardFilter,
 } from "@/lib/pti-shared";
 import { Badge, Card, Chip, Disclosure, EmptyState, IconButton, InfoTip, LinkButton, PageHeader, Stat, Table, buttonClass, cn } from "@/components/ui";
@@ -224,6 +224,11 @@ export default async function PreTripBoard({ searchParams }: PageProps<"/inspect
         })),
         members: members.map((m) => ({ id: m.id, name: m.name })),
         noteOptional,
+        // Saved Soon / Now marks whose defect was confirmed fixed or deleted, with no earlier defect tracking them.
+        settled: (w?.ratings ?? []).filter((r) => RATING_SEVERITY[r.rating]).map((r) => r.component).filter((c) => {
+          const own = w?.defects.find((d) => d.component === c);
+          return own ? own.status === "CLOSED" && !own.closeNote?.startsWith(WITHDRAWN_NOTE) : !data.earlier.some((d) => d.component === c);
+        }),
         history: data.history.map((h) => ({
           key: h.key, label: f.day(h.at), current: h.key === week.key,
           video: h.walk?.video ?? null, result: h.walk?.reviewedAt ? h.walk.result : null,

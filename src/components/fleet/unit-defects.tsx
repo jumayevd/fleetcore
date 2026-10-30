@@ -20,6 +20,7 @@ export async function UnitDefects({ unit, editable }: { unit: { type: "truck" | 
   const f = await getFormat();
   const me = await getCurrentUser();
   const noteOptional = can(me?.role, "defects.closeWithoutNote");
+  const canDelete = can(me?.role, "defects.delete");
   const now = new Date();
   const where = unit.type === "truck" ? { truckId: unit.id } : { trailerId: unit.id };
   const [open, closed, closedCount, self] = await Promise.all([
@@ -77,7 +78,7 @@ export async function UnitDefects({ unit, editable }: { unit: { type: "truck" | 
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   <RepairCell id={d.id} workOrder={d.workOrder} editable={editable} openOrders={repairs.get(unit.id) ?? []} newHref={newRepairHref(d)} />
-                  {editable && <DefectActions id={d.id} number={d.number} status={d.status} severity={d.severity} holdsUnit={d.holdsUnit} hasOwner={Boolean(d.ownerId)} noteOptional={noteOptional} compact />}
+                  {editable && <DefectActions id={d.id} number={d.number} status={d.status} severity={d.severity} holdsUnit={d.holdsUnit} hasOwner={Boolean(d.ownerId)} noteOptional={noteOptional} canDelete={canDelete} compact />}
                 </div>
               </li>
             );
@@ -96,7 +97,7 @@ export async function UnitDefects({ unit, editable }: { unit: { type: "truck" | 
                 </span>
                 <span className="shrink-0 text-right text-[11px] text-fg-subtle">
                   {f.day(d.closedAt)}{d.closedBy ? ` · ${d.closedBy.name}` : ""}
-                  {editable && <span className="mt-0.5 block"><DefectActions id={d.id} number={d.number} status={d.status} severity={d.severity} holdsUnit={d.holdsUnit} hasOwner={Boolean(d.ownerId)} noteOptional={noteOptional} compact /></span>}
+                  {editable && <span className="mt-0.5 block"><DefectActions id={d.id} number={d.number} status={d.status} severity={d.severity} holdsUnit={d.holdsUnit} hasOwner={Boolean(d.ownerId)} noteOptional={noteOptional} canDelete={canDelete} compact /></span>}
                 </span>
               </li>
             ))}

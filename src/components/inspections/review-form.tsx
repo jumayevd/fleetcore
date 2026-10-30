@@ -43,6 +43,8 @@ export type ReviewFormProps = {
   members: { id: string; name: string }[];
   /** Admins may mark an earlier defect fixed without saying how they can tell. */
   noteOptional: boolean;
+  /** Saved Soon / Now marks whose defect was confirmed fixed or deleted: they stay exactly as they are. */
+  settled: string[];
 };
 
 type Opt = { value: string; label: string; tone: Tone; hint?: string; disabled?: boolean };
@@ -98,7 +100,7 @@ export function ReviewForm(p: ReviewFormProps) {
   /** Earlier defects still open for a component once the verdicts are applied: rating it again keeps that one open. */
   const trackedFor = (c: string) => p.earlier.find((d) => d.component === c && verdicts[d.id] !== "FIXED");
   /** Soon / Now marks already saved this week stay on the record (only Soon → Now is still possible). */
-  const allowedFor = (c: string) => allowedRatings(p.ratings[c], Boolean(p.thisWeek[c]?.resolved));
+  const allowedFor = (c: string) => allowedRatings(p.ratings[c], p.settled.includes(c));
   const lockedFor = (c: string) => allowedFor(c).length < PTI_RATINGS.length;
   const allGood = PTI_COMPONENTS.every((c) => ratings[c] === "GOOD" || !allowedFor(c).includes("GOOD"));
   const newNow = PTI_COMPONENTS.some((c) => ratings[c] === "NOW" && p.ratings[c] !== "NOW");
@@ -202,7 +204,8 @@ export function ReviewForm(p: ReviewFormProps) {
               const locked = allowed.length < PTI_RATINGS.length;
               const lockHint = own?.resolved
                 ? `Marked ${PTI_RATING_LABELS[p.ratings[c]]} this week and ${defectLabel(own.number)} is confirmed fixed: the mark stays on the record`
-                : `Marked ${PTI_RATING_LABELS[p.ratings[c]]} this week: it stays on the record${allowed.length > 1 ? " and can only be raised to Now" : ""}`;
+                : !own && p.settled.includes(c) ? `Marked ${PTI_RATING_LABELS[p.ratings[c]]} this week; its defect was deleted: the mark stays on the record`
+                  : `Marked ${PTI_RATING_LABELS[p.ratings[c]]} this week: it stays on the record${allowed.length > 1 ? " and can only be raised to Now" : ""}`;
               return (
                 <li key={c} className={cn("px-3 py-2", r === "NOW" ? "bg-danger-soft/60" : r === "SOON" ? "bg-warn-soft/60" : undefined)}>
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -215,7 +218,7 @@ export function ReviewForm(p: ReviewFormProps) {
                     <RadioPills name={`rating_${c}`} label={componentLabel(c)} size="sm" value={r} onChange={(v) => setRatings((s) => ({ ...s, [c]: v }))}
                       options={RATING_OPTIONS.map((o) => (allowed.includes(o.value) ? o : { ...o, disabled: true, hint: lockHint }))} />
                   </div>
-                  {bad && !own?.resolved && (
+                  {bad && !p.settled.includes(c) && (
                     <Input name={`desc_${c}`} value={descs[c]} onChange={(e) => setDescs((s) => ({ ...s, [c]: e.target.value }))}
                       required={!own && !tracked} aria-label={`What is wrong with the ${componentLabel(c).toLowerCase()}`}
                       placeholder={tracked ? `Already tracked as ${defectLabel(tracked.number)}; add a note only if it changed` : "What you saw, e.g. cut on the sidewall, cords showing"}
