@@ -140,17 +140,16 @@ export default async function DefectsPage({ searchParams }: PageProps<"/inspecti
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Link href={defectsHref({ holding: "1" })} className="block rounded-lg hover:shadow-lift">
-          <Stat label="Holding a unit" value={holdingCount} tone={holdingCount ? "danger" : "ok"} icon={<ShieldAlert />}
-            hint={holdingCount ? "Out of service until someone confirms the repair" : "No unit is held by a defect"} />
+          <Stat label="Holding a unit" value={holdingCount} tone={holdingCount ? "danger" : "ok"} icon={<ShieldAlert />} />
         </Link>
         <Link href={defectsHref({ status: "OPEN", overdue: "1" })} className="block rounded-lg hover:shadow-lift">
-          <Stat label="Overdue" value={overdueCount} tone={overdueCount ? "warn" : "ok"} icon={<Clock />} hint={overdueCount ? "Past the date they should be fixed by" : "Nothing past its due date"} />
+          <Stat label="Overdue" value={overdueCount} tone={overdueCount ? "warn" : "ok"} icon={<Clock />} />
         </Link>
         <Link href={defectsHref({ status: "REPAIRED" })} className="block rounded-lg hover:shadow-lift">
-          <Stat label="Repaired, to confirm" value={toConfirm} tone={toConfirm ? "info" : "neutral"} icon={<ClipboardCheck />} hint="The shop says fixed; someone checks and closes it" />
+          <Stat label="Repaired, to confirm" value={toConfirm} tone={toConfirm ? "info" : "neutral"} icon={<ClipboardCheck />} />
         </Link>
         <Link href={defectsHref({ owner: "none" })} className="block rounded-lg hover:shadow-lift">
-          <Stat label="Nobody owns" value={unowned} tone={unowned ? "warn" : "ok"} icon={<TriangleAlert />} hint={unowned ? "Give each one an owner so it gets chased" : "Every open defect has an owner"} />
+          <Stat label="Nobody owns" value={unowned} tone={unowned ? "warn" : "ok"} icon={<TriangleAlert />} />
         </Link>
       </div>
 
