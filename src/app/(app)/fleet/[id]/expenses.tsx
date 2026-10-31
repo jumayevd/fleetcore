@@ -175,7 +175,7 @@ export async function ExpensesTab({ truck, editable, showMoney }: { truck: Expen
             </Table>
             {totals.km === 0 && (
               <p className="border-t border-line px-4 py-2 text-[12px] text-fg-muted">
-                Distance needs at least two odometer readings.{editable && <> Log fuel with the odometer, or <Link href={`/fleet/${truck.id}#readings`} className="font-medium text-fg hover:underline">update the reading</Link> regularly.</>}
+                Distance needs at least two odometer readings.{editable && <> Log fuel with the odometer, or <Link href={`/fleet/${truck.id}?tab=tracking#readings`} className="font-medium text-fg hover:underline">update the reading</Link> regularly.</>}
               </p>
             )}
           </Card>

@@ -7,8 +7,8 @@ export const unitComplianceHref = (type: "truck" | "trailer", id: string) =>
   type === "truck" ? `/fleet/${id}?tab=compliance` : `/fleet/trailers/${id}#documents`;
 export const workOrderHref = (id: string) => `/maintenance/work-orders/${id}`;
 export const vendorHref = (id: string) => `/vendors/${id}`;
-/** The truck page's readings card, where a fresh odometer reading is entered. */
-export const readingsHref = (truckId: string) => `/fleet/${truckId}#readings`;
+/** The truck page's readings card, where a fresh odometer reading is entered (Tracking tab, beside its position). */
+export const readingsHref = (truckId: string) => `/fleet/${truckId}?tab=tracking#readings`;
 
 type Query = Record<string, string | number | null | undefined>;
 

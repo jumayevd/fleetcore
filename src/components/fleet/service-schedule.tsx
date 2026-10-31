@@ -81,7 +81,7 @@ export async function ServiceSchedule({ truckId, editable }: { truckId: string; 
           <dd className="text-right">
             <span className="num text-fg">{f.dist(truck.odometerKm)}</span>
             <span className={cn(s.stale ? "text-warn" : "text-fg-subtle")}> · {s.readingAt ? `as of ${f.day(s.readingAt)}` : "no reading date"}</span>
-            {s.stale && editable && <> · <Link href={`/fleet/${truck.id}#readings`} className="font-medium text-fg hover:underline">Get reading</Link></>}
+            {s.stale && editable && <> · <Link href={`/fleet/${truck.id}?tab=tracking#readings`} className="font-medium text-fg hover:underline">Get reading</Link></>}
           </dd>
         </div>
       </dl>
