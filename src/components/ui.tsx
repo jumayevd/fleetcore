@@ -180,6 +180,8 @@ export const STATUS_TONE: Record<string, Tone> = {
   MISSING_DOCS: "warn", READY_TO_INVOICE: "info",
   // assets
   ACTIVE: "ok", MAINTENANCE: "warn", VENDOR: "progress", OUT_OF_SERVICE: "danger", INACTIVE: "neutral",
+  /** An inactive truck or trailer (sold, stolen, total loss…) reads red; an inactive driver or vendor stays neutral. */
+  UNIT_INACTIVE: "danger",
   // trailers
   IN_USE: "progress", EMPTY: "ok", DROPPED: "info", YARD: "neutral", SHOP: "warn",
   // driver employment / board statuses

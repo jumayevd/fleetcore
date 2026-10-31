@@ -17,7 +17,8 @@ import { ListFilters } from "./filters";
 import { LinkRow } from "./link-row";
 import { ColumnChooser, type ColumnDef } from "./column-chooser";
 import { TruckStatusPill } from "./status-pill";
-import { openDefects, openRepairs, truckTypeOptions, unitDocRows } from "./data";
+import { openDefects, openRepairs, statusRecorders, truckTypeOptions, unitDocRows } from "./data";
+import { inactiveInfo } from "./status-info";
 import {
   docExpiryByUnit, docsByUnit, earliest, EXPIRY_SOON_DAYS, fuelTone, LIST_LIMIT, missingDocs, OWNERSHIP_SHORT, OWNERSHIP_TONE, pingStale,
   serviceSummary, sinceShort, TRUCK_STATUS_LABELS, TRUCK_VIEW_LABELS, TRUCK_VIEW_STATUSES, TRUCK_VIEWS, type TruckView,
@@ -184,10 +185,11 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
   const capped = rows.length > LIST_LIMIT;
   const trucks = capped ? rows.slice(0, LIST_LIMIT) : rows;
   const ids = trucks.map((t) => t.id);
-  const [matching, perDay, repairs] = await Promise.all([
+  const [matching, perDay, repairs, recorders] = await Promise.all([
     capped ? db.truck.count({ where }) : Promise.resolve(trucks.length),
     distancePerDay(ids),
     openRepairs("truck", ids),
+    statusRecorders(trucks.filter((t) => t.status === "INACTIVE").map((t) => t.id)),
   ]);
 
   const qs = (patch: Partial<typeof params>) => {
@@ -320,7 +322,8 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
                   <td data-col="type" className="whitespace-nowrap text-fg-muted">{t.truckType?.name ?? <span className="text-fg-faint">No type</span>}</td>
                   <td data-col="status">
                     <TruckStatusPill id={t.id} unitNumber={t.unitNumber} status={t.status} hasDriver={Boolean(t.driverId)} editable={editable} today={today}
-                      scheduled={r && r.status !== "IN_PROGRESS" ? [{ id: r.id, number: r.number, title: r.title, when: f.day(r.scheduledAt) }] : []} />
+                      scheduled={r && r.status !== "IN_PROGRESS" ? [{ id: r.id, number: r.number, title: r.title, when: f.day(r.scheduledAt) }] : []}
+                      inactive={t.status === "INACTIVE" ? inactiveInfo(t, f, recorders.get(t.id)) : null} />
                     {t.status === "INACTIVE" && (t.statusReason || t.statusSince) && (
                       <p className="mt-0.5 max-w-[164px] truncate text-[11px] text-fg-subtle" title={t.statusNote ?? undefined}>
                         {[t.statusReason ? INACTIVE_REASON_LABELS[t.statusReason] ?? t.statusReason : null, t.statusSince ? f.day(t.statusSince) : null].filter(Boolean).join(" · ")}

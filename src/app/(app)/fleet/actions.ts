@@ -81,6 +81,7 @@ export async function setTruckStatus(truckId: string, status: string, details?: 
     revalidatePath("/tracking");
     revalidatePath("/inspections");
     if (ended) revalidatePath("/drivers");
+    if (truck.status === status) return { ok: `${u}: the inactive record is saved` };
     const label = (truckStatusLabel(status, Boolean(truck.driverId) && !ended) ?? humanize(status)).toLowerCase();
     return { ok: `${u} is now ${label}${ended ? " and no longer has a driver" : ""}` };
   });

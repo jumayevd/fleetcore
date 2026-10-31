@@ -6,7 +6,7 @@ import { PICKABLE_TRUCK_STATUSES } from "@/lib/constants";
 import { Badge, STATUS_TONE, StatusDot, TONE_DOT, TONE_SOFT, cn, type Tone } from "@/components/ui";
 import { Popover, menuItemClass, useMenuKeys } from "./menu";
 import { truckStatusLabel, truckStatusTone } from "./lib";
-import { useTruckStatusChange, type TruckStatusTarget } from "./truck-status-change";
+import { InactiveRecord, useTruckStatusChange, type TruckStatusTarget } from "./truck-status-change";
 
 /** The status as a tinted pill with a chevron: reads like a select, so it's plain that it changes the status. */
 export const statusPillClass = (tone: Tone) =>
@@ -43,13 +43,21 @@ export function TruckStatusPill({ status, editable, ...t }: TruckStatusTarget & 
   if (!editable) return <Badge value={key} label={label} dot />;
   return (
     <>
-      <Popover width={256} align="start" trigger={({ open, toggle }) => (
-        <button type="button" onClick={toggle} aria-haspopup="menu" aria-expanded={open} aria-label={`Status: ${label}. Change status`}
+      <Popover width={status === "INACTIVE" && t.inactive ? 340 : 256} align="start" trigger={({ open, toggle }) => (
+        <button type="button" onClick={toggle} aria-haspopup="menu" aria-expanded={open} aria-label={`Status: ${label}. ${status === "INACTIVE" ? "See why, or change status" : "Change status"}`}
           className={cn(statusPillClass(tone), open && "ring-2 ring-accent/30")}>
           <StatusPillFace tone={tone} label={label} />
         </button>
       )}>
-        {(close) => <StatusList status={status} hasDriver={t.hasDriver} pending={change.pending} pick={(s, done) => change.pick(s, (err) => { done(err); if (!err) close(); })} />}
+        {(close) => (
+          <>
+            {/* An inactive truck opens on its record: why, since when, who recorded it and the details. */}
+            {status === "INACTIVE" && t.inactive && (
+              <InactiveRecord info={t.inactive} className="mb-1" onEdit={() => change.pick("INACTIVE", () => close())} />
+            )}
+            <StatusList status={status} hasDriver={t.hasDriver} pending={change.pending} pick={(s, done) => change.pick(s, (err) => { done(err); if (!err) close(); })} />
+          </>
+        )}
       </Popover>
       {change.dialogs}
     </>

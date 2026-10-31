@@ -5,7 +5,7 @@ import { CalendarClock, ChevronRight, Compass, Droplet, Fuel, Gauge, MapPin, Pen
 import { getCurrentUser, requireUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { db } from "@/lib/db";
-import { CITIES, DEFECT_SEVERITY_LABELS, DRIVER_TYPE_LABELS, EQUIPMENT_LABELS, INACTIVE_REASON_LABELS, OWNERSHIP_LABELS, REPAIR_STAGE_LABELS } from "@/lib/constants";
+import { CITIES, DEFECT_SEVERITY_LABELS, DRIVER_TYPE_LABELS, EQUIPMENT_LABELS, OWNERSHIP_LABELS, REPAIR_STAGE_LABELS } from "@/lib/constants";
 import { DOC_KIND_LABELS, REQUIRED_UNIT_DOCS, UNIT_DOC_SLOTS } from "@/lib/documents";
 import { ago, daysUntil } from "@/lib/format";
 import { getFormat } from "@/lib/format-server";
@@ -27,7 +27,9 @@ import { CompletenessCard, FixLink, FixNote, TruckFix, type Prompt } from "./com
 import { ExpensesTab } from "./expenses";
 import { DriverTab } from "./driver-tab";
 import { CompletedRepairs } from "../repair-history";
-import { openDefects, openRepairs, truckTypeOptions, type OpenRepair } from "../data";
+import { openDefects, openRepairs, statusRecorders, truckTypeOptions, type OpenRepair } from "../data";
+import { inactiveInfo } from "../status-info";
+import { InactiveCard } from "../truck-status-change";
 import {
   compass, dayAsDate, daysSince, docExpiryByUnit, earliest, EXPIRY_SOON_DAYS, FUEL_TYPE_LABELS, fuelTone, intervalText, leaseStatus, missingDocs,
   ODOMETER_JUMP_KM, OWNERSHIP_TONE, parseNotes, pingSourceLabel, pingStale, recordedExpiry, serviceSummary, truckStatusLabel, truckStatusTone, type ServiceSummary,
@@ -68,7 +70,7 @@ export default async function TruckDetail({ params, searchParams }: PageProps<"/
   if (!truck) notFound();
 
   const now = new Date();
-  const [docRows, repairs, defects, perDay, types, booked] = await Promise.all([
+  const [docRows, repairs, defects, perDay, types, booked, recorders] = await Promise.all([
     db.document.findMany({ where: { truckId: id, kind: { in: [...UNIT_DOC_SLOTS.truck] } }, orderBy: { createdAt: "desc" }, select: { kind: true, expiresAt: true } }),
     openRepairs("truck", [id]),
     openDefects("truck", [id]),
@@ -76,7 +78,13 @@ export default async function TruckDetail({ params, searchParams }: PageProps<"/
     truckTypeOptions(),
     // Booked and not in yet: the status menu's In shop can check one of these in.
     db.workOrder.findMany({ where: { truckId: id, status: { in: ["DRAFT", "OPEN"] }, voidedAt: null }, orderBy: { scheduledAt: "asc" }, select: { id: true, number: true, title: true, scheduledAt: true } }),
+    truck.status === "INACTIVE" ? statusRecorders([id]) : Promise.resolve(new Map<string, string>()),
   ]);
+  const statusTarget = {
+    id, unitNumber: truck.unitNumber, hasDriver: Boolean(truck.driverId), today: f.dateInput(now),
+    scheduled: booked.map((w) => ({ id: w.id, number: w.number, title: w.title, when: f.day(w.scheduledAt) })),
+    inactive: truck.status === "INACTIVE" ? inactiveInfo(truck, f, recorders.get(id)) : null,
+  };
   const repair = repairs.get(id);
   const defect = defects.get(id);
   const have = new Set(docRows.map((d) => d.kind));
@@ -142,10 +150,6 @@ export default async function TruckDetail({ params, searchParams }: PageProps<"/
   if (truck.status === "ACTIVE" && !truck.driver) attention.push({ tone: "info", text: "No driver assigned", href: `/fleet/${id}?tab=driver` });
   if (truck.driver?.hold) attention.push({ tone: "warn", text: `${truck.driver.name} is on hold${truck.driver.holdReason ? `: ${truck.driver.holdReason}` : ""}`, href: `/drivers/${truck.driver.id}` });
   if (truck.status === "MAINTENANCE" && repair?.status !== "IN_PROGRESS") attention.push({ tone: "warn", text: "In shop with no repair order in the shop", href: editable ? `/maintenance/work-orders/new?truck=${id}&status=IN_PROGRESS` : maintHref });
-  if (truck.status === "INACTIVE") {
-    const why = truck.statusReason ? INACTIVE_REASON_LABELS[truck.statusReason] ?? truck.statusReason : null;
-    attention.push({ tone: "info", text: `Inactive${truck.statusSince ? ` since ${f.date(truck.statusSince)}` : ""}${why ? `: ${why}` : ""}${truck.statusNote ? ` — ${truck.statusNote}` : ""}`, href: "/fleet?view=archived" });
-  }
 
   const openWork = (repair?.count ?? 0) + (defect?.open ?? 0);
   const tabs = TABS.map((t) => ({
@@ -169,14 +173,15 @@ export default async function TruckDetail({ params, searchParams }: PageProps<"/
         }
         actions={editable && (
           <>
-            <TruckStatusMenu id={id} unitNumber={truck.unitNumber} status={truck.status} hasDriver={Boolean(truck.driverId)} today={f.dateInput(now)}
-              scheduled={booked.map((w) => ({ id: w.id, number: w.number, title: w.title, when: f.day(w.scheduledAt) }))} />
+            <TruckStatusMenu status={truck.status} {...statusTarget} />
             <LinkButton href={`/fleet/${id}/edit`} variant="secondary"><Pencil />Edit</LinkButton>
             <LinkButton href={`/maintenance/oil?book=${id}`} variant="secondary"><CalendarClock />Schedule maintenance</LinkButton>
             <LinkButton href={`/maintenance/work-orders/new?truck=${id}`}><Wrench />Create repair</LinkButton>
           </>
         )}
       />
+
+      {statusTarget.inactive && <div className="mb-4"><InactiveCard target={{ ...statusTarget, inactive: statusTarget.inactive }} editable={editable} /></div>}
 
       <Tabs active={tab} tabs={tabs} />
 

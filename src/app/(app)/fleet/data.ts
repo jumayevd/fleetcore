@@ -36,6 +36,19 @@ export async function openDefects(unit: UnitKind, ids?: string[]) {
   return out;
 }
 
+/** Who recorded each inactive truck's status: the latest status change in the audit log, per truck. */
+export async function statusRecorders(truckIds: string[]) {
+  if (!truckIds.length) return new Map<string, string>();
+  const rows = await db.auditLog.findMany({
+    where: { entity: "truck", action: "status", entityId: { in: truckIds } },
+    orderBy: { createdAt: "desc" },
+    select: { entityId: true, user: { select: { name: true } } },
+  });
+  const out = new Map<string, string>();
+  for (const r of rows) if (r.entityId && r.user && !out.has(r.entityId)) out.set(r.entityId, r.user.name);
+  return out;
+}
+
 export type OpenRepair = {
   id: string; number: number; title: string; status: string; stage: string | null; stageAt: Date | null;
   scheduledAt: Date; promisedAt: Date | null; inAt: Date | null; repairType: string;

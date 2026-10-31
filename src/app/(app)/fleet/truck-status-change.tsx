@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Wrench } from "lucide-react";
+import { Pencil, Wrench } from "lucide-react";
 import { INACTIVE_REASONS, INACTIVE_REASON_LABELS, IN_SHOP_REASONS } from "@/lib/constants";
 import { roLabel } from "@/lib/service";
 import { Button, Input, LinkButton, Textarea, cn } from "@/components/ui";
@@ -13,7 +13,16 @@ import { setTruckStatus } from "./actions";
 /** A repair order booked for the truck that has not gone in yet ("check in" puts the truck In shop). */
 export type ScheduledRepair = { id: string; number: number; title: string; when: string };
 
-export type TruckStatusTarget = { id: string; unitNumber: string; hasDriver: boolean; today: string; scheduled: ScheduledRepair[] };
+/** An inactive truck's record: why, since when (shown, and as a date input value), who recorded it, details. */
+export type InactiveInfo = {
+  reason: string | null; note: string | null; since: string | null; sinceInput: string | null; by: string | null; odometer: string | null;
+};
+
+export type TruckStatusTarget = {
+  id: string; unitNumber: string; hasDriver: boolean; today: string; scheduled: ScheduledRepair[];
+  /** Set while the truck is Inactive: shown when its status is opened, and what Edit starts from. */
+  inactive?: InactiveInfo | null;
+};
 
 /** What the details box suggests writing down, by reason. */
 const DETAIL_HINT: Record<string, string> = {
@@ -66,10 +75,43 @@ function Choice({ name, value, checked, onPick, children }: { name: string; valu
   );
 }
 
+/**
+ * The inactive record (reason, since when, who recorded it, details, odometer), with Edit when `onEdit` is given. Shown
+ * when an inactive truck's status is opened on the list, and as a card on the truck page.
+ */
+export function InactiveRecord({ info, onEdit, className }: { info: InactiveInfo; onEdit?: () => void; className?: string }) {
+  return (
+    <div className={cn("rounded-md border border-danger/30 bg-danger-soft/40 px-3 py-2.5 text-[12.5px]", className)}>
+      <div className="flex items-start justify-between gap-2">
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="rounded bg-danger-soft px-1.5 py-px text-[11px] font-medium text-danger">{info.reason ? INACTIVE_REASON_LABELS[info.reason] ?? info.reason : "No reason recorded"}</span>
+          <span className="font-medium text-fg">{info.since ?? "Date not recorded"} · inactive</span>
+          {info.by && <span className="text-fg-subtle">recorded by {info.by}</span>}
+        </p>
+        {onEdit && <Button size="sm" variant="secondary" onClick={onEdit}><Pencil />Edit</Button>}
+      </div>
+      <p className={cn("mt-1.5 whitespace-pre-wrap", info.note ? "text-fg" : "text-fg-subtle")}>{info.note ?? "No details written down."}</p>
+      {info.odometer && <p className="mt-1.5 text-[11px] text-fg-subtle">Odometer <span className="num text-fg-muted">{info.odometer}</span></p>}
+    </div>
+  );
+}
+
+/** The truck page's inactive card: the record, and Edit opening the same dialog the status menu uses. */
+export function InactiveCard({ target, editable }: { target: TruckStatusTarget & { inactive: InactiveInfo }; editable: boolean }) {
+  const [editing, setEditing] = useState(false);
+  return (
+    <>
+      <InactiveRecord info={target.inactive} onEdit={editable ? () => setEditing(true) : undefined} />
+      {editing && <InactiveDialog t={target} onClose={() => setEditing(false)} />}
+    </>
+  );
+}
+
 function InactiveDialog({ t, onClose }: { t: TruckStatusTarget; onClose: () => void }) {
-  const [reason, setReason] = useState("");
-  const [date, setDate] = useState(t.today);
-  const [note, setNote] = useState("");
+  const was = t.inactive;
+  const [reason, setReason] = useState(was?.reason ?? "");
+  const [date, setDate] = useState(was?.sinceInput ?? t.today);
+  const [note, setNote] = useState(was?.note ?? "");
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const ready = Boolean(reason) && Boolean(date) && (reason !== "OTHER" || Boolean(note.trim()));
@@ -84,11 +126,11 @@ function InactiveDialog({ t, onClose }: { t: TruckStatusTarget; onClose: () => v
     }
   });
   return (
-    <Overlay variant="dialog" onClose={onClose} title={`Set ${t.unitNumber} inactive`} subtitle="Why it is leaving the fleet"
+    <Overlay variant="dialog" onClose={onClose} title={was ? `Why ${t.unitNumber} is inactive` : `Set ${t.unitNumber} inactive`} subtitle={was ? "Edit the record" : "Why it is leaving the fleet"}
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button disabled={pending || !ready} onClick={submit}>{pending ? "Saving…" : "Set inactive"}</Button>
+          <Button disabled={pending || !ready} onClick={submit}>{pending ? "Saving…" : was ? "Save" : "Set inactive"}</Button>
         </div>
       }>
       <fieldset>
@@ -105,9 +147,11 @@ function InactiveDialog({ t, onClose }: { t: TruckStatusTarget; onClose: () => v
         <span className="mb-1 block text-[12px] font-medium text-fg-muted">Details{reason === "OTHER" ? <span className="text-danger"> *</span> : " (optional)"}</span>
         <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={500} placeholder={DETAIL_HINT[reason] ?? "Anything to keep on record"} />
       </label>
-      <p className="mt-3 text-[12px] text-fg-subtle">
-        {t.hasDriver ? "Its driver comes off the truck on that day. " : ""}It stops counting in the fleet until it is set back to Available.
-      </p>
+      {!was && (
+        <p className="mt-3 text-[12px] text-fg-subtle">
+          {t.hasDriver ? "Its driver comes off the truck on that day. " : ""}It stops counting in the fleet until it is set back to Available.
+        </p>
+      )}
       {error && <FormMessage tone="error" className="mt-3">{error}</FormMessage>}
     </Overlay>
   );

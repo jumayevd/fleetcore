@@ -20,8 +20,10 @@ export const NEW_TRUCK_STATUSES = ["ACTIVE", "VENDOR"] as const;
 /** A truck in service reads Assigned when it has a driver and Available when it has none. */
 export const truckStatusLabel = (status: string, hasDriver: boolean) =>
   status === "ACTIVE" && hasDriver ? "Assigned" : TRUCK_STATUS_LABELS[status] ?? status;
-/** The badge colour key for the same (STATUS_TONE). */
-export const truckStatusTone = (status: string, hasDriver: boolean) => (status === "ACTIVE" && hasDriver ? "ASSIGNED" : status);
+/** The badge colour key for the same (STATUS_TONE). Inactive units read red. */
+export const truckStatusTone = (status: string, hasDriver: boolean) => (status === "ACTIVE" && hasDriver ? "ASSIGNED" : unitStatusTone(status));
+/** Trucks and trailers: an inactive unit's colour key (red), otherwise the status itself. */
+export const unitStatusTone = (status: string) => (status === "INACTIVE" ? "UNIT_INACTIVE" : status);
 
 export const OWNERSHIP_TONE: Record<string, Tone> = { COMPANY: "neutral", OWNER_OPERATOR: "progress", LEASED: "info" };
 export const OWNERSHIP_SHORT: Record<string, string> = { COMPANY: "Company", OWNER_OPERATOR: "Owner-op", LEASED: "Leased" };

@@ -7,6 +7,7 @@ import { Badge, STATUS_TONE, StatusDot, buttonClass, cn, inputClass } from "@/co
 import { setTrailerStatus } from "../actions";
 import { Popover, menuItemClass, useMenuKeys } from "../menu";
 import { StatusPillFace, statusPillClass } from "../status-pill";
+import { unitStatusTone } from "../lib";
 
 /** Statuses that describe where the trailer is, so we ask for the place. */
 const ASKS_LOCATION = new Set(["DROPPED", "YARD"]);
@@ -21,7 +22,7 @@ export function TrailerStatusControl({ id, status, locationName, editable, since
   if (!editable) {
     return (
       <span className="inline-flex items-center gap-1.5">
-        <Badge value={status} label={TRAILER_STATUS_LABELS[status] ?? status} dot />
+        <Badge value={unitStatusTone(status)} label={TRAILER_STATUS_LABELS[status] ?? status} dot />
         {since && <span className="num text-[11px] text-fg-subtle" title="Time in this status">{since}</span>}
       </span>
     );
@@ -30,8 +31,8 @@ export function TrailerStatusControl({ id, status, locationName, editable, since
     <Popover width={232} align="start" trigger={({ open, toggle }) => (
       <span className="inline-flex items-center gap-1.5">
         <button type="button" onClick={toggle} aria-haspopup="menu" aria-expanded={open} aria-label={`Status: ${TRAILER_STATUS_LABELS[status] ?? status}. Change status`}
-          className={cn(statusPillClass(STATUS_TONE[status] ?? "neutral"), open && "ring-2 ring-accent/30")}>
-          <StatusPillFace tone={STATUS_TONE[status] ?? "neutral"} label={TRAILER_STATUS_LABELS[status] ?? status} />
+          className={cn(statusPillClass(STATUS_TONE[unitStatusTone(status)] ?? "neutral"), open && "ring-2 ring-accent/30")}>
+          <StatusPillFace tone={STATUS_TONE[unitStatusTone(status)] ?? "neutral"} label={TRAILER_STATUS_LABELS[status] ?? status} />
         </button>
         {since && <span className="num text-[11px] text-fg-subtle" title="Time in this status">{since}</span>}
       </span>
@@ -76,7 +77,7 @@ function StatusList({ status, pending, error, onPick }: { status: string; pendin
           <li key={s} role="none">
             <button type="button" role="menuitem" disabled={pending || s === status} onClick={() => onPick(s)}
               className={cn(menuItemClass, s === status && "bg-raised font-medium")}>
-              <StatusDot tone={STATUS_TONE[s] ?? "neutral"} />
+              <StatusDot tone={STATUS_TONE[unitStatusTone(s)] ?? "neutral"} />
               <span className="flex-1">{TRAILER_STATUS_LABELS[s]}</span>
               {s === status && <span className="text-[10px] text-fg-subtle">current</span>}
               {ASKS_LOCATION.has(s) && s !== status && <span className="text-[10px] text-fg-subtle">asks where</span>}
