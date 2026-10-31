@@ -74,7 +74,7 @@ export async function releaseUnit(unit: Unit, workOrderId: string, now: Date) {
 /**
  * What a repair order reaching `status` (from `prevStatus`) does:
  *  - into the shop: the downtime clock starts (inAt), the stage pipeline starts at Diagnosing, an Available or Assigned
- *    truck goes In shop (one held out of service stays held; a vendor's or inactive truck keeps its status), a trailer
+ *    truck goes In shop (one held out of service stays held; an inactive truck keeps its status), a trailer
  *    goes In shop (SHOP) and leaves its tractor;
  *  - back to scheduled, or cancelled while in: the unit is released;
  *  - completed: the clock stops (outAt), the unit is released, a newer odometer reading moves the truck's odometer

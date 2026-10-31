@@ -12,7 +12,7 @@ import { getFormat } from "@/lib/format-server";
 import { dayKey, parseDateInput, startOfDayIn } from "@/lib/locale";
 import { setTruckDriver } from "@/lib/assignments";
 import { serviceStatus } from "@/lib/service";
-import { NEW_TRUCK_STATUSES, ODOMETER_JUMP_KM, placeFromText } from "@/app/(app)/fleet/lib";
+import { ODOMETER_JUMP_KM, placeFromText } from "@/app/(app)/fleet/lib";
 
 /*
  * Truck actions: the truck form, the one-click fixes on the truck page, notes, readings and fuel.
@@ -41,10 +41,9 @@ export async function saveTruck(truckId: string | null, _: ActionState, fd: Form
   let id = truckId;
   const res = await attempt(async () => {
     const f = fields(fd, me.company.timezone);
-    // Only a new truck takes its status from the form (in service or a vendor's); after that it changes through the
-    // status menu, which asks why for Inactive and needs a repair order for In shop.
-    const status = f.str("status") ?? "ACTIVE";
-    if (!truckId && !(NEW_TRUCK_STATUSES as readonly string[]).includes(status)) throw new FormError("Pick a valid status");
+    // A new truck starts in service; after that its status changes through the status menu, which asks why for
+    // Inactive and needs a repair order for In shop. Vendor (another company's or owner's truck) is a flag beside it.
+    const isVendor = f.bool("isVendor");
     const ownership = f.str("ownership") ?? "COMPANY";
     if (!OWNERSHIP.includes(ownership as never)) throw new FormError("Pick a valid ownership");
     const unitNumber = f.req("unitNumber", "Unit number");
@@ -75,7 +74,8 @@ export async function saveTruck(truckId: string | null, _: ActionState, fd: Form
       year: f.num("year") ?? new Date().getFullYear(),
       vin: f.str("vin")?.toUpperCase() ?? null,
       plate: f.req("plate", "Plate"),
-      ...(truckId ? {} : { status, statusSince: new Date() }),
+      ...(truckId ? {} : { status: "ACTIVE", statusSince: new Date() }),
+      isVendor,
       ownership,
       group: f.str("group"),
       homeTerminal: f.str("homeTerminal"),

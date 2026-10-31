@@ -93,8 +93,8 @@ export async function syncUnitHold(unit: UnitRef, opts: { released?: boolean } =
       db.truck.findUnique({ where: { id: unit.truckId }, select: { id: true, unitNumber: true, status: true } }),
       db.defect.count({ where: { truckId: unit.truckId, holdsUnit: true, status: { not: "CLOSED" } } }),
     ]);
-    // An inactive truck, or another owner's (Vendor), keeps its status.
-    if (truck && truck.status !== "INACTIVE" && truck.status !== "VENDOR") {
+    // An inactive truck keeps its status.
+    if (truck && truck.status !== "INACTIVE") {
       if (holding > 0 && truck.status !== "OUT_OF_SERVICE") {
         await db.truck.update({ where: { id: truck.id }, data: { status: "OUT_OF_SERVICE", statusReason: null, statusNote: null, statusSince: now } });
         out.held.push(truck.unitNumber);

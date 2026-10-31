@@ -11,11 +11,11 @@ import { SERVICE_STATE_TONE, type ServiceStatus } from "@/lib/service";
 /* ------------------------------------------------------------------ */
 
 export const TRUCK_STATUS_LABELS: Record<string, string> = {
-  ACTIVE: "Available", MAINTENANCE: "In shop", VENDOR: "Vendor", OUT_OF_SERVICE: "Out of service", INACTIVE: "Inactive",
+  ACTIVE: "Available", MAINTENANCE: "In shop", OUT_OF_SERVICE: "Out of service", INACTIVE: "Inactive",
 };
 
-/** What a new truck can start as. Later changes go through the status menu (setTruckStatus). */
-export const NEW_TRUCK_STATUSES = ["ACTIVE", "VENDOR"] as const;
+/** "3 repairs" · "1 document" · null for none (what deleting a unit also removes). */
+export const countOf = (n: number, one: string, many = `${one}s`) => (n ? `${n} ${n === 1 ? one : many}` : null);
 
 /** A truck in service reads Assigned when it has a driver and Available when it has none. */
 export const truckStatusLabel = (status: string, hasDriver: boolean) =>
@@ -60,7 +60,7 @@ export type TruckView = (typeof TRUCK_VIEWS)[number];
 export const TRUCK_VIEW_LABELS: Record<TruckView, string> = { fleet: "The fleet", off: "Off the road", archived: "Archived" };
 /** Which statuses each view lists. */
 export const TRUCK_VIEW_STATUSES: Record<TruckView, readonly string[]> = {
-  fleet: ["ACTIVE", "MAINTENANCE", "VENDOR", "OUT_OF_SERVICE"],
+  fleet: ["ACTIVE", "MAINTENANCE", "OUT_OF_SERVICE"],
   off: ["MAINTENANCE", "OUT_OF_SERVICE"],
   archived: ["INACTIVE"],
 };

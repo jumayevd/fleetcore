@@ -66,7 +66,7 @@ export async function fleetSnapshot() {
       name: `${t.make} ${t.model}`,
       year: t.year,
       plate: t.plate,
-      /** ACTIVE | MAINTENANCE | VENDOR | OUT_OF_SERVICE (INACTIVE trucks are left out). */
+      /** ACTIVE | MAINTENANCE | OUT_OF_SERVICE (INACTIVE trucks are left out). */
       status: t.status,
       group: t.group,
       odometerKm: t.odometerKm,

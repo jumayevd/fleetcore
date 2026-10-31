@@ -81,7 +81,7 @@ export default async function TruckDetail({ params, searchParams }: PageProps<"/
     truck.status === "INACTIVE" ? statusRecorders([id]) : Promise.resolve(new Map<string, string>()),
   ]);
   const statusTarget = {
-    id, unitNumber: truck.unitNumber, hasDriver: Boolean(truck.driverId), today: f.dateInput(now),
+    id, unitNumber: truck.unitNumber, hasDriver: Boolean(truck.driverId), isVendor: truck.isVendor, today: f.dateInput(now),
     scheduled: booked.map((w) => ({ id: w.id, number: w.number, title: w.title, when: f.day(w.scheduledAt) })),
     inactive: truck.status === "INACTIVE" ? inactiveInfo(truck, f, recorders.get(id)) : null,
   };

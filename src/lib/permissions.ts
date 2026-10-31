@@ -10,6 +10,8 @@ export const PERMISSIONS = {
   "tracking.view": EVERYONE,
   "fleet.view": EVERYONE,
   "fleet.edit": EDITORS,
+  /** Delete a truck or trailer with everything recorded on it (added by mistake). Sold or retired units go Inactive. */
+  "fleet.delete": ADMINS,
   "drivers.view": EVERYONE,
   "drivers.edit": EDITORS,
   "reports.view": EVERYONE,

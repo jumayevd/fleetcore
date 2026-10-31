@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import { PICKABLE_TRUCK_STATUSES } from "@/lib/constants";
 import { Badge, STATUS_TONE, StatusDot, TONE_DOT, TONE_SOFT, cn, type Tone } from "@/components/ui";
 import { Popover, menuItemClass, useMenuKeys } from "./menu";
@@ -25,7 +25,7 @@ export function StatusPillFace({ tone, label }: { tone: Tone; label: string }) {
 
 /** What picking each status does, beside it in the menu. */
 export const TRUCK_STATUS_HINT: Record<string, string> = {
-  ACTIVE: "in service", MAINTENANCE: "opens a repair order", VENDOR: "another owner's truck", INACTIVE: "asks why",
+  ACTIVE: "in service", MAINTENANCE: "opens a repair order", INACTIVE: "asks why",
 };
 
 /** The statuses to offer: Out of service only while the truck is in it (a defect sets it, nobody picks it). */
@@ -40,9 +40,9 @@ export function TruckStatusPill({ status, editable, ...t }: TruckStatusTarget & 
   const tone: Tone = STATUS_TONE[key] ?? "neutral";
   const label = truckStatusLabel(status, t.hasDriver);
   const change = useTruckStatusChange(t);
-  if (!editable) return <Badge value={key} label={label} dot />;
+  if (!editable) return <span className="inline-flex items-center gap-1.5"><Badge value={key} label={label} dot />{t.isVendor && <VendorChip />}</span>;
   return (
-    <>
+    <span className="inline-flex items-center gap-1.5">
       <Popover width={status === "INACTIVE" && t.inactive ? 340 : 256} align="start" trigger={({ open, toggle }) => (
         <button type="button" onClick={toggle} aria-haspopup="menu" aria-expanded={open} aria-label={`Status: ${label}. ${status === "INACTIVE" ? "See why, or change status" : "Change status"}`}
           className={cn(statusPillClass(tone), open && "ring-2 ring-accent/30")}>
@@ -55,17 +55,25 @@ export function TruckStatusPill({ status, editable, ...t }: TruckStatusTarget & 
             {status === "INACTIVE" && t.inactive && (
               <InactiveRecord info={t.inactive} className="mb-1" onEdit={() => change.pick("INACTIVE", () => close())} />
             )}
-            <StatusList status={status} hasDriver={t.hasDriver} pending={change.pending} pick={(s, done) => change.pick(s, (err) => { done(err); if (!err) close(); })} />
+            <StatusList status={status} hasDriver={t.hasDriver} pending={change.pending} pick={(s, done) => change.pick(s, (err) => { done(err); if (!err) close(); })}
+              isVendor={t.isVendor} toggleVendor={(done) => change.toggleVendor((err) => { done(err); if (!err) close(); })} />
           </>
         )}
       </Popover>
+      {t.isVendor && <VendorChip />}
       {change.dialogs}
-    </>
+    </span>
   );
 }
 
-function StatusList({ status, hasDriver, pending, pick }: {
+/** Beside the status of another company's or owner's truck. */
+export function VendorChip() {
+  return <span className="rounded bg-progress-soft px-1.5 py-px text-[10.5px] font-medium text-progress" title="Belongs to another company or owner">Vendor</span>;
+}
+
+function StatusList({ status, hasDriver, pending, pick, isVendor, toggleVendor }: {
   status: string; hasDriver: boolean; pending: boolean; pick: (status: string, done: (error: string | null) => void) => void;
+  isVendor: boolean; toggleVendor: (done: (error: string | null) => void) => void;
 }) {
   const { ref, onKeyDown } = useMenuKeys();
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +91,15 @@ function StatusList({ status, hasDriver, pending, pick }: {
             </button>
           </li>
         ))}
+        <li role="none" className="mt-1 border-t border-line pt-1">
+          <button type="button" role="menuitemcheckbox" aria-checked={isVendor} disabled={pending} onClick={() => { setError(null); toggleVendor(setError); }} className={menuItemClass}>
+            <span className={cn("flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border", isVendor ? "border-progress bg-progress text-white" : "border-line-strong")}>
+              {isVendor && <Check className="h-2.5 w-2.5" />}
+            </span>
+            <span className="flex-1">Vendor truck</span>
+            <span className="text-[10px] text-fg-subtle">another owner&apos;s</span>
+          </button>
+        </li>
       </ul>
       {error && <p role="alert" className="mt-1 rounded bg-danger-soft px-2 py-1 text-[11px] text-danger">{error}</p>}
       <p className="mt-1 border-t border-line px-2 pt-1.5 text-[10px] leading-4 text-fg-subtle">

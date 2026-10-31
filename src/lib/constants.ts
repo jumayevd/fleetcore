@@ -42,12 +42,13 @@ export const EQUIPMENT_LABELS: Record<string, string> = {
 
 /**
  * ACTIVE: in service, shown as Available without a driver and Assigned with one (both automatic) · MAINTENANCE: In shop,
- * only through a repair order in the shop · VENDOR: belongs to another company or owner (not leased), set by hand ·
- * OUT_OF_SERVICE: held by a "fix before next load" defect, never set by hand · INACTIVE: set by hand with a reason.
+ * only through a repair order in the shop · OUT_OF_SERVICE: held by a "fix before next load" defect, never set by hand
+ * · INACTIVE: set by hand with a reason. Vendor is not a status: Truck.isVendor flags another company's or owner's
+ * truck, which keeps its own status and also counts as Vendor.
  */
-export const TRUCK_STATUSES = ["ACTIVE", "MAINTENANCE", "VENDOR", "OUT_OF_SERVICE", "INACTIVE"] as const;
+export const TRUCK_STATUSES = ["ACTIVE", "MAINTENANCE", "OUT_OF_SERVICE", "INACTIVE"] as const;
 /** What the status menu offers. In shop opens a repair order; Out of service only comes from a defect. */
-export const PICKABLE_TRUCK_STATUSES = ["ACTIVE", "MAINTENANCE", "VENDOR", "INACTIVE"] as const;
+export const PICKABLE_TRUCK_STATUSES = ["ACTIVE", "MAINTENANCE", "INACTIVE"] as const;
 /** Why a truck is set Inactive (Truck.statusReason). */
 export const INACTIVE_REASONS = ["SOLD", "ACCIDENT", "STOLEN", "TOTAL_LOSS", "RETURNED", "MECHANICAL", "OTHER"] as const;
 export const INACTIVE_REASON_LABELS: Record<string, string> = {

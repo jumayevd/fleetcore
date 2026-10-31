@@ -43,6 +43,7 @@ const TABLE_ID = "trailer-table";
 export default async function TrailersPage({ searchParams }: PageProps<"/fleet/trailers">) {
   const user = await requireUser("fleet.view");
   const editable = can(user.role, "fleet.edit");
+  const canDelete = can(user.role, "fleet.delete");
   const f = await getFormat();
   const sp = await searchParams;
   // Other modules link a trailer as /fleet/trailers?unit=<id>[&tab=compliance]; send those to the detail page.
@@ -251,7 +252,7 @@ export default async function TrailersPage({ searchParams }: PageProps<"/fleet/t
                         className={cn("num", onFile === 0 && "text-fg-subtle")} />
                     </Link>
                   </td>
-                  <td className="text-right"><TrailerRowMenu id={t.id} truckId={t.truckId} editable={editable} /></td>
+                  <td className="text-right"><TrailerRowMenu id={t.id} truckId={t.truckId} editable={editable} canDelete={canDelete} /></td>
                 </LinkRow>
               );
             })}

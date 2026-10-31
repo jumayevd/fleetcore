@@ -8,7 +8,7 @@ import { Button, Input, LinkButton, Textarea, cn } from "@/components/ui";
 import { FormMessage } from "@/components/forms";
 import { Overlay } from "@/components/inspections/overlay";
 import { startRepair } from "@/app/actions/repairs";
-import { setTruckStatus } from "./actions";
+import { setTruckStatus, setTruckVendor } from "./actions";
 
 /** A repair order booked for the truck that has not gone in yet ("check in" puts the truck In shop). */
 export type ScheduledRepair = { id: string; number: number; title: string; when: string };
@@ -20,6 +20,8 @@ export type InactiveInfo = {
 
 export type TruckStatusTarget = {
   id: string; unitNumber: string; hasDriver: boolean; today: string; scheduled: ScheduledRepair[];
+  /** Another company's or owner's truck (a flag beside the status, not a status). */
+  isVendor: boolean;
   /** Set while the truck is Inactive: shown when its status is opened, and what Edit starts from. */
   inactive?: InactiveInfo | null;
 };
@@ -32,9 +34,10 @@ const DETAIL_HINT: Record<string, string> = {
 };
 
 /**
- * One way to change a truck's status, for the pill on the trucks list and the menu on the truck page. Available and
- * Vendor apply at once; Inactive asks why first; In shop asks why and then needs a repair order: a new one (the
- * truck goes In shop when it is saved) or checking in one already booked. `pick` returns an error to show, if any.
+ * One way to change a truck's status, for the pill on the trucks list and the menu on the truck page. Available applies
+ * at once; Inactive asks why first; In shop asks why and then needs a repair order: a new one (the truck goes In shop
+ * when it is saved) or checking in one already booked. `pick` returns an error to show, if any. `toggleVendor` flags
+ * another owner's truck, beside its status.
  */
 export function useTruckStatusChange(t: TruckStatusTarget) {
   const [pending, start] = useTransition();
@@ -54,6 +57,15 @@ export function useTruckStatusChange(t: TruckStatusTarget) {
       }
     });
   };
+  /** Mark or unmark the truck as a vendor's: it keeps its status either way. */
+  const toggleVendor = (onDone: (error: string | null) => void) => start(async () => {
+    try {
+      const res = await setTruckVendor(t.id, !t.isVendor);
+      onDone(res?.error ?? null);
+    } catch {
+      onDone("Could not save. Refresh the page and try again.");
+    }
+  });
   const close = () => setAsking(null);
   // The dialogs render into <body>, but React still bubbles their clicks to the list row, which would open the truck.
   const dialogs = (
@@ -62,7 +74,7 @@ export function useTruckStatusChange(t: TruckStatusTarget) {
       {asking === "MAINTENANCE" && <ShopDialog t={t} onClose={close} />}
     </span>
   );
-  return { pick, pending, dialogs };
+  return { pick, toggleVendor, pending, dialogs };
 }
 
 function Choice({ name, value, checked, onPick, children }: { name: string; value: string; checked: boolean; onPick: (v: string) => void; children: React.ReactNode }) {

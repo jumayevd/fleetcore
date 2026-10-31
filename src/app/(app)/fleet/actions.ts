@@ -12,6 +12,8 @@ import { getFormat } from "@/lib/format-server";
 import { parseDateInput } from "@/lib/locale";
 import { defectLabel, roLabel } from "@/lib/service";
 import { setTruckDriver } from "@/lib/assignments";
+import { can } from "@/lib/permissions";
+import { deleteFile } from "@/lib/storage";
 import { placeFromText, truckStatusLabel, UNHOOKED_TRAILER_STATUSES } from "./lib";
 
 /*
@@ -84,6 +86,58 @@ export async function setTruckStatus(truckId: string, status: string, details?: 
     if (truck.status === status) return { ok: `${u}: the inactive record is saved` };
     const label = (truckStatusLabel(status, Boolean(truck.driverId) && !ended) ?? humanize(status)).toLowerCase();
     return { ok: `${u} is now ${label}${ended ? " and no longer has a driver" : ""}` };
+  });
+}
+
+/** Vendor is a flag, not a status: another company's or owner's truck, which keeps its own status. */
+export async function setTruckVendor(truckId: string, isVendor: boolean): Promise<ActionState> {
+  const me = await requireUser("fleet.edit");
+  return attempt(async () => {
+    const truck = await db.truck.findUnique({ where: { id: truckId }, select: { unitNumber: true, isVendor: true } });
+    if (!truck) throw new FormError("This truck no longer exists. Refresh the page.");
+    if (truck.isVendor !== isVendor) {
+      await db.truck.update({ where: { id: truckId }, data: { isVendor } });
+      await audit(me.id, "update", "truck", truckId, `${truck.unitNumber}: ${isVendor ? "marked as a vendor's truck" : "no longer a vendor's truck"}`);
+    }
+    revalidatePath("/fleet");
+    revalidatePath(`/fleet/${truckId}`);
+    return { ok: isVendor ? `${truck.unitNumber} is a vendor's truck` : `${truck.unitNumber} is no longer a vendor's truck` };
+  });
+}
+
+/**
+ * Owners and admins: delete a truck or trailer added by mistake, with everything recorded on it (repairs, documents
+ * and their files, defects, walk-arounds, fuel, driver history). `confirm` must be its unit number. Sold, stolen or
+ * retired units belong in Inactive, which keeps their history.
+ */
+export async function deleteUnit(kind: "truck" | "trailer", id: string, confirm: string): Promise<ActionState> {
+  const me = await requireUser("fleet.edit");
+  return attempt(async () => {
+    if (!can(me.role, "fleet.delete")) throw new FormError(`Only an owner or admin can delete a ${kind}.`);
+    const unit = kind === "truck"
+      ? await db.truck.findUnique({ where: { id }, select: { unitNumber: true, make: true, model: true } })
+      : await db.trailer.findUnique({ where: { id }, select: { unitNumber: true, type: true, truckId: true } });
+    if (!unit) throw new FormError(`This ${kind} no longer exists. It may have been deleted already.`);
+    if (confirm.trim() !== unit.unitNumber) throw new FormError(`Type ${unit.unitNumber} to confirm.`);
+    // Files of the unit, its repairs and (trucks) its pickup photos go with it; the rows cascade in the database.
+    const docs = await db.document.findMany({
+      where: kind === "truck"
+        ? { OR: [{ truckId: id }, { workOrder: { truckId: id } }, { assignment: { truckId: id } }] }
+        : { OR: [{ trailerId: id }, { workOrder: { trailerId: id } }] },
+      select: { storageKey: true },
+    });
+    if (kind === "truck") await db.truck.delete({ where: { id } });
+    else await db.trailer.delete({ where: { id } });
+    await Promise.all(docs.map((d) => deleteFile(d.storageKey).catch(() => undefined)));
+    await audit(me.id, "delete", kind, null, `${unit.unitNumber}${"make" in unit ? ` ${unit.make} ${unit.model}` : ""}${docs.length ? ` · ${docs.length} file${docs.length > 1 ? "s" : ""}` : ""}`);
+    revalidatePath("/fleet");
+    revalidatePath("/fleet/trailers");
+    revalidatePath("/dashboard");
+    revalidatePath("/tracking");
+    revalidatePath("/inspections");
+    revalidatePath("/maintenance");
+    if ("truckId" in unit && unit.truckId) revalidatePath(`/fleet/${unit.truckId}`);
+    return { ok: `${unit.unitNumber} deleted` };
   });
 }
 

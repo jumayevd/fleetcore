@@ -79,12 +79,14 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
   const group = str(sp.group);
   const type = str(sp.type);
   const q = str(sp.q);
-  const params = { view: view === "fleet" ? undefined : view, status, attention, service, docs: docsFilter, ownership, driver, group, type, q };
+  /** Vendor trucks (another company's or owner's) in any status, Inactive included. */
+  const vendor = str(sp.vendor) === "1" ? "1" : undefined;
+  const params = { view: view === "fleet" ? undefined : view, status, attention, service, docs: docsFilter, ownership, driver, group, type, q, vendor };
 
   const [all, docRows, defects, trailerCount, types, inShopRows] = await Promise.all([
     db.truck.findMany({
       select: {
-        id: true, status: true, group: true, homeTerminal: true, driverId: true, ownership: true, truckTypeId: true,
+        id: true, status: true, isVendor: true, group: true, homeTerminal: true, driverId: true, ownership: true, truckTypeId: true,
         odometerKm: true, odometerAt: true, pmIntervalKm: true, lastPmKm: true, lastPmAt: true, nextServiceKm: true,
         insuranceExpiry: true, inspectionExpiry: true, registrationExpiry: true,
         truckType: { select: { name: true, oilIntervalKm: true } },
@@ -146,6 +148,8 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
   const working = all.filter((t) => t.status !== "INACTIVE");
   const available = all.filter((t) => t.status === "ACTIVE" && !t.driverId).length;
   const assigned = all.filter((t) => t.status === "ACTIVE" && t.driverId).length;
+  // A vendor's truck also counts in its own status's tile (Available, Assigned, In shop, Inactive).
+  const vendors = all.filter((t) => t.isVendor).length;
   const attentionCount = working.filter((t) => fact(t.id).reasons.length > 0).length;
   const viewCount = (v: TruckView) => all.filter((t) => TRUCK_VIEW_STATUSES[v].includes(t.status)).length;
   const groups = [...new Set(all.flatMap((t) => [t.group, t.homeTerminal]).filter((g): g is string => Boolean(g)))].sort();
@@ -164,7 +168,9 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
   const like = { contains: q ?? "", mode: "insensitive" as const };
   const where: Prisma.TruckWhereInput = {
     AND: [
-      { status: { in: status ? [status] : [...TRUCK_VIEW_STATUSES[view]] } },
+      // The Vendor counter lists vendor trucks in every status, Inactive included.
+      { status: { in: status ? [status] : vendor ? [...TRUCK_STATUSES] : [...TRUCK_VIEW_STATUSES[view]] } },
+      vendor ? { isVendor: true } : {},
       ownership ? { ownership } : {},
       group ? { OR: [{ group }, { homeTerminal: group }] } : {},
       type ? (type === "none" ? { truckTypeId: null } : { truckTypeId: type }) : {},
@@ -201,13 +207,13 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
   const filtered = Object.entries(params).some(([k, v]) => k !== "view" && v);
   // A counter filters the list to what it counts; a second click clears it.
   const counter = (on: boolean, href: string, node: React.ReactNode) => (
-    <Link href={on ? qs({ status: undefined, attention: undefined, view: undefined, driver: undefined }) : href} aria-current={on || undefined}
+    <Link href={on ? qs({ status: undefined, attention: undefined, view: undefined, driver: undefined, vendor: undefined }) : href} aria-current={on || undefined}
       className={cn("group block rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40", on && "ring-2 ring-accent/40")}>
       {node}
     </Link>
   );
   const tileClass = "h-full transition-[border-color,box-shadow] group-hover:border-line-strong group-hover:shadow-lift";
-  const only = (patch: Partial<typeof params>) => qs({ status: undefined, attention: undefined, view: undefined, driver: undefined, ...patch });
+  const only = (patch: Partial<typeof params>) => qs({ status: undefined, attention: undefined, view: undefined, driver: undefined, vendor: undefined, ...patch });
   const statusChip = status === "ACTIVE" ? (driver === "none" ? "Available" : driver === "assigned" ? "Assigned" : "In service") : status ? TRUCK_STATUS_LABELS[status] : null;
   const chipClass = "inline-flex h-7 items-center gap-1 rounded-full bg-accent-soft px-2.5 text-[12px] font-medium text-accent-text hover:opacity-80";
   const col = (key: string, label: React.ReactNode) => <span key={key} data-col={key} className="inline-flex items-center gap-1">{label}</span>;
@@ -240,17 +246,18 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
         {counter(Boolean(attention), only({ attention: "1" }),
           <Stat className={tileClass} label="Needs attention" value={attentionCount} icon={<TriangleAlert />} tone={attentionCount ? "danger" : "ok"}
             hint={attentionCount ? "out of service, defects to fix now, oil overdue or papers expired" : "nothing to follow up"} />)}
-        {counter(status === "VENDOR", only({ status: "VENDOR" }),
-          <Stat className={tileClass} label="Vendor" value={count("VENDOR")} icon={<Store />} tone={count("VENDOR") ? "progress" : "neutral"}
-            hint="belongs to another company or owner (not leased)" />)}
+        {counter(Boolean(vendor) && !status, only({ vendor: "1" }),
+          <Stat className={tileClass} label="Vendor" value={vendors} icon={<Store />} tone={vendors ? "progress" : "neutral"}
+            hint="another company's or owner's trucks, in any status" />)}
       </div>
 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <Segmented active={status && status !== "INACTIVE" ? "" : view} items={TRUCK_VIEWS.map((v) => ({
-            key: v, label: TRUCK_VIEW_LABELS[v], count: viewCount(v), href: qs({ view: v === "fleet" ? undefined : v, status: undefined }),
+          <Segmented active={(status && status !== "INACTIVE") || vendor ? "" : view} items={TRUCK_VIEWS.map((v) => ({
+            key: v, label: TRUCK_VIEW_LABELS[v], count: viewCount(v), href: qs({ view: v === "fleet" ? undefined : v, status: undefined, vendor: undefined }),
           }))} />
           {status && status !== "INACTIVE" && <Link href={qs({ status: undefined, ...(status === "ACTIVE" ? { driver: undefined } : {}) })} className={chipClass}>{statusChip}<X className="h-3 w-3" /></Link>}
+          {vendor && <Link href={qs({ vendor: undefined })} className={chipClass}>Vendor<X className="h-3 w-3" /></Link>}
           {attention && <Link href={qs({ attention: undefined })} className={chipClass}>Needs attention<X className="h-3 w-3" /></Link>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -321,7 +328,7 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
                   </td>
                   <td data-col="type" className="whitespace-nowrap text-fg-muted">{t.truckType?.name ?? <span className="text-fg-faint">No type</span>}</td>
                   <td data-col="status">
-                    <TruckStatusPill id={t.id} unitNumber={t.unitNumber} status={t.status} hasDriver={Boolean(t.driverId)} editable={editable} today={today}
+                    <TruckStatusPill id={t.id} unitNumber={t.unitNumber} status={t.status} hasDriver={Boolean(t.driverId)} isVendor={t.isVendor} editable={editable} today={today}
                       scheduled={r && r.status !== "IN_PROGRESS" ? [{ id: r.id, number: r.number, title: r.title, when: f.day(r.scheduledAt) }] : []}
                       inactive={t.status === "INACTIVE" ? inactiveInfo(t, f, recorders.get(t.id)) : null} />
                     {t.status === "INACTIVE" && (t.statusReason || t.statusSince) && (

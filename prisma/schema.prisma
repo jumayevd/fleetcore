@@ -220,9 +220,11 @@ model Truck {
   year               Int
   vin                String?
   plate              String
-  /// ACTIVE (Available, or Assigned with a driver) | MAINTENANCE (In shop: a repair order has it) | VENDOR (another
-  /// company's or owner's truck) | OUT_OF_SERVICE (held by a "fix before next load" defect) | INACTIVE
+  /// ACTIVE (Available, or Assigned with a driver) | MAINTENANCE (In shop: a repair order has it) | OUT_OF_SERVICE
+  /// (held by a "fix before next load" defect) | INACTIVE
   status             String               @default("ACTIVE")
+  /// A vendor's truck: belongs to another company or owner (not leased). Set by hand; the truck keeps its own status.
+  isVendor           Boolean              @default(false)
   /// Why it is Inactive (INACTIVE_REASONS), with any details, and when the status started.
   statusReason       String?
   statusNote         String?
