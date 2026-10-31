@@ -304,6 +304,41 @@ export async function saveWalkAroundReview(_: ActionState, fd: FormData): Promis
   redirect(target);
 }
 
+/**
+ * Owners and admins: undo one truck's walk-around for one week, back to Nothing sent: the video mark, the review, its
+ * Soon / Now marks (which otherwise stay on the record) and every defect it raised. A truck those defects held goes
+ * back into service once nothing else holds it. The audit log keeps what was removed. Then closes the drawer.
+ */
+export async function resetWalkAround(truckId: string, weekKey: string, closeHref: string): Promise<ActionState> {
+  const me = await requireUser("fleet.edit");
+  const f = formatFor(me);
+  const res = await attempt(async () => {
+    if (!can(me.role, "walkarounds.reset")) throw new FormError("Only an owner or admin can reset a walk-around.");
+    const week = resolveWeek(f, weekKey);
+    if (week.key !== weekKey) throw new FormError("That week can't be reset. Pick a week from the board.");
+    const truck = await db.truck.findUnique({ where: { id: truckId }, select: { unitNumber: true } });
+    if (!truck) throw new FormError("This truck no longer exists.");
+    const wa = await db.walkAround.findUnique({
+      where: { truckId_weekStart: { truckId, weekStart: dateOnly(week.key) } },
+      include: { ratings: { where: { rating: { in: ["SOON", "NOW"] } }, select: { component: true, rating: true } }, defects: { select: { id: true, number: true, holdsUnit: true, status: true } } },
+    });
+    if (!wa) throw new FormError(`${truck.unitNumber} has nothing recorded for the week of ${f.day(week.at)}.`);
+    await db.defect.deleteMany({ where: { id: { in: wa.defects.map((d) => d.id) } } });
+    await db.walkAround.delete({ where: { id: wa.id } }); // its marks go with it
+    const hold = wa.defects.some((d) => d.holdsUnit && d.status !== "CLOSED") ? await syncUnitHold({ truckId }, { released: true }) : { held: [], released: [] };
+    await audit(me.id, "reset", "walk_around", null, [
+      `${truck.unitNumber} · week of ${week.key}: back to nothing sent`,
+      `was ${wa.video.toLowerCase()}${wa.reviewedAt ? `, reviewed ${wa.result?.toLowerCase() ?? ""}` : ""}`,
+      wa.ratings.length ? `marks ${wa.ratings.map((r) => `${componentLabel(r.component).toLowerCase()} ${PTI_RATING_LABELS[r.rating]}`).join(", ")}` : null,
+      wa.defects.length ? `deleted ${wa.defects.map((d) => defectLabel(d.number)).join(", ")}` : null,
+      hold.released.length ? "back in service" : null,
+    ].filter(Boolean).join(" · "));
+  });
+  if (res?.error) return res;
+  revalidateInspections([{ truckId }]);
+  redirect(closeHref.startsWith("/inspections") ? closeHref : "/inspections");
+}
+
 /* ------------------------------------------------------------------ */
 /* Defects                                                             */
 /* ------------------------------------------------------------------ */

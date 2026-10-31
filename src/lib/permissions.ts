@@ -25,6 +25,8 @@ export const PERMISSIONS = {
   "defects.closeWithoutNote": ADMINS,
   /** Delete a defect for good (reported by mistake or twice). The audit log keeps what it was. */
   "defects.delete": ADMINS,
+  /** Undo a week's walk-around (its video mark, review, Soon / Now marks and the defects it raised): back to Nothing sent. */
+  "walkarounds.reset": ADMINS,
   "company.delete": ["OWNER"],
 } as const satisfies Record<string, readonly Role[]>;
 

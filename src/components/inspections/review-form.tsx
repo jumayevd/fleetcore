@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
-import { CheckCheck, Lock, Video, VideoOff } from "lucide-react";
+import { useRef, useState, useTransition } from "react";
+import { CheckCheck, Lock, RotateCcw, Video, VideoOff } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Chip, Field, Input, Textarea, TONE_SOFT, buttonClass, cn, inputClass, type Tone } from "@/components/ui";
 import { PTI_COMPONENTS, PTI_RATINGS, PTI_RATING_LABELS } from "@/lib/constants";
@@ -11,7 +11,7 @@ import {
   RATING_HINTS, RATING_SEVERITY, RATING_TONE, SEVERITY_SHORT, SEVERITY_TONE, VERDICTS, VERDICT_HINTS, VERDICT_LABELS, VERDICT_TONE,
   allowedRatings, componentLabel, plural, type Verdict,
 } from "@/lib/pti-shared";
-import { saveWalkAroundReview } from "@/app/actions/inspections";
+import { resetWalkAround, saveWalkAroundReview } from "@/app/actions/inspections";
 
 export type ReviewEarlierDefect = {
   id: string; number: number; component: string; description: string; severity: string; status: string;
@@ -45,6 +45,8 @@ export type ReviewFormProps = {
   noteOptional: boolean;
   /** Saved Soon / Now marks whose defect was confirmed fixed or deleted: they stay exactly as they are. */
   settled: string[];
+  /** Owners and admins: Reset to nothing sent (undoes the week's video mark, review, marks and the defects it raised). */
+  canReset: boolean;
 };
 
 type Opt = { value: string; label: string; tone: Tone; hint?: string; disabled?: boolean };
@@ -280,7 +282,41 @@ export function ReviewForm(p: ReviewFormProps) {
           </span>
         )}
         <Link href={p.closeHref} scroll={false} className={buttonClass("ghost")}>Cancel</Link>
+        {p.canReset && p.video !== "AWAITING" && <ResetButton p={p} />}
       </div>
     </ActionForm>
+  );
+}
+
+/**
+ * Owners and admins: back to Nothing sent. Removes the week's video mark, the review, its Soon / Now marks and the
+ * defects it raised, after a confirm that names them.
+ */
+function ResetButton({ p }: { p: ReviewFormProps }) {
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const raised = Object.values(p.thisWeek).map((d) => defectLabel(d.number));
+  const reset = () => {
+    const also = [p.reviewed ? "the review and its marks" : null, raised.length ? raised.join(", ") : null].filter(Boolean).join(" and ");
+    if (!window.confirm(`Reset ${p.unitNumber} for the week of ${p.weekLabel} to Nothing sent?\n\nThis removes the video mark${also ? `, ${also}` : ""}. It can't be undone.`)) return;
+    start(async () => {
+      setError(null);
+      try {
+        const res = await resetWalkAround(p.truckId, p.week, p.closeHref);
+        if (res?.error) setError(res.error);
+      } catch (e) {
+        // The redirect back to the board arrives as a thrown navigation; anything else is a real failure.
+        if (!(e instanceof Error && /NEXT_REDIRECT/.test(e.message))) setError("Could not reset it. Refresh the page and try again.");
+      }
+    });
+  };
+  return (
+    <span className="ml-auto flex items-center gap-2">
+      {error && <span role="alert" className="text-[12px] text-danger">{error}</span>}
+      <button type="button" onClick={reset} disabled={pending} title="Owners and admins: undo this week's video mark, review, marks and the defects it raised"
+        className="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[12px] font-medium text-danger transition-colors hover:bg-danger-soft disabled:opacity-50 [&_svg]:h-3.5 [&_svg]:w-3.5">
+        <RotateCcw />{pending ? "Resetting…" : "Reset to nothing sent"}
+      </button>
+    </span>
   );
 }

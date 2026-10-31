@@ -223,6 +223,7 @@ export default async function PreTripBoard({ searchParams }: PageProps<"/inspect
         })),
         members: members.map((m) => ({ id: m.id, name: m.name })),
         noteOptional,
+        canReset: can(me.role, "walkarounds.reset"),
         // Saved Soon / Now marks whose defect was confirmed fixed or deleted, with no earlier defect tracking them.
         settled: (w?.ratings ?? []).filter((r) => RATING_SEVERITY[r.rating]).map((r) => r.component).filter((c) => {
           const own = w?.defects.find((d) => d.component === c);
