@@ -339,20 +339,23 @@ export function Checkbox({ label, className, ...props }: ComponentProps<"input">
 /* Data display                                                        */
 /* ------------------------------------------------------------------ */
 
-export function Table({ head, children, empty, emptyTitle, emptyDescription, dense, className, stickyHead = true }: {
+export function Table({ head, children, empty, emptyTitle, emptyDescription, dense, grid, className, stickyHead = true }: {
   head: ReactNode[]; children: ReactNode; empty?: boolean; emptyTitle?: string; emptyDescription?: string;
   dense?: boolean; className?: string; stickyHead?: boolean;
+  /** Lines between the columns too, so a wide table of figures reads as a grid. */
+  grid?: boolean;
 }) {
   return (
     <div className={clsx("overflow-auto", className)}>
       <table className="w-full min-w-max text-[13px]">
         <thead className={clsx(stickyHead && "sticky top-0 z-10")}>
           <tr className="bg-raised text-left text-[12px] text-fg-subtle">
-            {head.map((h, i) => <th key={i} className={clsx("whitespace-nowrap border-b border-line px-3 font-medium first:pl-4 last:pr-4", dense ? "py-1.5" : "py-2")}>{h}</th>)}
+            {head.map((h, i) => <th key={i} className={clsx("whitespace-nowrap border-b border-line px-3 font-medium first:pl-4 last:pr-4", dense ? "py-1.5" : "py-2", grid && "border-l first:border-l-0")}>{h}</th>)}
           </tr>
         </thead>
         {/* Rows only as tall as their text: little padding, and lines set close (see Cell). */}
-        <tbody className={clsx("divide-y divide-line [&_td]:px-3 [&_td]:leading-[1.35] [&_td:first-child]:pl-4 [&_td:last-child]:pr-4 [&_tr]:transition-colors [&_tr:hover]:bg-raised", dense ? "[&_td]:py-1" : "[&_td]:py-1.5")}>{children}</tbody>
+        <tbody className={clsx("divide-y divide-line [&_td]:px-3 [&_td]:leading-[1.35] [&_td:first-child]:pl-4 [&_td:last-child]:pr-4 [&_tr]:transition-colors [&_tr:hover]:bg-raised", dense ? "[&_td]:py-1" : "[&_td]:py-1.5",
+          grid && "[&_td]:border-l [&_td]:border-line [&_td:first-child]:border-l-0")}>{children}</tbody>
       </table>
       {empty && <EmptyState title={emptyTitle ?? "Nothing here yet"} description={emptyDescription} />}
     </div>

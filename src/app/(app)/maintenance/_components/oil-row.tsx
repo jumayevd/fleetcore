@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useState, useTransition, type KeyboardEvent } from "react";
-import { Badge, Progress, cn, inputClass } from "@/components/ui";
+import { CircleAlert, CircleCheck, CircleMinus, Clock, TriangleAlert, type LucideIcon } from "lucide-react";
+import { Progress, TONE_SOFT, cn, inputClass } from "@/components/ui";
 import { useFormat } from "@/components/locale";
 import type { Formatter } from "@/lib/locale";
 import { roLabel, serviceStatus, SERVICE_STATE_LABELS, SERVICE_STATE_TONE, type ServiceStatus } from "@/lib/service";
@@ -104,14 +105,20 @@ export function OilRow({ t, editable, highlighted, now, types }: {
           {editable ? <TruckTypeSelect truckId={t.id} value={t.truckTypeId} types={types} /> : <p className="text-[11px] text-fg-subtle">{s.intervalFrom ?? "truck's own"}</p>}
         </div>
       </td>
-      <td className="min-w-32 whitespace-nowrap">
-        {s.used != null ? <span className="num">{s.stale ? "≥ " : ""}{f.dist(s.used)}</span> : <span className="text-fg-faint">—</span>}
-        {s.pct != null && <Progress value={Math.min(1, s.pct)} tone={tone === "neutral" ? "neutral" : tone} className="mt-1.5 w-28" />}
+      {/* The bar across the cell, what has been used under it (the interval is its own column). */}
+      <td className="w-[22%] min-w-48 whitespace-nowrap">
+        {s.pct != null ? (
+          <>
+            <Progress value={Math.min(1, s.pct)} tone={tone === "neutral" ? "neutral" : tone} className="w-full" />
+            <p className="mt-1 text-[11.5px] text-fg-muted"><span className="num font-medium text-fg">{s.stale ? "≥ " : ""}{f.dist(s.used)}</span> used</p>
+          </>
+        ) : s.used != null ? (
+          <p className="text-[11.5px] text-fg-muted"><span className="num font-medium text-fg">{s.stale ? "≥ " : ""}{f.dist(s.used)}</span> used</p>
+        ) : <span className="text-fg-faint">—</span>}
       </td>
-      <td className="num whitespace-nowrap text-fg-muted">{s.dueAtKm != null ? f.dist(s.dueAtKm) : <span className="text-fg-faint">—</span>}</td>
-      <td className="min-w-40">
-        <Badge value={s.state} tone={tone} label={SERVICE_STATE_LABELS[s.state]} />
-        <p className={cn("num mt-0.5 text-[11px]", s.state === "overdue" ? "text-danger" : "text-fg-subtle")}>{statusLine(s, f)}</p>
+      <td className="num whitespace-nowrap text-right text-fg-muted">{s.dueAtKm != null ? f.dist(s.dueAtKm) : <span className="text-fg-faint">—</span>}</td>
+      <td className="whitespace-nowrap">
+        <StatusPill s={s} f={f} />
       </td>
       <td className="min-w-48 max-w-64">
         {editable ? (
@@ -150,6 +157,28 @@ export function OilRow({ t, editable, highlighted, now, types }: {
         </p>
       </td>
     </tr>
+  );
+}
+
+const STATE_ICON: Record<ServiceStatus["state"], LucideIcon> = {
+  overdue: CircleAlert, due_now: TriangleAlert, due_soon: TriangleAlert, ok: CircleCheck, no_reading: Clock, unknown: CircleMinus,
+};
+
+/**
+ * The status as one tinted pill with its figure: "! 4,119 mi over", "189 mi left". No recent reading and no oil change
+ * recorded say so; the label and the full line are on hover.
+ */
+function StatusPill({ s, f }: { s: ServiceStatus; f: Formatter }) {
+  const tone = SERVICE_STATE_TONE[s.state];
+  const Icon = STATE_ICON[s.state];
+  const text = s.state === "overdue" ? `${s.stale ? "≥ " : ""}${f.dist(-(s.left ?? 0))} over`
+    : s.state === "due_now" || s.state === "due_soon" || s.state === "ok" ? `${f.dist(s.left)} left`
+      : s.state === "no_reading" ? "No recent reading" : "Not recorded";
+  return (
+    <span title={`${SERVICE_STATE_LABELS[s.state]} · ${statusLine(s, f)}`}
+      className={cn("num inline-flex h-6 items-center gap-1 rounded-md border border-current/25 px-2 text-[12px] font-medium", TONE_SOFT[tone])}>
+      <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />{text}
+    </span>
   );
 }
 

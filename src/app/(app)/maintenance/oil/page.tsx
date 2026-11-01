@@ -163,7 +163,7 @@ export default async function OilBoard({ searchParams }: PageProps<"/maintenance
           <SearchBox action="/maintenance/oil" q={str(sp.q)} keep={keep} placeholder="Search unit, driver, type" />
         </div>
         {/* Editors type the shop and the last oil change straight into the row; the row works out the rest. */}
-        <Table head={["Unit", "Odometer", "Interval", "Used", "Due at", "Status", "Shop", "Last change"]} empty={rows.length === 0}
+        <Table grid head={["Unit", "Odometer", "Interval", "Used", <span key="due" className="block text-right">Due at</span>, "Status", "Shop", "Last change"]} empty={rows.length === 0}
           emptyTitle={all.length ? "Nothing matches" : "No trucks in service"}
           emptyDescription={all.length ? "Clear the search or pick another tile." : "Trucks appear here once they are added to the fleet."}>
           {rows.map(({ t, booked }) => (
