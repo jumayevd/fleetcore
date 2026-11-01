@@ -38,13 +38,13 @@ Every page must look right in **both** themes.
 |---|---|---|---|
 | Page background | `bg-canvas` | #F3F4F7 | #0B0D12 |
 | Card / panel | `bg-surface` | #FFFFFF | #12151C |
-| Hover row / table head | `bg-raised` | #F5F6F8 | #1A1E27 |
+| Hover row / table head | `bg-raised` | #F5F6F8 | #181C25 |
 | Inset / segmented track | `bg-sunken` | #ECEEF2 | #0E1117 |
-| Floating layer | `bg-overlay` | #FFFFFF | #171B24 |
-| Hairline / strong line | `border-line` / `border-line-strong` | #E7E9EE / #D3D8E0 | #242A35 / #353D4B |
-| Text, secondary, tertiary, faint | `text-fg` `-muted` `-subtle` `-faint` | #101828 … #98A2B3 | #F0F2F5 … #545D6C |
-| Accent | `bg-accent` `text-accent-text` `bg-accent-soft` | follows the accent choice | |
-| Status | `ok` `warn` `danger` `info` `progress` (+ `-soft`) | green, orange, red, cyan, violet | |
+| Floating layer | `bg-overlay` | #FFFFFF | #181C25 |
+| Hairline / strong line | `border-line` / `border-line-strong` | #E7E9EE / #D3D8E0 | #232834 / #323846 |
+| Text, secondary, tertiary, faint | `text-fg` `-muted` `-subtle` `-faint` | #101828 … #98A2B3 | #E8EAF0 / #9AA3B2 … #535B6A |
+| Accent | `bg-accent` `text-accent-text` `bg-accent-soft` | follows the accent choice | #8B7CF6, hover #A094FA (default and Violet; other choices override) |
+| Status | `ok` `warn` `danger` `info` `progress` (+ `-soft`) | green, orange, red, cyan, violet | #34D399, #F5A524, #F26D6D, #38BDF8, #9B8AFB |
 | Categorical hues | `bg-hue-N-soft text-hue-N` (N = 1…6) | blue, violet, teal, amber, pink, green | |
 
 Shadows: `shadow-card` (resting), `shadow-lift` (hover), `shadow-float` (menus, drawers).
