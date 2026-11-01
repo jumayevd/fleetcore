@@ -9,3 +9,6 @@ export const writeOpen = (v: boolean) => {
   listeners.forEach((l) => l());
 };
 export const subscribeOpen = (cb: () => void) => { listeners.add(cb); return () => { listeners.delete(cb); }; };
+
+/** Where the panel opens: top right, just under the header that holds the assistant button. */
+export const ASSISTANT_DOCK = "fixed right-4 top-16 print:hidden";

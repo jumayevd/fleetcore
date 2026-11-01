@@ -13,7 +13,7 @@ import {
 } from "@/lib/assistant/shared";
 import { ACTIVE_COOKIE, parseWorkspaceKey } from "@/lib/workspace-shared";
 
-import { readOpen, subscribeOpen, writeOpen } from "./open-store";
+import { ASSISTANT_DOCK, readOpen, subscribeOpen, writeOpen } from "./open-store";
 
 type ChatHelpers = UseChatHelpers<FleetAgentUIMessage>;
 
@@ -86,30 +86,24 @@ export function AssistantChat({ companyId, userId }: { companyId?: string | null
   const switched = info?.companyId && ws.companyId && info.companyId !== ws.companyId
     ? `This browser now works in ${info.company ?? "another company"}. Reload the page to ask about ${info.company ?? "it"}.`
     : null;
-  const launcherRef = useRef<HTMLButtonElement>(null);
   const refocus = useRef(false);
 
-  // Hand focus back to the launcher once the panel has closed (the button remounts when `open` flips).
+  // Hand focus back to the assistant button in the top bar once the panel has closed.
   useEffect(() => {
     if (open || !refocus.current) return;
     refocus.current = false;
-    launcherRef.current?.focus();
+    document.getElementById("assistant-toggle")?.focus();
   }, [open]);
   const close = () => { refocus.current = true; writeOpen(false); };
 
+  // Closed, the panel is gone (the button lives in the top bar); the conversation stays in `instance`.
+  if (!open) return null;
   return (
-    // Closed, and below lg, it stays under the mobile nav (z-50); page toasts (z-80), menus, dialogs and the
-    // command palette (z-90+) sit above it. From lg up the open panel sits above toasts, still under menus and dialogs.
-    <div className={cn("fixed bottom-4 right-4 print:hidden", open ? "z-[45] lg:z-[85]" : "z-[45]")}>
-      {open ? (
-        // Keyed by workspace: a company switch starts from that company's own draft, scroll and stop state.
-        <AssistantPanel key={key} chat={chat} info={info} switched={switched} onClose={close} />
-      ) : (
-        <button ref={launcherRef} type="button" onClick={() => writeOpen(true)} aria-label="Open fleet assistant" title="Fleet assistant"
-          className="flex h-11 w-11 items-center justify-center rounded-full bg-primary text-on-primary shadow-float transition-colors hover:bg-primary-hover">
-          <Sparkles className="h-5 w-5" />
-        </button>
-      )}
+    // Below lg it stays under the mobile nav (z-50); page toasts (z-80), menus, dialogs and the command palette
+    // (z-90+) sit above it. From lg up the open panel sits above toasts, still under menus and dialogs.
+    <div className={cn(ASSISTANT_DOCK, "z-[45] lg:z-[85]")}>
+      {/* Keyed by workspace: a company switch starts from that company's own draft, scroll and stop state. */}
+      <AssistantPanel key={key} chat={chat} info={info} switched={switched} onClose={close} />
     </div>
   );
 }
@@ -190,7 +184,7 @@ function AssistantPanel({ chat, info, switched, onClose }: { chat: ChatHelpers; 
 
   return (
     <section role="dialog" aria-label="Fleet assistant" onKeyDown={onPanelKeyDown}
-      className="flex h-[560px] max-h-[calc(100dvh-2rem)] w-[380px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-lg border border-line bg-overlay shadow-float">
+      className="flex h-[560px] max-h-[calc(100dvh-5rem)] w-[380px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-lg border border-line bg-overlay shadow-float">
       <header className="flex h-11 shrink-0 items-center gap-2 border-b border-line px-3">
         <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent-text"><Sparkles className="h-3.5 w-3.5" /></span>
         <div className="min-w-0 flex-1 leading-tight">

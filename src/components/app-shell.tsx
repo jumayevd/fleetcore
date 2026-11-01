@@ -21,6 +21,7 @@ const AppearanceControls = dynamic(() => import("./appearance").then((m) => m.Ap
 import { NavProgress } from "./nav-progress";
 import { LocaleProvider } from "./locale";
 import { CompanyClock } from "./company-clock";
+import { AssistantButton } from "./assistant/launcher";
 import { WorkspaceGuard, flatCompanies, useSwitchCompany } from "./workspace-switcher";
 import { NAV, NAV_COOKIE, SEGMENT_LABELS, allNavItems, findNavItem, findNavSection } from "@/lib/nav";
 import { can } from "@/lib/permissions";
@@ -283,6 +284,7 @@ function TopBar({ user, active, accounts, locale, path, data, pinned, onSidebar,
             <Search className="h-3.5 w-3.5" /><span className="flex-1 truncate text-left">Search {active.companyName}…</span><Kbd>⌘K</Kbd>
           </button>
           <button onClick={openSearch} className="rounded-md p-1.5 text-fg-muted transition-colors hover:bg-raised sm:hidden" aria-label="Search"><Search className="h-4 w-4" /></button>
+          {can(user.role, "assistant.use") && <AssistantButton />}
           <div className="relative">
             <button onClick={() => only("look")} className={cn("rounded-md p-1.5 text-fg-muted transition-colors hover:bg-raised hover:text-fg", look && "bg-raised text-fg")}
               aria-label="Appearance" aria-expanded={look} title="Appearance">
