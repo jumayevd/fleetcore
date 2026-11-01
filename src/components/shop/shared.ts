@@ -36,18 +36,18 @@ export const FORM_STATUSES = [
 
 /** Older reports group by WorkOrder.category; every repair type maps to one so those keep adding up. */
 const CATEGORY_FOR_TYPE: Record<string, string> = {
-  OIL_CHANGE: "PM", PM_INSPECTION: "PM", DOT_INSPECTION: "INSPECTION", ENGINE: "ENGINE", INJECTOR: "ENGINE", DPF: "ENGINE",
-  ELECTRICAL: "ELECTRICAL", COMPUTER: "ELECTRICAL", BODY: "BODY", FRAME: "BODY", ACCIDENT: "BODY", TIRES: "TIRES",
-  STEER: "OTHER", REPAIR: "OTHER", OTHER: "OTHER",
+  OIL_CHANGE: "PM", PM_INSPECTION: "PM", DOT_INSPECTION: "INSPECTION", ENGINE: "ENGINE", FUEL_SYSTEM: "ENGINE", INJECTOR: "ENGINE", DPF: "ENGINE",
+  ELECTRICAL: "ELECTRICAL", LIGHTS: "ELECTRICAL", COMPUTER: "ELECTRICAL", BODY: "BODY", FRAME: "BODY", ACCIDENT: "BODY", MUD_FLAP: "BODY",
+  TIRES: "TIRES", BRAKES: "BRAKES", TOWING: "TOWING", SUSPENSION: "OTHER", STEER: "OTHER", REPAIR: "OTHER", OTHER: "OTHER",
 };
 export const categoryForRepairType = (t: string) => CATEGORY_FOR_TYPE[t] ?? "OTHER";
 
 /** For callers that still send a category (the quick form on the truck page). */
 const TYPE_FOR_CATEGORY: Record<string, string> = {
   PM: "OIL_CHANGE", INSPECTION: "DOT_INSPECTION", ENGINE: "ENGINE", COOLING: "ENGINE", ELECTRICAL: "ELECTRICAL", BODY: "BODY",
-  TIRES: "TIRES", BRAKES: "REPAIR", TOWING: "OTHER", OTHER: "REPAIR",
+  TIRES: "TIRES", BRAKES: "BRAKES", TOWING: "TOWING", OTHER: "OTHER",
 };
-export const repairTypeForCategory = (c: string) => TYPE_FOR_CATEGORY[c] ?? "REPAIR";
+export const repairTypeForCategory = (c: string) => TYPE_FOR_CATEGORY[c] ?? "OTHER";
 
 type TypeLike = { repairType: string; category?: string | null };
 /** Completing it resets the oil interval. Rows from before repair types count by their old PM category. */
@@ -64,9 +64,9 @@ export const payerLabel = (p: string) => PAYER_LABELS[p] ?? humanize(p);
 
 /** Default system for the first line of a new repair of this type. */
 export const SYSTEM_FOR_TYPE: Record<string, string> = {
-  OIL_CHANGE: "PM", PM_INSPECTION: "PM", DOT_INSPECTION: "OTHER", ENGINE: "ENGINE", INJECTOR: "ENGINE", DPF: "EXHAUST",
-  ELECTRICAL: "ELECTRICAL", COMPUTER: "ELECTRICAL", BODY: "BODY", FRAME: "BODY", ACCIDENT: "BODY", TIRES: "TIRES",
-  STEER: "SUSPENSION", REPAIR: "OTHER", OTHER: "OTHER",
+  OIL_CHANGE: "PM", PM_INSPECTION: "PM", DOT_INSPECTION: "OTHER", ENGINE: "ENGINE", FUEL_SYSTEM: "ENGINE", INJECTOR: "ENGINE", DPF: "EXHAUST",
+  ELECTRICAL: "ELECTRICAL", LIGHTS: "ELECTRICAL", COMPUTER: "ELECTRICAL", BODY: "BODY", FRAME: "BODY", ACCIDENT: "BODY", MUD_FLAP: "BODY",
+  TIRES: "TIRES", BRAKES: "BRAKES", SUSPENSION: "SUSPENSION", STEER: "SUSPENSION", TOWING: "FEES", REPAIR: "OTHER", OTHER: "OTHER",
 };
 
 /* ------------------------------------------------------------------ */

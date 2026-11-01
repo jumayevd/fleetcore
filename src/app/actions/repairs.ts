@@ -75,8 +75,8 @@ export async function saveWorkOrder(workOrderId: string | null, _: ActionState, 
     const unit: Unit = { truckId: truckId ?? null, trailerId: truckId ? null : trailerId };
 
     const category = f.str("category");
-    const repairType = f.str("repairType") ?? (category ? repairTypeForCategory(category) : "REPAIR");
-    if (!(REPAIR_TYPES as readonly string[]).includes(repairType)) throw new FormError("Pick a repair type");
+    const repairType = f.str("repairType") ?? (category ? repairTypeForCategory(category) : null);
+    if (!repairType || !(REPAIR_TYPES as readonly string[]).includes(repairType)) throw new FormError("Pick a repair type");
     const rawStatus = f.str("status") ?? "OPEN";
     const status = rawStatus === "SCHEDULED" ? "OPEN" : rawStatus;
     if (!FORM_STATUSES.includes(status)) throw new FormError("Pick whether the unit is scheduled, in the shop or done");
@@ -386,7 +386,7 @@ export async function saveMaintenance(_: ActionState, fd: FormData): Promise<Act
     const status = raw === "SCHEDULED" ? "OPEN" : raw;
     if (!["OPEN", "IN_PROGRESS", "DONE"].includes(status)) throw new FormError("Pick how the repair starts");
     const legacy = f.str("type") ?? f.str("category");
-    const repairType = f.str("repairType") ?? (legacy ? repairTypeForCategory(legacy) : "REPAIR");
+    const repairType = f.str("repairType") ?? (legacy ? repairTypeForCategory(legacy) : "OTHER");
     if (!(REPAIR_TYPES as readonly string[]).includes(repairType)) throw new FormError("Pick a repair type");
     const category = legacy && (WORK_ORDER_CATEGORIES as readonly string[]).includes(legacy) && !f.str("repairType") ? legacy : categoryForRepairType(repairType);
     const scheduledAt = f.date("scheduledAt") ?? new Date();

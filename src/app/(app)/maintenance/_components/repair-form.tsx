@@ -6,7 +6,7 @@ import { Container, Truck as TruckIcon } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Card, Field, InfoTip, Input, Select, Textarea, buttonClass, cn, segmentedThumb, segmentedTrack } from "@/components/ui";
 import { useFormat } from "@/components/locale";
-import { PAYERS, PAYER_HINTS, PAYER_LABELS, PAYMENT_STATUSES, PAYMENT_STATUS_LABELS, REPAIR_TYPES, REPAIR_TYPE_LABELS } from "@/lib/constants";
+import { PAYERS, PAYER_HINTS, PAYER_LABELS, PAYMENT_STATUSES, PAYMENT_STATUS_LABELS, REPAIR_TYPE_LABELS, TRAILER_REPAIR_TYPES, TRUCK_REPAIR_TYPES } from "@/lib/constants";
 import type { ActionState } from "@/lib/action";
 import { LinesEditor } from "@/components/shop/lines-editor";
 import { VendorPicker } from "@/components/shop/vendor-picker";
@@ -76,7 +76,8 @@ export function RepairForm({ action, trucks, trailers, drivers, vendors, initial
   const [mode, setMode] = useState<Mode>(initial.trailerId && !initial.truckId ? "trailer" : "truck");
   const [truckId, setTruckId] = useState(initial.truckId ?? "");
   const [trailerId, setTrailerId] = useState(initial.trailerId ?? "");
-  const [repairType, setRepairType] = useState(initial.repairType ?? "REPAIR");
+  // A new repair asks for its type (no default), from the truck or the trailer list.
+  const [repairType, setRepairType] = useState(initial.repairType ?? "");
   const [status, setStatus] = useState(initial.status && initial.status !== "DRAFT" ? initial.status : "OPEN");
   const [payer, setPayer] = useState(initial.payer ?? "COMPANY");
   const [chargeDriverId, setChargeDriverId] = useState(initial.chargeDriverId ?? "");
@@ -121,7 +122,12 @@ export function RepairForm({ action, trucks, trailers, drivers, vendors, initial
   const switchMode = (next: Mode) => {
     setMode(next);
     if (!odometerTouched) setOdometer(next === "truck" ? numOrEmpty(truck?.odometerKm) : "");
+    // A type the other kind of unit doesn't offer (an oil change for a trailer) is picked again.
+    if (repairType && !(next === "truck" ? TRUCK_REPAIR_TYPES : TRAILER_REPAIR_TYPES).includes(repairType as never)) setRepairType("");
   };
+  // The unit's list, plus the type an older order already has (it keeps it until someone picks another).
+  const typeList: string[] = [...(mode === "truck" ? TRUCK_REPAIR_TYPES : TRAILER_REPAIR_TYPES)];
+  if (repairType && !typeList.includes(repairType)) typeList.push(repairType);
   const pickPayer = (p: string) => {
     setPayer(p);
     if (p === "DRIVER" && !chargeDriverId && unit?.driverId) setChargeDriverId(unit.driverId);
@@ -159,8 +165,8 @@ export function RepairForm({ action, trucks, trailers, drivers, vendors, initial
               </Field>
             )}
             <TipField id={`${uid}-type`} label="Repair type" tip="Completing an oil change restarts the oil interval; an annual DOT inspection moves the inspection expiry a year on.">
-              <Select id={`${uid}-type`} name="repairType" value={repairType} onChange={(e) => setRepairType(e.target.value)}
-                options={REPAIR_TYPES.map((t) => ({ value: t, label: REPAIR_TYPE_LABELS[t] }))} />
+              <Select id={`${uid}-type`} name="repairType" required value={repairType} onChange={(e) => setRepairType(e.target.value)} placeholder="Pick the repair type…"
+                options={typeList.map((t) => ({ value: t, label: REPAIR_TYPE_LABELS[t] ?? t }))} />
             </TipField>
             <Field label="Title">
               <Input name="title" defaultValue={initial.title ?? ""} placeholder={REPAIR_TYPE_LABELS[repairType] ?? "e.g. Front brakes"} maxLength={200} />

@@ -183,7 +183,8 @@ function ShopDialog({ t, onClose }: { t: TruckStatusTarget; onClose: () => void 
       setError("Could not check it in. Refresh the page and try again.");
     }
   });
-  const href = `/maintenance/work-orders/new?truck=${t.id}&type=${reason}&status=IN_PROGRESS`;
+  // Accident repair opens as that type; a repair's type (engine, brakes…) is picked on the form.
+  const href = `/maintenance/work-orders/new?truck=${t.id}${reason === "ACCIDENT" ? "&type=ACCIDENT" : ""}&status=IN_PROGRESS`;
   return (
     <Overlay variant="dialog" onClose={onClose} title={`Put ${t.unitNumber} in the shop`} subtitle="In shop always has a repair order"
       footer={

@@ -13,10 +13,10 @@ import { RepairForm } from "../../_components/repair-form";
 
 export const metadata = { title: "New repair" };
 
-/** Walk-around components → the repair type a fix usually is. */
+/** Walk-around components → the repair type a fix usually is. Anything else is picked on the form. */
 const TYPE_FOR_COMPONENT: Record<string, string> = {
-  STEER_TIRES: "TIRES", DRIVE_TIRES: "TIRES", TRAILER_TIRES: "TIRES", LIGHTS: "ELECTRICAL", BATTERY: "ELECTRICAL",
-  SUSPENSION: "STEER", BODY: "BODY", GLASS_MIRRORS: "BODY", LEAKS: "ENGINE", BELTS_HOSES: "ENGINE",
+  STEER_TIRES: "TIRES", DRIVE_TIRES: "TIRES", TRAILER_TIRES: "TIRES", LIGHTS: "LIGHTS", BATTERY: "ELECTRICAL", BRAKES: "BRAKES",
+  SUSPENSION: "SUSPENSION", BODY: "BODY", GLASS_MIRRORS: "BODY", LEAKS: "ENGINE", BELTS_HOSES: "ENGINE",
 };
 
 /**
@@ -37,8 +37,8 @@ export default async function NewRepair({ searchParams }: PageProps<"/maintenanc
   const typeParam = str(sp.type);
   const category = str(sp.category);
   const repairType = typeParam && (REPAIR_TYPES as readonly string[]).includes(typeParam) ? typeParam
-    : defect ? TYPE_FOR_COMPONENT[defect.component] ?? "REPAIR"
-      : category ? repairTypeForCategory(category) : "REPAIR";
+    : defect ? TYPE_FOR_COMPONENT[defect.component] ?? ""
+      : category ? repairTypeForCategory(category) : "";
   const statusParam = str(sp.status);
   const status = statusParam === "DONE" || statusParam === "IN_PROGRESS" ? statusParam : "OPEN";
   const vendorId = vendors.find((v) => v.id === str(sp.vendor))?.id ?? null;
@@ -47,7 +47,7 @@ export default async function NewRepair({ searchParams }: PageProps<"/maintenanc
   const component = defect ? PTI_COMPONENT_LABELS[defect.component] ?? humanize(defect.component) : null;
   const title = defect ? `Repair for ${defectLabel(defect.number)}`
     : status === "DONE" ? "Log a completed repair"
-      : repairType !== "REPAIR" && unit ? `${repairTypeLabel(repairType)} for ${unit.unitNumber}` : "New repair";
+      : repairType && repairType !== "OTHER" && unit ? `${repairTypeLabel(repairType)} for ${unit.unitNumber}` : "New repair";
 
   return (
     <>
