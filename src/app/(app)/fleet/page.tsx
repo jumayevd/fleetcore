@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
-import { Archive, CircleCheck, Container, Plus, Store, TriangleAlert, Truck as TruckIcon, Users, Wrench, X } from "lucide-react";
+import { Archive, ChevronRight, CircleCheck, Container, Info, Plus, Store, TriangleAlert, Truck as TruckIcon, Users, Wrench, X } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { db } from "@/lib/db";
@@ -19,6 +19,7 @@ import { ColumnChooser, type ColumnDef } from "./column-chooser";
 import { TruckStatusPill } from "./status-pill";
 import { openDefects, openRepairs, statusRecorders, truckTypeOptions, unitDocRows } from "./data";
 import { inactiveInfo } from "./status-info";
+import { FINDINGS, FINDING_BY_KEY, isFinding, needsAction, truckFindings, type FindingKey } from "./findings";
 import {
   docExpiryByUnit, docsByUnit, earliest, EXPIRY_SOON_DAYS, fuelTone, LIST_LIMIT, missingDocs, OWNERSHIP_SHORT, OWNERSHIP_TONE, pingStale,
   serviceSummary, sinceShort, TRUCK_STATUS_LABELS, TRUCK_VIEW_LABELS, TRUCK_VIEW_STATUSES, TRUCK_VIEWS, type TruckView,
@@ -70,7 +71,9 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
 
   const status = oneOf(TRUCK_STATUSES, str(sp.status));
   const view: TruckView = status === "INACTIVE" ? "archived" : oneOf(TRUCK_VIEWS, str(sp.view)) ?? "fleet";
-  const attention = str(sp.attention) === "1" ? "1" : undefined;
+  /** "1": every truck that needs a look; a finding key: the trucks with that finding. */
+  const attentionParam = str(sp.attention);
+  const attention = attentionParam === "1" ? "1" : isFinding(attentionParam) ? attentionParam : undefined;
   const legacyPm = str(sp.pm) === "overdue" ? "overdue" : str(sp.pm) === "due" ? "due" : undefined; // links made before ?service=
   const service = oneOf(SERVICE_FILTERS, str(sp.service)) ?? legacyPm;
   const docsFilter = oneOf(DOCS_FILTERS, str(sp.docs));
@@ -83,23 +86,29 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
   const vendor = str(sp.vendor) === "1" ? "1" : undefined;
   const params = { view: view === "fleet" ? undefined : view, status, attention, service, docs: docsFilter, ownership, driver, group, type, q, vendor };
 
-  const [all, docRows, defects, trailerCount, types, inShopRows] = await Promise.all([
+  const [all, docRows, defects, trailerCount, types, openWork, eldConnections] = await Promise.all([
     db.truck.findMany({
       select: {
         id: true, status: true, isVendor: true, group: true, homeTerminal: true, driverId: true, ownership: true, truckTypeId: true,
         odometerKm: true, odometerAt: true, pmIntervalKm: true, lastPmKm: true, lastPmAt: true, nextServiceKm: true,
-        insuranceExpiry: true, inspectionExpiry: true, registrationExpiry: true,
+        insuranceExpiry: true, inspectionExpiry: true, registrationExpiry: true, lastPingAt: true,
         truckType: { select: { name: true, oilIntervalKm: true } },
+        driver: { select: { licenseExpiry: true, medicalExpiry: true } },
       },
     }),
     unitDocRows("truck"),
     openDefects("truck"),
     db.trailer.count(),
     truckTypeOptions(),
-    // Trucks a repair order has in the shop: In shop without one needs a look.
-    db.workOrder.groupBy({ by: ["truckId"], where: { status: "IN_PROGRESS", voidedAt: null, truckId: { not: null } } }),
+    // Open repairs of every truck: late ones, ones booked in the next days, and In shop without one need a look.
+    db.workOrder.findMany({
+      where: { truckId: { not: null }, status: { in: ["DRAFT", "OPEN", "IN_PROGRESS"] }, voidedAt: null },
+      select: { truckId: true, status: true, scheduledAt: true, promisedAt: true },
+    }),
+    db.eldConnection.count(),
   ]);
-  const inShop = new Set(inShopRows.map((r) => r.truckId));
+  const repairsOf = new Map<string, typeof openWork>();
+  for (const w of openWork) repairsOf.set(w.truckId!, [...(repairsOf.get(w.truckId!) ?? []), w]);
 
   if (all.length === 0) {
     return (
@@ -122,7 +131,9 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
   const docExpiry = docExpiryByUnit(docRows.map((d) => ({ id: d.truckId, kind: d.kind, expiresAt: d.expiresAt })));
   const RECORD: Record<string, "registrationExpiry" | "insuranceExpiry" | "inspectionExpiry"> = { REGISTRATION: "registrationExpiry", INSURANCE: "insuranceExpiry", INSPECTION: "inspectionExpiry" };
 
-  /** Per truck: oil service, paperwork expiry per kind, what is missing, what is expired, why it needs a look. */
+  const todayStart = f.startOfDay(now);
+
+  /** Per truck: oil service, paperwork expiry per kind, what is missing, what is expired, and its findings (findings.ts). */
   const facts = new Map(all.map((t) => {
     const s = serviceStatus(t, now);
     const files = docExpiry.get(t.id);
@@ -130,16 +141,11 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
     for (const k of DATED_SLOTS) expiry[k] = earliest(files?.get(k), RECORD[k] ? t[RECORD[k]] : null);
     const expired = Object.entries(expiry).filter(([, d]) => d && d < now).map(([k]) => k);
     const missing = missingDocs(have.get(t.id), REQUIRED_UNIT_DOCS);
-    const urgent = defects.get(t.id)?.urgent ?? 0;
-    // What needs following up. Out of service is here rather than a tile of its own: only a defect puts a truck there.
-    const reasons = [
-      t.status === "OUT_OF_SERVICE" ? "out of service" : null,
-      urgent ? `${urgent} defect${urgent > 1 ? "s" : ""} to fix now` : null,
-      t.status === "MAINTENANCE" && !inShop.has(t.id) ? "in shop, no repair order" : null,
-      s.state === "overdue" ? "oil service overdue" : null,
-      expired.length ? `${expired.map((k) => DOC_KIND_LABELS[k].toLowerCase()).join(", ")} expired` : null,
-    ].filter((r): r is string => Boolean(r));
-    return [t.id, { s, expiry, expired, missing, reasons }];
+    const findings = truckFindings({
+      status: t.status, hasDriver: Boolean(t.driverId), oil: s.state, expiry, missingPapers: missing.length,
+      defects: defects.get(t.id), driver: t.driver, repairs: repairsOf.get(t.id) ?? [], tracked: eldConnections > 0, lastPingAt: t.lastPingAt,
+    }, now, todayStart);
+    return [t.id, { s, expiry, expired, missing, findings, flagged: findings.some(needsAction) }];
   }));
   const fact = (id: string) => facts.get(id)!;
 
@@ -150,7 +156,9 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
   const assigned = all.filter((t) => t.status === "ACTIVE" && t.driverId).length;
   // A vendor's truck also counts in its own status's tile (Available, Assigned, In shop, Inactive).
   const vendors = all.filter((t) => t.isVendor).length;
-  const attentionCount = working.filter((t) => fact(t.id).reasons.length > 0).length;
+  const attentionCount = working.filter((t) => fact(t.id).flagged).length;
+  // How many trucks have each finding (the cards of the Needs attention panel).
+  const findingCounts = FINDINGS.map((d) => ({ ...d, count: working.filter((t) => fact(t.id).findings.includes(d.key)).length })).filter((d) => d.count > 0);
   const viewCount = (v: TruckView) => all.filter((t) => TRUCK_VIEW_STATUSES[v].includes(t.status)).length;
   const groups = [...new Set(all.flatMap((t) => [t.group, t.homeTerminal]).filter((g): g is string => Boolean(g)))].sort();
 
@@ -158,7 +166,8 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
   const computed = attention || service || docsFilter
     ? all.filter((t) => {
       const x = fact(t.id);
-      if (attention && !x.reasons.length) return false;
+      if (attention === "1" && !x.flagged) return false;
+      if (attention && attention !== "1" && !x.findings.includes(attention)) return false;
       if (service && !SERVICE_MATCH[service].includes(x.s.state)) return false;
       if (docsFilter === "expired" && !x.expired.length) return false;
       if (docsFilter === "incomplete" && !x.missing.length) return false;
@@ -245,11 +254,15 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
             hint={count("MAINTENANCE") ? "open the repair from the Repair column" : "nothing in the shop"} />)}
         {counter(Boolean(attention), only({ attention: "1" }),
           <Stat className={tileClass} label="Needs attention" value={attentionCount} icon={<TriangleAlert />} tone={attentionCount ? "danger" : "ok"}
-            hint={attentionCount ? "out of service, defects to fix now, oil overdue or papers expired" : "nothing to follow up"} />)}
+            hint={attentionCount ? `${findingCounts.filter((d) => d.tone !== "info").length} kinds of problem · open to see them` : "nothing to follow up"} />)}
         {counter(Boolean(vendor) && !status, only({ vendor: "1" }),
           <Stat className={tileClass} label="Vendor" value={vendors} icon={<Store />} tone={vendors ? "progress" : "neutral"}
             hint="another company's or owner's trucks, in any status" />)}
       </div>
+
+      {attention && (
+        <FindingsPanel findings={findingCounts} active={attention} hrefFor={(key) => qs({ attention: attention === key ? "1" : key })} />
+      )}
 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
@@ -258,7 +271,11 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
           }))} />
           {status && status !== "INACTIVE" && <Link href={qs({ status: undefined, ...(status === "ACTIVE" ? { driver: undefined } : {}) })} className={chipClass}>{statusChip}<X className="h-3 w-3" /></Link>}
           {vendor && <Link href={qs({ vendor: undefined })} className={chipClass}>Vendor<X className="h-3 w-3" /></Link>}
-          {attention && <Link href={qs({ attention: undefined })} className={chipClass}>Needs attention<X className="h-3 w-3" /></Link>}
+          {attention && (
+            <Link href={qs({ attention: undefined })} className={chipClass}>
+              {attention === "1" ? "Needs attention" : FINDING_BY_KEY[attention].short}<X className="h-3 w-3" />
+            </Link>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <ListFilters basePath="/fleet" params={params} placeholder="Unit, VIN, plate, driver, location…" selects={[
@@ -321,7 +338,12 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
                       primary={
                         <span className="flex min-w-0 items-baseline gap-2">
                           <Link href={`/fleet/${t.id}`} className="num unit-no shrink-0 font-semibold text-accent-text hover:underline">{t.unitNumber}</Link>
-                          {x.reasons.length > 0 && <span className="truncate text-[11px] text-danger" title={x.reasons.join(" · ")}>{x.reasons[0]}</span>}
+                          {x.flagged && (() => {
+                            // The worst finding beside the unit; all of them on hover.
+                            const top = FINDING_BY_KEY[x.findings.find(needsAction)!];
+                            const all = x.findings.filter(needsAction).map((k) => FINDING_BY_KEY[k].short);
+                            return <span className={cn("truncate text-[11px]", top.tone === "danger" ? "text-danger" : "text-warn")} title={all.join(" · ")}>{top.short}{all.length > 1 ? ` +${all.length - 1}` : ""}</span>;
+                          })()}
                         </span>
                       }
                       secondary={<span title={`${t.year} ${t.make} ${t.model}`}><span className="num">{t.year}</span> {t.make} {t.model}</span>} />
@@ -407,6 +429,49 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
         </div>
       </Card>
     </>
+  );
+}
+
+/**
+ * The Needs attention panel (shown while the counter is open): one card per finding, worst first, saying how many
+ * trucks have it and why it matters. A card lists those trucks; a second click goes back to every truck that needs a look.
+ */
+function FindingsPanel({ findings, active, hrefFor }: {
+  findings: ((typeof FINDINGS)[number] & { count: number })[]; active: string; hrefFor: (key: FindingKey) => string;
+}) {
+  return (
+    <section className="mb-4" aria-label="Needs attention">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h2 className="text-[12px] font-semibold uppercase tracking-[0.04em] text-fg-muted">Needs attention</h2>
+        <span className="text-[12px] text-fg-subtle">{findings.length} finding{findings.length === 1 ? "" : "s"}</span>
+      </div>
+      {findings.length === 0 ? (
+        <p className="rounded-lg border border-line bg-surface px-4 py-3 text-[13px] text-fg-muted">
+          Nothing needs a look: no expired or missing papers, overdue oil, late repairs, open defects or silent trackers.
+        </p>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {findings.map((d) => {
+            const on = active === d.key;
+            const Icon = d.tone === "info" ? Info : TriangleAlert;
+            const text = d.tone === "danger" ? "text-danger" : d.tone === "warn" ? "text-warn" : "text-fg";
+            return (
+              <Link key={d.key} href={hrefFor(d.key)} aria-current={on || undefined} title={on ? "Show every truck that needs a look" : "Show these trucks"}
+                className={cn("flex items-start gap-2.5 rounded-lg border px-3 py-2.5 transition-[border-color,box-shadow] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
+                  d.tone === "danger" ? "border-danger/30 bg-danger-soft/40" : d.tone === "warn" ? "border-warn/30 bg-warn-soft/40" : "border-line bg-surface",
+                  on ? "ring-2 ring-accent/60" : "hover:shadow-lift")}>
+                <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", d.tone === "info" ? "text-fg-subtle" : text)} />
+                <span className="min-w-0 flex-1">
+                  <span className={cn("block text-[13px] font-semibold leading-snug", text)}>{d.title(d.count)}</span>
+                  <span className="mt-0.5 block truncate text-[11.5px] text-fg-muted" title={d.hint}>{d.hint}</span>
+                </span>
+                <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-fg-faint" />
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 
