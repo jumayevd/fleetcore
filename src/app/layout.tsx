@@ -14,6 +14,8 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 export const metadata: Metadata = {
   title: { default: "FleetCore", template: "%s · FleetCore" },
   description: "Trucks, trailers, maintenance and compliance for fleet specialists, across every company you work for.",
+  // iPhone: Safari → Share → Add to Home Screen opens FleetCore full-screen under its own name and icon.
+  appleWebApp: { capable: true, title: "FleetCore", statusBarStyle: "default" },
 };
 
 // Day is the default theme whatever the device prefers, so the browser chrome matches the Day canvas.

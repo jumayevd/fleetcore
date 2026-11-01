@@ -1,0 +1,52 @@
+{
+  "packageId": "uz.fleetcore.app",
+  "host": "fleetcore-uz.vercel.app",
+  "name": "FleetCore",
+  "launcherName": "FleetCore",
+  "display": "standalone",
+  "themeColor": "#801AB8",
+  "themeColorDark": "#000000",
+  "navigationColor": "#000000",
+  "navigationColorDark": "#000000",
+  "navigationDividerColor": "#000000",
+  "navigationDividerColorDark": "#000000",
+  "backgroundColor": "#F5F6F8",
+  "enableNotifications": false,
+  "startUrl": "/dashboard",
+  "iconUrl": "https://fleetcore-uz.vercel.app/brand/icon-512.png",
+  "maskableIconUrl": "https://fleetcore-uz.vercel.app/brand/icon-maskable-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "../../FleetCore-Android-signing/fleetcore-upload.jks",
+    "alias": "fleetcore"
+  },
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "unknown",
+  "webManifestUrl": "https://fleetcore-uz.vercel.app/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://fleetcore-uz.vercel.app/",
+  "minSdkVersion": 24,
+  "orientation": "default",
+  "fingerprints": [
+    {
+      "name": "upload key",
+      "value": "6C:08:1D:2D:FF:85:7E:00:A7:72:07:1C:5A:DF:A1:5A:AD:50:F7:82:FA:A8:8F:1C:17:02:6A:BD:9C:BE:22:7A"
+    }
+  ],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "protocolHandlers": [],
+  "fileHandlers": [],
+  "launchHandlerClientMode": "",
+  "displayOverride": [],
+  "appVersion": "1.0.0"
+}

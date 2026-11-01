@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "uz.fleetcore.app",
+      "sha256_cert_fingerprints": ["6C:08:1D:2D:FF:85:7E:00:A7:72:07:1C:5A:DF:A1:5A:AD:50:F7:82:FA:A8:8F:1C:17:02:6A:BD:9C:BE:22:7A"]
+    }
+  }
+]

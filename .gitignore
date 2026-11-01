@@ -62,6 +62,17 @@ DEMO-CREDENTIALS.local.txt
 
 # local tool config
 /.claude/launch.json
+
+# Android app (android/): build outputs and signed packages. The signing key lives outside the repo.
+/android/.gradle/
+/android/build/
+/android/app/build/
+/android/local.properties
+/android/*.apk
+/android/*.aab
+/android/*.idsig
+*.jks
+*.keystore
 .vercel
 .env*
 !.env.example

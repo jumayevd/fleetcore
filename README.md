@@ -184,6 +184,24 @@ it elsewhere):
 database itself (migration `11_audit_log_append_only`): a trigger refuses any UPDATE, DELETE or TRUNCATE of `AuditLog`,
 deleting a company keeps its entries, and an account with entries can't be deleted (deactivate it instead).
 
+## Phone apps
+
+**Android** (`android/`, package `uz.fleetcore.app`): a Trusted Web Activity built with
+[Bubblewrap](https://github.com/GoogleChromeLabs/bubblewrap). The app opens the live site full-screen in Chrome's
+engine, so every deploy reaches it at once; only a change to `android/twa-manifest.json` (name, icon, colours, start
+page) needs a new build. Full-screen depends on `public/.well-known/assetlinks.json` listing the signing key's SHA-256
+fingerprint; without it Android shows an address bar. For Google Play, add the Play App Signing key's fingerprint
+there too.
+
+To build: JDK 17 and the Android SDK (build-tools 36.1.0), `~/.bubblewrap/config.json` pointing at them, and the
+upload key in `../FleetCore-Android-signing/` (outside the repo, never committed). Raise `appVersionCode` /
+`appVersionName` in `twa-manifest.json` for each release, then run `bubblewrap update`, and `bubblewrap build` from
+`android/` with `BUBBLEWRAP_KEYSTORE_PASSWORD` and `BUBBLEWRAP_KEY_PASSWORD` set. It writes
+`app-release-signed.apk` (install directly) and `app-release-bundle.aab` (for Play).
+
+**iPhone**: Safari → Share → Add to Home Screen. It opens full-screen with its own icon (`appleWebApp` in the root
+layout). An App Store app needs a Mac with Xcode and an Apple Developer account.
+
 ## Architecture
 
 - **Next.js 16 (App Router)**: Server Components, Server Actions, route handlers under `src/app/api`
