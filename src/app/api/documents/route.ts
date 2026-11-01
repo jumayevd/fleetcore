@@ -61,19 +61,18 @@ export async function POST(req: Request) {
       ...ownerData(target), uploadedById: user.id,
     },
   });
-  await audit(user.id, "upload", "document", doc.id, `${DOC_KIND_LABELS[kind] ?? kind}: ${doc.name} (${target.type})`);
-  // Compliance docs with an expiry keep the unit's own expiry field in sync.
-  if (expiresAt && target.type === "truck") {
-    const field = kind === "INSURANCE" ? "insuranceExpiry" : kind === "INSPECTION" ? "inspectionExpiry" : kind === "REGISTRATION" ? "registrationExpiry" : null;
-    if (field) await db.truck.update({ where: { id: target.id }, data: { [field]: expiresAt } });
+  // Compliance docs with an expiry keep the unit's (or driver's) own expiry field in sync; the audit line says so.
+  const field = !expiresAt ? null
+    : target.type === "truck" ? (kind === "INSURANCE" ? "insuranceExpiry" : kind === "INSPECTION" ? "inspectionExpiry" : kind === "REGISTRATION" ? "registrationExpiry" : null)
+      : target.type === "trailer" ? (kind === "INSURANCE" ? "insuranceExpiry" : kind === "INSPECTION" ? "inspectionExpiry" : null)
+        : target.type === "driver" ? (kind === "LICENSE" ? "licenseExpiry" : kind === "MEDICAL" ? "medicalExpiry" : null)
+          : null;
+  if (field && expiresAt) {
+    if (target.type === "truck") await db.truck.update({ where: { id: target.id }, data: { [field]: expiresAt } });
+    if (target.type === "trailer") await db.trailer.update({ where: { id: target.id }, data: { [field]: expiresAt } });
+    if (target.type === "driver") await db.driver.update({ where: { id: target.id }, data: { [field]: expiresAt } });
   }
-  if (expiresAt && target.type === "trailer") {
-    const field = kind === "INSURANCE" ? "insuranceExpiry" : kind === "INSPECTION" ? "inspectionExpiry" : null;
-    if (field) await db.trailer.update({ where: { id: target.id }, data: { [field]: expiresAt } });
-  }
-  if (expiresAt && target.type === "driver") {
-    const field = kind === "LICENSE" ? "licenseExpiry" : kind === "MEDICAL" ? "medicalExpiry" : null;
-    if (field) await db.driver.update({ where: { id: target.id }, data: { [field]: expiresAt } });
-  }
+  await audit(user.id, "upload", "document", doc.id,
+    `${DOC_KIND_LABELS[kind] ?? kind}: ${doc.name} (${target.type})${field && expiresAt ? ` · ${target.type}'s ${(DOC_KIND_LABELS[kind] ?? kind).toLowerCase()} expiry set to ${expiresAt.toISOString().slice(0, 10)}` : ""}`);
   return NextResponse.json({ ok: true, id: doc.id });
 }

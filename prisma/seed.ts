@@ -685,15 +685,18 @@ const US_TYPES: [string, number][] = [["Freightliner Cascadia", 25000], ["Volvo 
 const US_CAPACITY = { DRY_VAN: 45_000, REEFER: 43_500, FLATBED: 48_000, TANKER: 50_000, CONTAINER: 44_000 };
 
 async function main() {
-  // The seed WIPES all data. Local dev uses a local Postgres; anything else needs an explicit opt-in.
+  // The seed WIPES all data, the audit log included, so it only ever runs against a local Postgres.
   const isLocalDb = /localhost|127\.0\.0\.1/.test(process.env.DATABASE_URL ?? "");
-  if (!isLocalDb && process.env.CONFIRM_SEED !== "yes") {
-    console.error(`Refusing to seed: this deletes ALL data in ${process.env.DATABASE_URL?.split("@")[1]?.split("/")[0] ?? "the database"}. Re-run with CONFIRM_SEED=yes if you really mean it.`);
+  if (!isLocalDb) {
+    console.error(`Refusing to seed: this deletes ALL data, the audit log included, in ${process.env.DATABASE_URL?.split("@")[1]?.split("/")[0] ?? "the database"}. The seed only runs against a local database.`);
     process.exit(1);
   }
   console.log("Resetting database…");
-  // Deleting a company cascades to everything it owns.
+  // The audit log is append-only (a trigger refuses deletes); a local reset lifts that for the wipe only.
+  await db.$executeRawUnsafe('ALTER TABLE "AuditLog" DISABLE TRIGGER USER');
   await db.auditLog.deleteMany();
+  await db.$executeRawUnsafe('ALTER TABLE "AuditLog" ENABLE TRIGGER USER');
+  // Deleting a company cascades to everything it owns.
   await db.invite.deleteMany();
   await db.company.deleteMany();
   await db.user.deleteMany();

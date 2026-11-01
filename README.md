@@ -177,8 +177,12 @@ it elsewhere):
 4. Deploy. The production build runs `prisma migrate deploy`, which applies `prisma/migrations` (`0_init` onwards).
    Other branches don't deploy (`git.deploymentEnabled`), since Preview shares the production database.
 5. Make the first account a platform owner (`npm run user:password-link -- <email> --create "Full name" --platform-owner`),
-   then create companies from the Platform console. Seed demo data into production only on purpose:
-   `CONFIRM_SEED=yes` (it wipes the database).
+   then create companies from the Platform console. The demo seed only runs against a local database (it wipes
+   everything, the audit log included).
+
+**Audit log.** Every change is recorded with who and when (`src/lib/audit.ts`), and the log is append-only in the
+database itself (migration `11_audit_log_append_only`): a trigger refuses any UPDATE, DELETE or TRUNCATE of `AuditLog`,
+deleting a company keeps its entries, and an account with entries can't be deleted (deactivate it instead).
 
 ## Architecture
 

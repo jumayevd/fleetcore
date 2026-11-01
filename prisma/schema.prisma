@@ -99,7 +99,6 @@ model Company {
   workOrders  WorkOrder[]
   fuelLogs    FuelLog[]
   documents   Document[]
-  audits      AuditLog[]
   settings    AppSetting[]
 }
 
@@ -478,13 +477,14 @@ model DriverAssignment {
   @@index([driverId])
 }
 
+/// Append-only (migration 11_audit_log_append_only): a database trigger refuses every UPDATE, DELETE and TRUNCATE.
+/// No foreign key to Company, so deleting a company keeps its history; an account with entries can't be deleted.
 model AuditLog {
   id        String   @id @default(cuid())
-  /// Null for account-level events that belong to no company.
+  /// Null for account-level events that belong to no company. Kept after the company is deleted.
   companyId String?
-  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
   userId    String?
-  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Restrict)
   action    String
   entity    String
   entityId  String?
