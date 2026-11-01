@@ -545,6 +545,11 @@ model Vendor {
   notes       String?
   active      Boolean     @default(true)
   createdAt   DateTime    @default(now())
+  /// Where it is (src/lib/geocode.ts), for "Vendors near this truck". geoPrecision: ADDRESS | CITY | NONE (not found).
+  lat          Float?
+  lng          Float?
+  geoPrecision String?
+  geocodedAt   DateTime?
   workOrders  WorkOrder[]
 
   @@unique([companyId, name])

@@ -8,6 +8,7 @@ import { audit } from "@/lib/audit";
 import { attempt, fields, FormError, type ActionState } from "@/lib/action";
 import { VENDOR_TYPES } from "@/lib/constants";
 import { looksLikeAddress, type VendorOption } from "@/components/shop/shared";
+import { geocodeMissingVendors, geocodeVendor } from "@/lib/geocode";
 
 /*
  * Vendors: shops, dealers, tire and road-side services. Repair orders point at a vendor (vendorId) and keep its name
@@ -43,9 +44,11 @@ export async function saveVendor(vendorId: string | null, _: ActionState, fd: Fo
       name, type, phone: f.str("phone"), email, contactName: f.str("contactName"), address: f.str("address"), city: f.str("city"),
       notes: f.str("notes"), active: vendorId ? f.bool("active") : true,
     };
+    let moved = true;
     if (vendorId) {
-      const prev = await db.vendor.findUnique({ where: { id: vendorId }, select: { name: true } });
+      const prev = await db.vendor.findUnique({ where: { id: vendorId }, select: { name: true, address: true, city: true } });
       if (!prev) throw new FormError("This vendor no longer exists.");
+      moved = prev.address !== data.address || prev.city !== data.city;
       await db.vendor.update({ where: { id: vendorId }, data });
       if (prev.name !== name) await db.workOrder.updateMany({ where: { vendorId }, data: { vendor: name } });
       await audit(me.id, "update", "vendor", vendorId, name);
@@ -54,6 +57,8 @@ export async function saveVendor(vendorId: string | null, _: ActionState, fd: Fo
       id = v.id;
       await audit(me.id, "create", "vendor", v.id, name);
     }
+    // Where it is, for "Vendors near this truck": looked up again whenever the address or city changes.
+    if (moved && id) await geocodeVendor({ id, address: data.address, city: data.city }).catch(() => null);
   });
   if (res?.error) return res;
   refreshVendors(id);
@@ -114,6 +119,57 @@ export async function createVendorFromName(name: string): Promise<ActionState> {
     refreshVendors(vendor.id);
     return { ok: `${vendor.name} added with ${count} ${count === 1 ? "order" : "orders"}` };
   });
+}
+
+export type NearVendor = {
+  id: string; name: string; type: string; phone: string | null; address: string | null; city: string | null;
+  /** Straight-line distance from the truck's last position; null when the truck or the vendor has no location. */
+  distanceKm: number | null;
+  /** How the vendor was placed: its street address, or only its city. */
+  precision: "ADDRESS" | "CITY" | null;
+  /** Repair orders with this vendor: all of them, and on this truck. */
+  visits: number; truckVisits: number; lastVisit: string | null;
+};
+export type VendorsNearResult = {
+  error?: string;
+  truck?: { unitNumber: string; locationName: string | null; at: string | null; source: string | null; located: boolean };
+  vendors?: NearVendor[];
+};
+
+const toRad = (d: number) => (d * Math.PI) / 180;
+const greatCircleKm = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
+  const s = Math.sin(toRad(b.lat - a.lat) / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(toRad(b.lng - a.lng) / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(s));
+};
+
+/**
+ * "Vendors near this truck" on the repair form: every active vendor with how far it is from the truck's last position
+ * (ELD / tracker, as the crow flies) and how often the company used it, overall and on this truck. Vendors never
+ * placed on the map are looked up first, a few at a time (src/lib/geocode.ts).
+ */
+export async function vendorsNear(truckId: string): Promise<VendorsNearResult> {
+  await requireUser("fleet.view");
+  const truck = await db.truck.findUnique({ where: { id: truckId }, select: { unitNumber: true, lat: true, lng: true, locationName: true, lastPingAt: true, pingSource: true } });
+  if (!truck) return { error: "That truck no longer exists. Pick another one." };
+  await geocodeMissingVendors().catch(() => 0);
+  const [vendors, all, onTruck] = await Promise.all([
+    db.vendor.findMany({ where: { active: true }, select: { id: true, name: true, type: true, phone: true, address: true, city: true, lat: true, lng: true, geoPrecision: true } }),
+    db.workOrder.groupBy({ by: ["vendorId"], where: { vendorId: { not: null }, voidedAt: null }, _count: true, _max: { scheduledAt: true } }),
+    db.workOrder.groupBy({ by: ["vendorId"], where: { vendorId: { not: null }, voidedAt: null, truckId }, _count: true }),
+  ]);
+  const visits = new Map(all.map((r) => [r.vendorId!, r]));
+  const truckVisits = new Map(onTruck.map((r) => [r.vendorId!, r._count]));
+  const here = truck.lat != null && truck.lng != null ? { lat: truck.lat, lng: truck.lng } : null;
+  return {
+    truck: { unitNumber: truck.unitNumber, locationName: truck.locationName, at: truck.lastPingAt?.toISOString() ?? null, source: truck.pingSource, located: Boolean(here) },
+    vendors: vendors.map((v): NearVendor => ({
+      id: v.id, name: v.name, type: v.type, phone: v.phone, address: v.address, city: v.city,
+      distanceKm: here && v.lat != null && v.lng != null ? greatCircleKm(here, { lat: v.lat, lng: v.lng }) : null,
+      precision: v.lat != null && (v.geoPrecision === "ADDRESS" || v.geoPrecision === "CITY") ? v.geoPrecision : null,
+      visits: visits.get(v.id)?._count ?? 0, truckVisits: truckVisits.get(v.id) ?? 0,
+      lastVisit: visits.get(v.id)?._max.scheduledAt?.toISOString() ?? null,
+    })),
+  };
 }
 
 /** Stop offering a vendor in the picker (its history stays), or bring it back. */

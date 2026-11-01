@@ -12,7 +12,7 @@ import { vendorKey, type VendorOption } from "./shared";
  * Submits `vendorId` (and `vendorName` for an older order that only has a typed shop name until a vendor is picked).
  * Lives inside other forms, so it renders no <form> of its own and its own inputs carry no names.
  */
-export function VendorPicker({ vendors, defaultVendorId, legacyName, canCreate = true, name = "vendorId", id, compact }: {
+export function VendorPicker({ vendors, defaultVendorId, legacyName, canCreate = true, name = "vendorId", id, compact, value, onChange }: {
   vendors: VendorOption[];
   defaultVendorId?: string | null;
   /** Shop name typed on an older order that has no vendor yet. */
@@ -21,9 +21,14 @@ export function VendorPicker({ vendors, defaultVendorId, legacyName, canCreate =
   name?: string;
   id?: string;
   compact?: boolean;
+  /** Controlled: the picked vendor id, when something else (Vendors near this truck) can pick it too. */
+  value?: string;
+  onChange?: (vendorId: string) => void;
 }) {
   const [list, setList] = useState(vendors);
-  const [selected, setSelected] = useState(defaultVendorId ?? "");
+  const [own, setOwn] = useState(defaultVendorId ?? "");
+  const selected = value ?? own;
+  const setSelected = (vendorId: string) => { setOwn(vendorId); onChange?.(vendorId); };
   const [legacy, setLegacy] = useState(defaultVendorId ? "" : (legacyName ?? ""));
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");

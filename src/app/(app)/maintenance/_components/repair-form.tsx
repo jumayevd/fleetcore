@@ -10,6 +10,7 @@ import { PAYERS, PAYER_HINTS, PAYER_LABELS, PAYMENT_STATUSES, PAYMENT_STATUS_LAB
 import type { ActionState } from "@/lib/action";
 import { LinesEditor } from "@/components/shop/lines-editor";
 import { VendorPicker } from "@/components/shop/vendor-picker";
+import { VendorsNear } from "@/components/shop/vendors-near";
 import { FORM_STATUSES, SYSTEM_FOR_TYPE, type LineValue, type VendorOption } from "@/components/shop/shared";
 import type { UnitOption } from "../_lib/data";
 
@@ -86,6 +87,8 @@ export function RepairForm({ action, trucks, trailers, drivers, vendors, initial
   const [invoice, setInvoice] = useState(numOrEmpty(initial.invoiceTotal));
   const [invoiceTouched, setInvoiceTouched] = useState(initial.invoiceTotal != null);
   const [paymentStatus, setPaymentStatus] = useState(initial.paymentStatus ?? "");
+  /** The shop: picked in the Shop field or from Vendors near the truck. */
+  const [vendorId, setVendorId] = useState(initial.vendorId ?? "");
   const [dates, setDates] = useState<Record<DateKey, string>>({
     scheduledAt: initial.scheduledAt ?? "", inAt: initial.inAt ?? "", outAt: initial.outAt ?? "", promisedAt: initial.promisedAt ?? "",
   });
@@ -165,7 +168,12 @@ export function RepairForm({ action, trucks, trailers, drivers, vendors, initial
             <Field label="Technician">
               <Input name="technician" defaultValue={initial.technician ?? ""} placeholder="Who is working on it" />
             </Field>
-            <div className="hidden sm:block" />
+            {/* Once a truck is picked: the company's vendors by distance from where the truck is now; picking one sets the shop. */}
+            {mode === "truck" && truck ? (
+              <div className="flex items-end">
+                <VendorsNear truckId={truck.id} unitNumber={truck.unitNumber} selectedId={vendorId} onPick={setVendorId} />
+              </div>
+            ) : <div className="hidden sm:block" />}
             <Field label="Description" className="sm:col-span-2">
               <Textarea name="description" defaultValue={initial.description ?? ""} placeholder="Symptoms, what the driver reported, what the shop found" />
             </Field>
@@ -241,7 +249,7 @@ export function RepairForm({ action, trucks, trailers, drivers, vendors, initial
         </Card>
 
         <Card title="Shop">
-          <VendorPicker id={`${uid}-vendor`} vendors={vendors} defaultVendorId={initial.vendorId} legacyName={initial.vendorName} />
+          <VendorPicker id={`${uid}-vendor`} vendors={vendors} legacyName={initial.vendorName} value={vendorId} onChange={setVendorId} />
         </Card>
 
         {mode === "truck" && (

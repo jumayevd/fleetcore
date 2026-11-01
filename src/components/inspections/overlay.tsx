@@ -18,7 +18,7 @@ export function Overlay({ open = true, onClose, title, subtitle, children, foote
   children: ReactNode;
   footer?: ReactNode;
   variant?: "drawer" | "dialog";
-  /** A wider drawer (the walk-around review). */
+  /** Wider: the drawer (the walk-around review), or the dialog (Vendors near this truck). */
   wide?: boolean;
 }) {
   const id = useId();
@@ -50,7 +50,7 @@ export function Overlay({ open = true, onClose, title, subtitle, children, foote
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div ref={panel} role="dialog" aria-modal="true" aria-labelledby={`${id}-title`} tabIndex={-1}
         className={cn("flex max-h-full flex-col bg-overlay shadow-float focus:outline-none",
-          drawer ? cn("h-full w-full border-l border-line", wide ? "max-w-3xl" : "max-w-lg") : "pop-in max-h-[76vh] w-full max-w-md rounded-lg border border-line")}>
+          drawer ? cn("h-full w-full border-l border-line", wide ? "max-w-3xl" : "max-w-lg") : cn("pop-in max-h-[76vh] w-full rounded-lg border border-line", wide ? "max-w-2xl" : "max-w-md"))}>
         <header className="flex items-start justify-between gap-3 border-b border-line px-5 py-3.5">
           <div className="min-w-0">
             <h2 id={`${id}-title`} className="truncate text-[15px] font-semibold tracking-[-0.01em] text-fg">{title}</h2>
