@@ -92,11 +92,11 @@ export default async function RepairsPage({ searchParams }: PageProps<"/maintena
       />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {tile("active", <Stat label="Active" value={counts.active} hint="Scheduled or in the shop" />)}
-        {tile("scheduled", <Stat label="Scheduled" value={counts.scheduled} tone={counts.scheduled ? "info" : "neutral"} hint="Booked into a shop, unit still in service" />)}
-        {tile("shop", <Stat label="In the shop" value={counts.shop} tone={counts.shop ? "warn" : "ok"} hint={counts.shop ? `${plural(counts.shop, "unit")} off the road` : "nothing off the road"} />)}
-        {tile("completed", <Stat label="Completed" value={counts.completed} tone="ok" hint="Done and back in service" />)}
-        {tile("overdue", <Stat label="Overdue" value={counts.overdue} tone={counts.overdue ? "danger" : "ok"} hint={counts.overdue ? "past the promised date, or booked and not in" : "everything on time"} />)}
+        {tile("active", <Stat label="Active" value={counts.active} />)}
+        {tile("scheduled", <Stat label="Scheduled" value={counts.scheduled} tone={counts.scheduled ? "info" : "neutral"} />)}
+        {tile("shop", <Stat label="In the shop" value={counts.shop} tone={counts.shop ? "warn" : "ok"} />)}
+        {tile("completed", <Stat label="Completed" value={counts.completed} tone="ok" />)}
+        {tile("overdue", <Stat label="Overdue" value={counts.overdue} tone={counts.overdue ? "danger" : "ok"} />)}
       </div>
 
       {counts.notTold > 0 && (
