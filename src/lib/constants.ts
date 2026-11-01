@@ -83,21 +83,22 @@ export const WORK_ORDER_STATUSES = ["DRAFT", "OPEN", "IN_PROGRESS", "DONE", "CAN
 /**
  * What kind of visit it is (WorkOrder.repairType). Oil change and DOT inspection reset their schedules when completed.
  * A truck's repair picks from TRUCK_REPAIR_TYPES, a trailer's from TRAILER_REPAIR_TYPES; REPAIR_TYPES is every type
- * an order can have (older orders keep theirs: PM inspection, Repair, Steering, Injectors, Computer).
+ * an order can have (a PM visit booked from the oil board is a PM inspection; older orders keep theirs: Repair,
+ * Steering, Injectors, Computer).
  */
 export const TRUCK_REPAIR_TYPES = [
   "OIL_CHANGE", "DOT_INSPECTION", "ENGINE", "FUEL_SYSTEM", "DPF", "ELECTRICAL", "LIGHTS", "TIRES", "BRAKES", "SUSPENSION", "MUD_FLAP",
   "ACCIDENT", "TOWING", "FRAME", "BODY", "OTHER",
 ] as const;
 export const TRAILER_REPAIR_TYPES = [
-  "DOT_INSPECTION", "PM_INSPECTION", "REPAIR", "ELECTRICAL", "LIGHTS", "TIRES", "BRAKES", "SUSPENSION", "MUD_FLAP", "FRAME", "BODY", "ACCIDENT", "TOWING", "OTHER",
+  "DOT_INSPECTION", "ELECTRICAL", "LIGHTS", "TIRES", "BRAKES", "SUSPENSION", "TANDEM", "MUD_FLAP", "ACCIDENT", "FRAME", "BODY", "OTHER",
 ] as const;
-export const REPAIR_TYPES = [...new Set([...TRUCK_REPAIR_TYPES, ...TRAILER_REPAIR_TYPES, "STEER", "INJECTOR", "COMPUTER"] as const)];
+export const REPAIR_TYPES = [...new Set([...TRUCK_REPAIR_TYPES, ...TRAILER_REPAIR_TYPES, "PM_INSPECTION", "REPAIR", "STEER", "INJECTOR", "COMPUTER"] as const)];
 export const REPAIR_TYPE_LABELS: Record<string, string> = {
   OIL_CHANGE: "Oil change", DOT_INSPECTION: "DOT inspection", ENGINE: "Engine", FUEL_SYSTEM: "Emissions / fuel system", DPF: "Aftertreatment",
-  ELECTRICAL: "Electrical", LIGHTS: "Lights", TIRES: "Tires", BRAKES: "Brakes", SUSPENSION: "Suspension", MUD_FLAP: "Mud flap",
+  ELECTRICAL: "Electrical", LIGHTS: "Lights", TIRES: "Tires", BRAKES: "Brakes", SUSPENSION: "Suspension", TANDEM: "Tandem", MUD_FLAP: "Mud flap",
   ACCIDENT: "Accident repair", TOWING: "Towing", FRAME: "Frame", BODY: "Body", OTHER: "Other",
-  // Older orders, and trailers.
+  // Not on either list: PM visits from the oil board, and older orders.
   PM_INSPECTION: "PM / mid-trip inspection", REPAIR: "Repair", STEER: "Steering components", INJECTOR: "Injectors", COMPUTER: "Computer / module",
 };
 

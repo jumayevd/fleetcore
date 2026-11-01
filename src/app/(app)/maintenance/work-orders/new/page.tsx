@@ -3,7 +3,7 @@ import { can } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { getFormat } from "@/lib/format-server";
 import { defectLabel } from "@/lib/service";
-import { PTI_COMPONENT_LABELS, REPAIR_TYPES, humanize } from "@/lib/constants";
+import { PTI_COMPONENT_LABELS, TRAILER_REPAIR_TYPES, TRUCK_REPAIR_TYPES, humanize } from "@/lib/constants";
 import { PageHeader } from "@/components/ui";
 import { saveWorkOrder } from "@/app/actions/repairs";
 import { repairTypeForCategory, repairTypeLabel } from "@/components/shop/shared";
@@ -36,9 +36,10 @@ export default async function NewRepair({ searchParams }: PageProps<"/maintenanc
   const trailer = trailers.find((t) => t.id === (defect?.trailerId ?? str(sp.trailer)));
   const typeParam = str(sp.type);
   const category = str(sp.category);
-  const repairType = typeParam && (REPAIR_TYPES as readonly string[]).includes(typeParam) ? typeParam
-    : defect ? TYPE_FOR_COMPONENT[defect.component] ?? ""
-      : category ? repairTypeForCategory(category) : "";
+  const suggested = typeParam ?? (defect ? TYPE_FOR_COMPONENT[defect.component] : category ? repairTypeForCategory(category) : null);
+  // Only a type the unit's own list offers (a leak on a trailer is not an engine job): anything else is picked on the form.
+  const unitTypes: readonly string[] = trailer && !truck ? TRAILER_REPAIR_TYPES : TRUCK_REPAIR_TYPES;
+  const repairType = suggested && unitTypes.includes(suggested) ? suggested : "";
   const statusParam = str(sp.status);
   const status = statusParam === "DONE" || statusParam === "IN_PROGRESS" ? statusParam : "OPEN";
   const vendorId = vendors.find((v) => v.id === str(sp.vendor))?.id ?? null;
