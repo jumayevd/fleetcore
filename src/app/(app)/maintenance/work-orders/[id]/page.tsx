@@ -6,7 +6,7 @@ import { can } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { getFormat } from "@/lib/format-server";
 import { roLabel, defectLabel, serviceStatus, SERVICE_STATE_LABELS, SERVICE_STATE_TONE } from "@/lib/service";
-import { DEFECT_STATUS_LABELS, EQUIPMENT_LABELS, PAYER_HINTS, PAYMENT_STATUS_LABELS, REPAIR_STAGE_LABELS, VENDOR_TYPE_LABELS } from "@/lib/constants";
+import { DEFECT_STATUS_LABELS, EQUIPMENT_LABELS, PAYER_HINTS, PAYMENT_STATUS_LABELS, REPAIR_STAGE_LABELS } from "@/lib/constants";
 import { DOC_KIND_LABELS } from "@/lib/documents";
 import { Badge, Card, Chip, DL, Disclosure, Field, InfoTip, Input, LinkButton, PageHeader, Select, Table, Textarea, cn } from "@/components/ui";
 import { ActionForm, FormMessage, SubmitButton } from "@/components/forms";
@@ -15,6 +15,7 @@ import { ActionButton } from "@/components/shop/action-button";
 import { RepairTags } from "@/components/shop/repair-bits";
 import {
   SYSTEM_FOR_TYPE, downtime, downtimeTone, driverNotTold, payerLabel, repairStatusLabel, repairStatusTone, repairTypeLabel, resetsInspection, resetsOil, stageLabel, systemLabel,
+  vendorTypeLabel,
 } from "@/components/shop/shared";
 import { addRepairNote, closeOutRepair, deleteRepair, markDriverInformed, saveInvoice, startRepair, voidRepair } from "@/app/actions/repairs";
 import { DeleteButton } from "@/components/delete-button";
@@ -341,7 +342,7 @@ export default async function RepairDetail({ params, searchParams }: PageProps<"
             {wo.vendorRef ? (
               <>
                 <Link href={vendorHref(wo.vendorRef.id)} className="text-[13px] font-medium text-fg hover:underline">{wo.vendorRef.name}</Link>
-                <p className="text-[12px] text-fg-subtle">{[VENDOR_TYPE_LABELS[wo.vendorRef.type], wo.vendorRef.city].filter(Boolean).join(" · ")}</p>
+                <p className="text-[12px] text-fg-subtle">{[vendorTypeLabel(wo.vendorRef), wo.vendorRef.city].filter(Boolean).join(" · ")}</p>
                 <dl className="mt-2 space-y-1 text-[12px]">
                   {wo.vendorRef.contactName && <div className="flex gap-2"><dt className="w-16 text-fg-subtle">Contact</dt><dd className="text-fg">{wo.vendorRef.contactName}</dd></div>}
                   {wo.vendorRef.phone && <div className="flex gap-2"><dt className="w-16 text-fg-subtle">Phone</dt><dd><a href={`tel:${wo.vendorRef.phone}`} className="num text-fg hover:underline">{wo.vendorRef.phone}</a></dd></div>}

@@ -5,7 +5,7 @@ import { Check, ChevronDown, Plus, Search, Store, X } from "lucide-react";
 import { VENDOR_TYPES, VENDOR_TYPE_LABELS } from "@/lib/constants";
 import { Button, cn, inputClass } from "@/components/ui";
 import { createVendorInline } from "@/app/actions/vendors";
-import { vendorKey, type VendorOption } from "./shared";
+import { vendorKey, vendorTypeLabel, type VendorOption } from "./shared";
 
 /**
  * Pick the shop for a repair: search the company's vendors, or create one on the spot without leaving the form.
@@ -52,7 +52,7 @@ export function VendorPicker({ vendors, defaultVendorId, legacyName, canCreate =
     const q = vendorKey(query);
     return list
       .filter((v) => v.active || v.id === selected)
-      .filter((v) => !q || vendorKey(`${v.name} ${v.city ?? ""} ${VENDOR_TYPE_LABELS[v.type] ?? ""}`).includes(q))
+      .filter((v) => !q || vendorKey(`${v.name} ${v.city ?? ""} ${vendorTypeLabel(v)}`).includes(q))
       .slice(0, 50);
   }, [list, query, selected]);
   const exact = list.some((v) => vendorKey(v.name) === vendorKey(query));
@@ -143,7 +143,7 @@ export function VendorPicker({ vendors, defaultVendorId, legacyName, canCreate =
                     <button type="button" role="option" aria-selected={v.id === selected} onClick={() => choose(v)}
                       className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] hover:bg-raised">
                       <span className="min-w-0 flex-1 truncate text-fg">{v.name}</span>
-                      <span className="shrink-0 text-[11px] text-fg-subtle">{[VENDOR_TYPE_LABELS[v.type], v.city].filter(Boolean).join(" · ")}</span>
+                      <span className="max-w-[55%] truncate text-[11px] text-fg-subtle">{[vendorTypeLabel(v), v.city].filter(Boolean).join(" · ")}</span>
                       {v.id === selected && <Check className="h-3.5 w-3.5 shrink-0 text-accent-text" aria-hidden />}
                     </button>
                   </li>

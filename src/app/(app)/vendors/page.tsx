@@ -7,7 +7,7 @@ import { getFormat } from "@/lib/format-server";
 import { VENDOR_TYPES, VENDOR_TYPE_LABELS } from "@/lib/constants";
 import { Card, Chip, FilterPills, InfoTip, LinkButton, PageHeader, Table } from "@/components/ui";
 import { ActionButton } from "@/components/shop/action-button";
-import { looksLikeAddress, vendorKey } from "@/components/shop/shared";
+import { looksLikeAddress, vendorKey, vendorTypeLabel, vendorTypes } from "@/components/shop/shared";
 import { createVendorFromName, linkVendorName } from "@/app/actions/vendors";
 import { str } from "@/app/(app)/maintenance/_lib/data";
 import { vendorHref, vendorsHref, workOrdersHref } from "@/app/(app)/maintenance/_lib/links";
@@ -53,7 +53,7 @@ export default async function VendorsPage({ searchParams }: PageProps<"/vendors"
   const needle = q ? vendorKey(q) : "";
   const rows = vendors
     .filter((v) => (status === "all" ? true : status === "active" ? v.active : !v.active))
-    .filter((v) => !validType || v.type === validType)
+    .filter((v) => !validType || vendorTypes(v).includes(validType))
     .filter((v) => !needle || vendorKey([v.name, v.city, v.phone, v.contactName, v.address].filter(Boolean).join(" ")).includes(needle));
   const counts = { active: vendors.filter((v) => v.active).length, inactive: vendors.filter((v) => !v.active).length, all: vendors.length };
   const byName = new Map(vendors.map((v) => [vendorKey(v.name), v]));
@@ -161,7 +161,7 @@ export default async function VendorsPage({ searchParams }: PageProps<"/vendors"
                   <Link href={vendorHref(v.id)} className="block truncate font-medium text-fg hover:underline">{v.name}</Link>
                   {v.contactName && <p className="truncate text-[11px] text-fg-subtle">{v.contactName}</p>}
                 </td>
-                <td className="whitespace-nowrap text-fg-muted">{VENDOR_TYPE_LABELS[v.type] ?? v.type}</td>
+                <td className="text-fg-muted">{vendorTypeLabel(v)}</td>
                 <td className="whitespace-nowrap">{v.phone ? <a href={`tel:${v.phone}`} className="num text-fg-muted hover:text-fg hover:underline">{v.phone}</a> : <span className="text-fg-faint">—</span>}</td>
                 <td className="max-w-40 truncate text-fg-muted">{v.city ?? <span className="text-fg-faint">—</span>}</td>
                 <td className="num">{n ? <Link href={workOrdersHref({ shop: v.id, status: "all" })} className="hover:underline">{n}</Link> : <span className="text-fg-faint">0</span>}</td>

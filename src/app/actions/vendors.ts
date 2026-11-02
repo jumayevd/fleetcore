@@ -15,7 +15,7 @@ import { geocodeMissingVendors, geocodeVendor } from "@/lib/geocode";
  * in `vendor` too, so older reports that group by name keep adding up; renaming a vendor renames it on its orders.
  */
 
-const pick = { id: true, name: true, type: true, city: true, phone: true, active: true } as const;
+const pick = { id: true, name: true, type: true, types: true, city: true, phone: true, active: true } as const;
 
 function refreshVendors(id?: string | null) {
   revalidatePath("/vendors");
@@ -34,14 +34,16 @@ export async function saveVendor(vendorId: string | null, _: ActionState, fd: Fo
   const res = await attempt(async () => {
     const f = fields(fd);
     const name = f.req("name", "Name").replace(/\s+/g, " ").slice(0, 120);
-    const type = f.str("type") ?? "SHOP";
-    if (!(VENDOR_TYPES as readonly string[]).includes(type)) throw new FormError("Pick a vendor type");
+    // Ticked types, in the list's order; the first is the one shown where only one fits.
+    const ticked = new Set(fd.getAll("types").map(String));
+    const types = VENDOR_TYPES.filter((t) => ticked.has(t));
+    if (!types.length) throw new FormError("Tick at least one type: what the vendor does");
     const email = f.str("email");
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new FormError("That email address doesn't look right");
     const clash = await findByName(name, vendorId);
     if (clash) throw new FormError(`There is already a vendor called ${clash.name}`);
     const data = {
-      name, type, phone: f.str("phone"), email, contactName: f.str("contactName"), address: f.str("address"), city: f.str("city"),
+      name, type: types[0], types: [...types], phone: f.str("phone"), email, contactName: f.str("contactName"), address: f.str("address"), city: f.str("city"),
       notes: f.str("notes"), active: vendorId ? f.bool("active") : true,
     };
     let moved = true;
@@ -77,7 +79,7 @@ export async function createVendorInline(input: { name: string; type?: string; p
   const existing = await findByName(name);
   if (existing) return { vendor: existing, existed: true };
   const v = await db.vendor.create({
-    data: { name, type, phone: input.phone?.trim() || null, city: input.city?.trim() || null, address: looksLikeAddress(name) ? name : null },
+    data: { name, type, types: [type], phone: input.phone?.trim() || null, city: input.city?.trim() || null, address: looksLikeAddress(name) ? name : null },
     select: pick,
   });
   await audit(me.id, "create", "vendor", v.id, name);
@@ -108,7 +110,7 @@ export async function createVendorFromName(name: string): Promise<ActionState> {
     const clean = name.replace(/\s+/g, " ").trim().slice(0, 120);
     if (!clean) throw new FormError("There is no name to create a vendor from");
     const vendor = (await findByName(clean)) ?? (await db.vendor.create({
-      data: { name: clean, type: "SHOP", address: looksLikeAddress(clean) ? clean : null },
+      data: { name: clean, type: "SHOP", types: ["SHOP"], address: looksLikeAddress(clean) ? clean : null },
       select: pick,
     }));
     const { count } = await db.workOrder.updateMany({
@@ -122,7 +124,7 @@ export async function createVendorFromName(name: string): Promise<ActionState> {
 }
 
 export type NearVendor = {
-  id: string; name: string; type: string; phone: string | null; address: string | null; city: string | null;
+  id: string; name: string; type: string; types: string[]; phone: string | null; address: string | null; city: string | null;
   /** Straight-line distance from the unit's last position; null when the unit or the vendor has no location. */
   distanceKm: number | null;
   /** How the vendor was placed: its street address, or only its city. */
@@ -181,7 +183,7 @@ export async function vendorsNear(kind: "truck" | "trailer", id: string): Promis
   if (!unit) return { error: `That ${kind} no longer exists. Pick another one.` };
   await geocodeMissingVendors().catch(() => 0);
   const [vendors, all, onUnit] = await Promise.all([
-    db.vendor.findMany({ where: { active: true }, select: { id: true, name: true, type: true, phone: true, address: true, city: true, lat: true, lng: true, geoPrecision: true } }),
+    db.vendor.findMany({ where: { active: true }, select: { id: true, name: true, type: true, types: true, phone: true, address: true, city: true, lat: true, lng: true, geoPrecision: true } }),
     db.workOrder.groupBy({ by: ["vendorId"], where: { vendorId: { not: null }, voidedAt: null }, _count: true, _max: { scheduledAt: true } }),
     db.workOrder.groupBy({ by: ["vendorId"], where: { vendorId: { not: null }, voidedAt: null, ...(kind === "truck" ? { truckId: id } : { trailerId: id }) }, _count: true }),
   ]);
@@ -194,7 +196,7 @@ export async function vendorsNear(kind: "truck" | "trailer", id: string): Promis
       source: here?.source ?? null, located: Boolean(here), viaTruck: here?.viaTruck ?? null,
     },
     vendors: vendors.map((v): NearVendor => ({
-      id: v.id, name: v.name, type: v.type, phone: v.phone, address: v.address, city: v.city,
+      id: v.id, name: v.name, type: v.type, types: v.types, phone: v.phone, address: v.address, city: v.city,
       distanceKm: here && v.lat != null && v.lng != null ? greatCircleKm(here, { lat: v.lat, lng: v.lng }) : null,
       precision: v.lat != null && (v.geoPrecision === "ADDRESS" || v.geoPrecision === "CITY") ? v.geoPrecision : null,
       visits: visits.get(v.id)?._count ?? 0, unitVisits: unitVisits.get(v.id) ?? 0,

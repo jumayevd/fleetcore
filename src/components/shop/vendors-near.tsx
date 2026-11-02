@@ -2,13 +2,13 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { Check, LoaderCircle, MapPin, Phone, Store } from "lucide-react";
-import { VENDOR_TYPE_LABELS } from "@/lib/constants";
 import { ago } from "@/lib/format";
 import { Button, cn, segmentedThumb, segmentedTrack } from "@/components/ui";
 import { useFormat } from "@/components/locale";
 import { Overlay } from "@/components/inspections/overlay";
 import { sourceLabel } from "@/components/map/fleet-status";
 import { vendorsNear, type NearVendor, type VendorsNearResult } from "@/app/actions/vendors";
+import { vendorTypeLabel } from "./shared";
 
 type Sort = "closest" | "visited";
 
@@ -91,7 +91,7 @@ export function VendorsNear({ kind, unitId, unitNumber, selectedId, onPick }: {
                           {v.visits > 0 && v.visits === mostUsed && <span className="shrink-0 rounded bg-accent-soft px-1.5 py-px text-[10px] font-medium text-accent-text">Most used</span>}
                         </p>
                         <p className="truncate text-[11.5px] text-fg-subtle">
-                          {[VENDOR_TYPE_LABELS[v.type] ?? v.type, [v.address, v.city].filter(Boolean).join(", ") || null].filter(Boolean).join(" · ")}
+                          {[vendorTypeLabel(v), [v.address, v.city].filter(Boolean).join(", ") || null].filter(Boolean).join(" · ")}
                         </p>
                         <p className="mt-0.5 flex flex-wrap items-center gap-x-3 text-[11.5px] text-fg-muted">
                           <span>{v.visits ? `${v.visits} repair${v.visits === 1 ? "" : "s"}${v.unitVisits ? ` · ${v.unitVisits} on ${unitNumber}` : ""}${v.lastVisit ? ` · last ${f.day(v.lastVisit)}` : ""}` : "Not used yet"}</span>

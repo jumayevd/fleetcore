@@ -130,9 +130,11 @@ export const PAYER_HINTS: Record<string, string> = {
 export const PAYMENT_STATUSES = ["PAID", "PAY_LATER"] as const;
 export const PAYMENT_STATUS_LABELS: Record<string, string> = { PAID: "Paid", PAY_LATER: "To pay" };
 
-export const VENDOR_TYPES = ["DEALER", "SHOP", "TIRE", "MOBILE", "TOWING", "PARTS", "OTHER"] as const;
+/** What a vendor does (Vendor.types; a vendor can be several, e.g. a repair shop that also tows). */
+export const VENDOR_TYPES = ["DEALER", "SHOP", "TIRE", "WINDSHIELD", "MOBILE", "TOWING", "PARTS", "OTHER"] as const;
 export const VENDOR_TYPE_LABELS: Record<string, string> = {
-  DEALER: "Dealer", SHOP: "Repair shop", TIRE: "Tire shop", MOBILE: "Road-side / mobile", TOWING: "Towing", PARTS: "Parts supplier", OTHER: "Other",
+  DEALER: "Dealer", SHOP: "Repair shop", TIRE: "Tire shop", WINDSHIELD: "Windshield service", MOBILE: "Road-side / mobile", TOWING: "Towing",
+  PARTS: "Parts supplier", OTHER: "Other",
 };
 
 /* ------------------------------------------------------------------ */

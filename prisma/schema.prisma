@@ -535,8 +535,10 @@ model Vendor {
   companyId   String      @default("") // set by the company scope (src/lib/db.ts); "" fails the foreign key
   company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
   name        String
-  /// DEALER | SHOP | TIRE | MOBILE | TOWING | PARTS | OTHER
+  /// The first of `types` (one type to show where there is room for only one). DEALER | SHOP | TIRE | WINDSHIELD | MOBILE | TOWING | PARTS | OTHER
   type        String      @default("SHOP")
+  /// Everything it does, in the order picked (at least one). Rows from before keep [type].
+  types       String[]    @default([])
   phone       String?
   email       String?
   address     String?

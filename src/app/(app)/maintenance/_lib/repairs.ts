@@ -165,5 +165,5 @@ export async function repairCounts(now: Date, todayStart: Date) {
 
 /** Vendors for the picker: active ones and any already used by the order being edited. */
 export async function vendorOptions(): Promise<VendorOption[]> {
-  return db.vendor.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, type: true, city: true, phone: true, active: true } });
+  return db.vendor.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, type: true, types: true, city: true, phone: true, active: true } });
 }

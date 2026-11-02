@@ -1,8 +1,9 @@
 import Link from "next/link";
 import type { Vendor } from "@prisma/client";
 import { ActionForm, SubmitButton } from "@/components/forms";
-import { Card, Checkbox, Field, Input, Select, Textarea, buttonClass } from "@/components/ui";
+import { Card, Checkbox, Field, Input, Textarea, buttonClass } from "@/components/ui";
 import { VENDOR_TYPES, VENDOR_TYPE_LABELS } from "@/lib/constants";
+import { vendorTypes } from "@/components/shop/shared";
 import type { ActionState } from "@/lib/action";
 
 /** Add / edit vendor. Server-rendered fields inside the client ActionForm. */
@@ -20,12 +21,17 @@ export function VendorForm({ action, vendor, cancelHref, submitLabel }: {
             <Field label="Name" required className="sm:col-span-2" hint="The name people use for it, not just the street address.">
               <Input name="name" required maxLength={120} defaultValue={vendor?.name ?? ""} placeholder="e.g. Rush Truck Center Joliet" />
             </Field>
-            <Field label="Type">
-              <Select name="type" defaultValue={vendor?.type ?? "SHOP"} options={VENDOR_TYPES.map((t) => ({ value: t, label: VENDOR_TYPE_LABELS[t] }))} />
-            </Field>
-            <Field label="City">
+            <Field label="City" className="sm:col-span-2">
               <Input name="city" defaultValue={vendor?.city ?? ""} placeholder="e.g. Joliet, IL" />
             </Field>
+            <fieldset className="sm:col-span-2">
+              <legend className="mb-1.5 text-[12px] font-medium text-fg-muted">Type <span className="text-danger">*</span> <span className="font-normal text-fg-subtle">· tick everything it does</span></legend>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
+                {VENDOR_TYPES.map((t) => (
+                  <Checkbox key={t} name="types" value={t} label={VENDOR_TYPE_LABELS[t]} defaultChecked={(vendor ? vendorTypes(vendor) : ["SHOP"]).includes(t)} />
+                ))}
+              </div>
+            </fieldset>
             <Field label="Address" className="sm:col-span-2">
               <Input name="address" defaultValue={vendor?.address ?? ""} />
             </Field>

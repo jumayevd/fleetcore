@@ -119,7 +119,7 @@ async function seedCompany(spec: CompanySpec, people: { owner: string; members: 
   const vendors: { id: string; name: string; type: string }[] = [];
   for (const v of spec.vendors) {
     vendors.push(await db.vendor.create({
-      data: { companyId, name: v.name, type: v.type, city: v.city, phone: v.phone, contactName: v.contactName ?? null, email: v.email ?? null, address: v.address ?? null, createdAt: ago(int(100, 300)) },
+      data: { companyId, name: v.name, type: v.type, types: [v.type], city: v.city, phone: v.phone, contactName: v.contactName ?? null, email: v.email ?? null, address: v.address ?? null, createdAt: ago(int(100, 300)) },
     }));
   }
   const vendorFor = (kinds: string[]) => {

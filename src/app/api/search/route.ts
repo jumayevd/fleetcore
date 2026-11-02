@@ -6,8 +6,9 @@ import { getFormat } from "@/lib/format-server";
 import { defectLabel, roLabel } from "@/lib/service";
 import {
   DEFECT_STATUS_LABELS, PTI_COMPONENT_LABELS, REPAIR_STAGE_LABELS, REPAIR_TYPE_LABELS, ROADSIDE_RESULT_LABELS, TRAILER_STATUS_LABELS,
-  VENDOR_TYPE_LABELS, humanize,
+  humanize,
 } from "@/lib/constants";
+import { vendorTypeLabel } from "@/components/shop/shared";
 
 export const dynamic = "force-dynamic";
 
@@ -91,7 +92,7 @@ export async function GET(req: Request) {
       href: `/maintenance/work-orders/${w.id}`,
     })),
   });
-  if (vendors.length) groups.push({ label: "Vendors", hits: vendors.map((v) => ({ id: v.id, title: v.name, subtitle: [VENDOR_TYPE_LABELS[v.type] ?? humanize(v.type), v.city, v.phone].filter(Boolean).join(" · "), badge: v.active ? undefined : "Inactive", href: `/vendors/${v.id}` })) });
+  if (vendors.length) groups.push({ label: "Vendors", hits: vendors.map((v) => ({ id: v.id, title: v.name, subtitle: [vendorTypeLabel(v), v.city, v.phone].filter(Boolean).join(" · "), badge: v.active ? undefined : "Inactive", href: `/vendors/${v.id}` })) });
   if (defects.length) groups.push({
     label: "Defects",
     hits: defects.map((d) => ({

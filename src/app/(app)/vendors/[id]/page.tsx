@@ -6,12 +6,11 @@ import { can } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { getFormat } from "@/lib/format-server";
 import { roLabel } from "@/lib/service";
-import { VENDOR_TYPE_LABELS } from "@/lib/constants";
 import { Card, Chip, DL, LinkButton, PageHeader, Stat, Table } from "@/components/ui";
 import { Bars } from "@/components/charts-lite";
 import { ActionButton } from "@/components/shop/action-button";
 import { RepairStatus, RepairTags } from "@/components/shop/repair-bits";
-import { downtime, durationText, linesSummary, repairTypeLabel } from "@/components/shop/shared";
+import { downtime, durationText, linesSummary, repairTypeLabel, vendorTypeLabel } from "@/components/shop/shared";
 import { setVendorActive } from "@/app/actions/vendors";
 import { newWorkOrderHref, workOrderHref, workOrdersHref } from "@/app/(app)/maintenance/_lib/links";
 import { plural } from "@/app/(app)/maintenance/_lib/shared";
@@ -64,7 +63,7 @@ export default async function VendorPage({ params }: PageProps<"/vendors/[id]">)
     <>
       <PageHeader
         title={vendor.name}
-        subtitle={<span className="inline-flex flex-wrap items-center gap-2">{VENDOR_TYPE_LABELS[vendor.type] ?? vendor.type}{vendor.city && <span>· {vendor.city}</span>}{!vendor.active && <Chip tone="danger">Inactive</Chip>}</span>}
+        subtitle={<span className="inline-flex flex-wrap items-center gap-2">{vendorTypeLabel(vendor)}{vendor.city && <span>· {vendor.city}</span>}{!vendor.active && <Chip tone="danger">Inactive</Chip>}</span>}
         actions={editable && (
           <>
             <LinkButton href={`/vendors/${id}/edit`} variant="secondary"><Pencil />Edit</LinkButton>

@@ -2,7 +2,7 @@
  * Repair orders and oil service: plain values and rules shared by the shop pages, the truck / trailer page components
  * and the server actions. Client-safe (no Prisma, no server-only imports).
  */
-import { PAYER_LABELS, REPAIR_STAGE_LABELS, REPAIR_SYSTEM_LABELS, REPAIR_TYPE_LABELS, humanize } from "@/lib/constants";
+import { PAYER_LABELS, REPAIR_STAGE_LABELS, REPAIR_SYSTEM_LABELS, REPAIR_TYPE_LABELS, VENDOR_TYPE_LABELS, humanize } from "@/lib/constants";
 import type { Tone } from "@/components/ui";
 
 /* ------------------------------------------------------------------ */
@@ -147,7 +147,12 @@ export const OIL_CHECKLIST = [
 /* ------------------------------------------------------------------ */
 
 /** What the vendor picker needs about a vendor. */
-export type VendorOption = { id: string; name: string; type: string; city: string | null; phone: string | null; active: boolean };
+export type VendorOption = { id: string; name: string; type: string; types: string[]; city: string | null; phone: string | null; active: boolean };
+
+/** Everything a vendor does; a row from before vendors had several types has only `type`. */
+export const vendorTypes = (v: { type: string; types?: string[] | null }) => (v.types?.length ? v.types : [v.type]);
+/** "Repair shop, Towing" */
+export const vendorTypeLabel = (v: { type: string; types?: string[] | null }) => vendorTypes(v).map((t) => VENDOR_TYPE_LABELS[t] ?? humanize(t)).join(", ");
 
 /** A "shop" named only by a street address ("1234 Industrial Pkwy"): worth giving a proper name. */
 export const looksLikeAddress = (name: string) => /^\d+\s+\S+/.test(name.trim());

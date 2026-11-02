@@ -13,8 +13,9 @@ import {
   DEFECT_SEVERITIES, DEFECT_SEVERITY_LABELS, DEFECT_STATUS_LABELS, DRIVER_STATUSES, DRIVER_TYPES, DRIVER_TYPE_LABELS, EQUIPMENT, EQUIPMENT_LABELS,
   INSPECTION_LEVEL_LABELS, OWNERSHIP, OWNERSHIP_LABELS, PAYERS, PAYER_LABELS, PAYMENT_STATUS_LABELS, PTI_COMPONENT_LABELS, REPAIR_STAGES,
   REPAIR_STAGE_LABELS, REPAIR_SYSTEM_LABELS, REPAIR_TYPES, REPAIR_TYPE_LABELS, ROADSIDE_RESULTS, ROADSIDE_RESULT_LABELS, ROADSIDE_STATUSES,
-  ROADSIDE_STATUS_LABELS, TRAILER_STATUSES, TRAILER_STATUS_LABELS, TRUCK_STATUSES, VENDOR_TYPES, VENDOR_TYPE_LABELS, WORK_ORDER_PRIORITIES, humanize,
+  ROADSIDE_STATUS_LABELS, TRAILER_STATUSES, TRAILER_STATUS_LABELS, TRUCK_STATUSES, VENDOR_TYPES, WORK_ORDER_PRIORITIES, humanize,
 } from "@/lib/constants";
+import { vendorTypeLabel } from "@/components/shop/shared";
 import { TRAILER_POSITION_FIELDS, TRUCK_POSITION_FIELDS, lastSeen } from "./motion";
 import { COSTS_HIDDEN, DAY_MS as DAY, daysSince, daysUntil, makeKit, round, sumOf, type Kit } from "./kit";
 import {
@@ -815,7 +816,7 @@ export function buildAssistantTools(ctx: ToolContext) {
       description: "Vendors (shops, dealers, tire, road-side, towing, parts) with how much the fleet uses them: completed repair orders in a period (default the last 365 days), all-time orders, last used and (for roles that see money) spend and average per order; plus the most used and the biggest spend, and shop names typed on orders that are not linked to a vendor record. Filters: q (name, phone or city), type. sort: visits (default), spend, recent.",
       inputSchema: z.object({
         q: filterText("Vendor name, phone or city (case-insensitive contains)"),
-        type: z.enum(VENDOR_TYPES).optional().describe("DEALER | SHOP | TIRE | MOBILE | TOWING | PARTS | OTHER"),
+        type: z.enum(VENDOR_TYPES).optional().describe("DEALER | SHOP | TIRE | WINDSHIELD | MOBILE | TOWING | PARTS | OTHER (a vendor can be several)"),
         sort: z.enum(["visits", "spend", "recent"]).optional(),
         from: dateText("First day, YYYY-MM-DD. Default: 365 days before `to`."),
         to: dateText("Last day (inclusive), YYYY-MM-DD. Default: today."),
@@ -829,12 +830,12 @@ export function buildAssistantTools(ctx: ToolContext) {
           where: {
             AND: [
               q.includeInactive ? {} : { active: true },
-              q.type ? { type: q.type } : {},
+              q.type ? { OR: [{ types: { has: q.type } }, { type: q.type }] } : {},
               q.q ? { OR: [{ name: like(q.q) }, { phone: like(q.q) }, { city: like(q.q) }, { contactName: like(q.q) }] } : {},
             ],
           },
           orderBy: { name: "asc" }, take: SCAN,
-          select: { id: true, name: true, type: true, phone: true, email: true, city: true, contactName: true, active: true },
+          select: { id: true, name: true, type: true, types: true, phone: true, email: true, city: true, contactName: true, active: true },
         });
         const ids = vendors.map((v) => v.id);
         const done: Prisma.WorkOrderWhereInput = { status: "DONE", voidedAt: null, completedAt: { gte: p.from, lt: p.to } };
@@ -863,7 +864,7 @@ export function buildAssistantTools(ctx: ToolContext) {
               : sort === "recent" ? (b.last?.getTime() ?? 0) - (a.last?.getTime() ?? 0)
                 : b.s.orders - a.s.orders || b.s.spend - a.s.spend);
         const view = ({ v, s, last: l }: (typeof rows)[number]) => ({
-          name: v.name, href: link(`/vendors/${v.id}`), type: kit.label(VENDOR_TYPE_LABELS, v.type), phone: v.phone, email: v.email, city: v.city, contact: v.contactName,
+          name: v.name, href: link(`/vendors/${v.id}`), type: vendorTypeLabel(v), phone: v.phone, email: v.email, city: v.city, contact: v.contactName,
           ...(v.active ? {} : { inactive: true }),
           completedInPeriod: s.orders, allTimeOrders: all.get(v.id) ?? 0, lastUsed: kit.date(l),
           ...cash({ spendInPeriod: f.money(s.spend), averagePerOrder: s.orders ? f.money(s.spend / s.orders) : null }),
@@ -1367,7 +1368,7 @@ export function buildAssistantTools(ctx: ToolContext) {
             where: { OR: [...(ro ? [{ number: Number(ro[1]) }] : []), { title: like(q) }, { vendor: like(q) }, { vendorRef: { name: like(q) } }, { invoiceNumber: like(q) }] },
             take: 5, orderBy: { number: "desc" }, select: WO_ROW,
           }),
-          db.vendor.findMany({ where: { OR: [{ name: like(q) }, { phone: like(q) }, { city: like(q) }] }, take: 5, orderBy: { name: "asc" }, select: { id: true, name: true, type: true, phone: true, city: true } }),
+          db.vendor.findMany({ where: { OR: [{ name: like(q) }, { phone: like(q) }, { city: like(q) }] }, take: 5, orderBy: { name: "asc" }, select: { id: true, name: true, type: true, types: true, phone: true, city: true } }),
           db.defect.findMany({ where: { OR: [...(def ? [{ number: Number(def[1]) }] : []), { description: like(q) }] }, take: 5, orderBy: { number: "desc" }, select: DEFECT_ROW }),
           db.roadsideInspection.findMany({ where: { reportNumber: like(q) }, take: 5, orderBy: { inspectedAt: "desc" }, select: { id: true, reportNumber: true, inspectedAt: true, result: true, ...UNIT_SELECT } }),
         ]);
@@ -1379,7 +1380,7 @@ export function buildAssistantTools(ctx: ToolContext) {
           trailers: trailers.map((x) => ({ unit: x.unitNumber, type: kit.label(EQUIPMENT_LABELS, x.type), status: kit.label(TRAILER_STATUS_LABELS, x.status), pairedTruck: x.truck?.unitNumber ?? null, location: x.locationName, href: link(`/fleet/trailers/${x.id}`) })),
           drivers: drivers.map((x) => ({ name: x.name, phone: x.phone, employment: humanize(x.status), onHold: x.hold, truck: x.truck?.unitNumber ?? null, href: link(`/drivers/${x.id}`) })),
           repairOrders: workOrders.map((w) => woView(w, kit, now, today)),
-          vendors: vendors.map((v) => ({ name: v.name, type: kit.label(VENDOR_TYPE_LABELS, v.type), phone: v.phone, city: v.city, href: link(`/vendors/${v.id}`) })),
+          vendors: vendors.map((v) => ({ name: v.name, type: vendorTypeLabel(v), phone: v.phone, city: v.city, href: link(`/vendors/${v.id}`) })),
           defects: defects.map((d) => defectView(d, kit, now)),
           roadsideInspections: roadside.map((r) => ({ reportNumber: r.reportNumber, date: kit.date(r.inspectedAt), result: kit.label(ROADSIDE_RESULT_LABELS, r.result), unit: unitView(r, kit), href: link(`/inspections/roadside/${r.id}`) })),
         };
