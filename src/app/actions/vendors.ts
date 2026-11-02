@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+import { can } from "@/lib/permissions";
 import { audit } from "@/lib/audit";
 import { attempt, fields, FormError, type ActionState } from "@/lib/action";
 import { VENDOR_TYPES } from "@/lib/constants";
@@ -203,6 +204,25 @@ export async function vendorsNear(kind: "truck" | "trailer", id: string): Promis
       lastVisit: visits.get(v.id)?._max.scheduledAt?.toISOString() ?? null,
     })),
   };
+}
+
+/**
+ * Owners and admins: delete a vendor (one added by mistake, or a duplicate). Its repair orders stay, keeping the
+ * shop's name; they are no longer linked to a vendor, so they show again under the typed shop names to link.
+ */
+export async function deleteVendor(id: string): Promise<ActionState> {
+  const me = await requireUser("fleet.edit");
+  return attempt(async () => {
+    if (!can(me.role, "fleet.delete")) throw new FormError("Only an owner or admin can delete a vendor.");
+    const vendor = await db.vendor.findUnique({ where: { id }, select: { name: true } });
+    if (!vendor) throw new FormError("This vendor no longer exists. It may have been deleted already.");
+    // The name stays on its orders (the link is cleared when the vendor goes).
+    const { count } = await db.workOrder.updateMany({ where: { vendorId: id }, data: { vendor: vendor.name } });
+    await db.vendor.delete({ where: { id } });
+    await audit(me.id, "delete", "vendor", null, `${vendor.name}${count ? ` · ${count} ${count === 1 ? "repair keeps" : "repairs keep"} the shop name` : ""}`);
+    refreshVendors();
+    return { ok: `${vendor.name} deleted` };
+  });
 }
 
 /** Stop offering a vendor in the picker (its history stays), or bring it back. */
