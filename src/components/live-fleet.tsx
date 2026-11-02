@@ -21,7 +21,7 @@ import type { Formatter } from "@/lib/locale";
 /** The map only re-renders when its props change, not on every keystroke in the search box. */
 const MemoMap = memo(LeafletMap);
 
-const POLL_MS = 10_000;
+const POLL_MS = 5_000;
 const CLOCK_MS = 15_000;
 
 type Truck = FleetSnapshot[number];

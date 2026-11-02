@@ -765,6 +765,8 @@ model EldConnection {
   /// When a sync last started (also the lock that keeps two syncs of one company from running at once).
   lastSyncAt    DateTime?
   lastSuccessAt DateTime?
+  /// When a sync last changed something people see (a position, fuel, driver): open pages refresh when it moves on.
+  lastChangeAt  DateTime?
   lastError     String?
   vehicles      Int       @default(0)
   createdAt     DateTime  @default(now())

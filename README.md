@@ -120,12 +120,16 @@ single position, says why on the Integrations page, with the field names TrackPr
 - writes position, place, heading, fuel and the fix time onto the truck (`pingSource = TRACKPRO`, so the live map treats
   it as a tracker);
 - works speed out from the last two fixes, and adds up the straight-line distance between fixes since the truck's last
-  odometer reading (`EldUnit.gpsDistance`, shown as "≈ +312 mi by GPS"). It never overwrites the odometer: the oil
-  countdown stays on real readings;
+  odometer reading (`EldUnit.gpsDistance`, shown as "≈ +312 mi by GPS"), however far apart the fixes are, so nothing
+  is lost while nobody has the app open. It never overwrites the odometer: the oil countdown stays on real readings;
 - reads TrackPro's zone-less timestamps as UTC or company time, worked out on the first sync (changeable on the page).
 
-A sync runs at most once a minute per company: after any page view (`after()` in the app layout), on each live-map poll
-(`/api/fleet`), from "Sync now", and from `/api/cron/eld` (Vercel Cron once a day on the Hobby plan; it needs
+A sync runs at most every 5 seconds per company, while anyone has FleetCore open on screen: every page has a heartbeat
+(`src/components/eld-heartbeat.tsx`) that calls `/api/eld/tick` every 5 s and refreshes the page when a sync changed a
+reading (`EldConnection.lastChangeAt`), never while someone is typing in a field. A hidden tab stops and catches up when
+shown. The live map polls `/api/fleet` every 5 s too. However many pages are open, TrackPro is asked at most once per
+5 s per company (`lastSyncAt` is the lock); after a failed or unfinished sync the next waits 30 s. Syncs also run after a
+page load, from "Sync now", and from `/api/cron/eld` (Vercel Cron once a day on the Hobby plan; it needs
 `Authorization: Bearer $CRON_SECRET`, so an outside scheduler can call it more often). `TRACKPRO_API_BASE` (default
 `https://api.trackproeld.com/logger`) points the client at a stand-in server for local testing.
 

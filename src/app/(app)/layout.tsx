@@ -11,6 +11,7 @@ import { NAV_COOKIE } from "@/lib/nav";
 import { normalizeLocale } from "@/lib/locale";
 import { AppShell } from "@/components/app-shell";
 import { AssistantLauncher } from "@/components/assistant/launcher";
+import { EldHeartbeat } from "@/components/eld-heartbeat";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
@@ -20,7 +21,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const workspaces = await listWorkspaces(accounts);
   const navOpen = jar.get(NAV_COOKIE)?.value !== "rail";
   const active = { userId: user.id, companyId: user.company.id, companyName: user.company.name, color: user.company.color, role: user.role, email: user.email };
-  // ELD positions refresh while people use the app: at most once a minute per company, after the page is sent.
+  // ELD positions refresh while people use the app: a sync after the page is sent, then every 5 s from the heartbeat.
   const companyId = user.company.id;
   after(() => syncCompanyEld(companyId).catch((e) => console.error("eld sync failed", e)));
 
@@ -36,6 +37,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       )}
       {children}
+      <EldHeartbeat />
       {/* One conversation per account × company: switching company never shows another company's chat. */}
       <AssistantLauncher enabled={can(user.role, "assistant.use")} companyId={user.company.id} userId={user.id} />
     </AppShell>

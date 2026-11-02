@@ -11,21 +11,22 @@ import { EldError, emptyReason, fetchTrackProVehicles, type EldVehicle } from ".
  * fuel level, the time of the fix. TrackPro sends no speed or odometer, so:
  *  - speed is worked out from the last two fixes (distance / time), when they are close enough together to mean it;
  *  - EldUnit.gpsDistance adds up the straight-line distance between fixes since the truck's last odometer reading,
- *    a lower bound of what it has driven ("≈ +312 mi by GPS"). It never overwrites the odometer: an oil change is
- *    only as good as a real reading.
- * A sync runs at most once a minute per company (lastSyncAt is the lock): when someone uses the app (the layout and
- * the live map ask for one), from "Sync now", and from /api/cron/eld.
+ *    a lower bound of what it has driven ("≈ +312 mi by GPS"), however long apart the fixes are, so nothing is lost
+ *    while nobody has the app open. It never overwrites the odometer: an oil change is only as good as a real reading.
+ * A sync runs at most every 5 s per company (lastSyncAt is the lock): while someone has the app open (the heartbeat
+ * in every page, /api/eld/tick, and the live map ask for one), from "Sync now", and from /api/cron/eld. When the last
+ * attempt failed or is still running, the next waits 30 s, so a slow or refusing TrackPro isn't hammered.
  */
 
 export const PROVIDER = "TRACKPRO";
-export const SYNC_EVERY_MS = 60_000;
+export const SYNC_EVERY_MS = 5_000;
+/** After a failed sync (or one still running), the next waits this long. */
+const RETRY_AFTER_MS = 30_000;
 const KM_PER_MI = 1.609344;
 /** Faster than this between two fixes is a GPS jump, not driving (mph / km/h). */
 const MAX_SPEED = { imperial: 90, metric: 145 };
 /** Fixes further apart than this give no speed (the truck may have stopped and gone again in between). */
 const SPEED_WINDOW_MS = 30 * 60_000;
-/** …and are not added to the GPS distance either (a straight line over hours says little about the road). */
-const DISTANCE_WINDOW_MS = 6 * 3600_000;
 /** A truck whose last fix is older than this is taken as stopped. */
 const STOPPED_AFTER_MS = 10 * 60_000;
 
@@ -33,7 +34,11 @@ export type SyncResult =
   | { status: "none" }
   | { status: "skipped" }
   | { status: "error"; message: string }
-  | { status: "ok"; vehicles: number; matched: number; updated: number; note: string | null };
+  | { status: "ok"; vehicles: number; matched: number; updated: number; changed: boolean; note: string | null };
+
+/** The ELD fields of a unit row, compared to skip writing a row nothing changed in. */
+const UNIT_FIELDS = ["unitNumber", "vin", "make", "model", "driverName", "truckId", "lat", "lng", "fixAt", "place", "fuelPct", "defPct", "speed", "gpsDistance", "gpsFrom"] as const;
+const sameValue = (a: unknown, b: unknown) => (a instanceof Date || b instanceof Date ? (a as Date | null)?.getTime() === (b as Date | null)?.getTime() : a === b);
 
 function distanceKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
   const rad = (d: number) => (d * Math.PI) / 180;
@@ -90,8 +95,10 @@ export async function syncCompanyEld(companyId: string, opts: { force?: boolean 
     const conn = await db.eldConnection.findFirst({ where: { provider: PROVIDER, active: true } });
     if (!conn) return { status: "none" } as const;
     const now = new Date();
-    // The lock: only one sync per company per minute (or per 10 s for "Sync now").
-    const gap = opts.force ? 10_000 : SYNC_EVERY_MS;
+    // The lock: one sync per company every 5 s (half a second's slack, so a 5 s heartbeat never just misses it);
+    // 30 s after one that failed or hasn't finished (it started after the last success); "Sync now" every 2 s.
+    const unsettled = conn.lastSyncAt && (!conn.lastSuccessAt || conn.lastSuccessAt < conn.lastSyncAt);
+    const gap = opts.force ? 2_000 : unsettled ? RETRY_AFTER_MS : SYNC_EVERY_MS - 500;
     const claimed = await db.eldConnection.updateMany({
       where: { id: conn.id, OR: [{ lastSyncAt: null }, { lastSyncAt: { lt: new Date(now.getTime() - gap) } }] },
       data: { lastSyncAt: now },
@@ -125,7 +132,7 @@ export async function syncCompanyEld(companyId: string, opts: { force?: boolean 
     }
 
     const [trucks, known] = await Promise.all([
-      db.truck.findMany({ select: { id: true, unitNumber: true, vin: true, odometerAt: true, lastPingAt: true, pingSource: true } }),
+      db.truck.findMany({ select: { id: true, unitNumber: true, vin: true, odometerAt: true, lastPingAt: true, pingSource: true, speedKmh: true } }),
       db.eldUnit.findMany({ where: { connectionId: conn.id } }),
     ]);
     const byVin = new Map(trucks.filter((t) => vinKey(t.vin)).map((t) => [vinKey(t.vin), t]));
@@ -137,6 +144,9 @@ export async function syncCompanyEld(companyId: string, opts: { force?: boolean 
 
     let matched = 0;
     let updated = 0;
+    let changed = false;
+    /** Units nothing changed in: only their seenAt moves on, in one write. */
+    const unchanged: string[] = [];
     const claimedNow = new Set<string>();
     for (const v of vehicles) {
       const prev = knownBy.get(v.externalId);
@@ -164,7 +174,8 @@ export async function syncCompanyEld(companyId: string, opts: { force?: boolean 
         const perHour = d / (dtMs / 3_600_000);
         const plausible = perHour <= MAX_SPEED[locale.units];
         speed = dtMs >= 30_000 && dtMs <= SPEED_WINDOW_MS && plausible ? Math.round(perHour) : dtMs > SPEED_WINDOW_MS ? null : speed;
-        if (plausible && dtMs <= DISTANCE_WINDOW_MS) hop = d;
+        // A straight line is never longer than the road, however long ago the last fix was.
+        if (plausible) hop = d;
       } else if (newFix) speed = null;
       if (fixAt && now.getTime() - fixAt.getTime() > STOPPED_AFTER_MS) speed = 0;
 
@@ -181,8 +192,13 @@ export async function syncCompanyEld(companyId: string, opts: { force?: boolean 
         truckId, lat: hasFix ? v.lat : prev?.lat ?? null, lng: hasFix ? v.lng : prev?.lng ?? null, fixAt: fixAt ?? prev?.fixAt ?? null,
         place: place ?? prev?.place ?? null, fuelPct: v.fuelPct, defPct: v.defPct, speed, gpsDistance: Math.round(gpsDistance * 10) / 10, gpsFrom, seenAt: now,
       };
-      if (prev) await db.eldUnit.update({ where: { id: prev.id }, data });
-      else await db.eldUnit.create({ data: { ...data, connectionId: conn.id, externalId: v.externalId } });
+      if (!prev) {
+        await db.eldUnit.create({ data: { ...data, connectionId: conn.id, externalId: v.externalId } });
+        changed = true;
+      } else if (UNIT_FIELDS.some((k) => !sameValue(prev[k], data[k]))) {
+        await db.eldUnit.update({ where: { id: prev.id }, data });
+        changed = true;
+      } else unchanged.push(prev.id);
 
       // Onto the truck: a new fix (never older than what the truck already has from elsewhere).
       if (truck && hasFix && (newFix || truck.pingSource !== PROVIDER) && (!truck.lastPingAt || truck.pingSource === PROVIDER || fixAt!.getTime() >= truck.lastPingAt.getTime())) {
@@ -194,23 +210,41 @@ export async function syncCompanyEld(companyId: string, opts: { force?: boolean 
           },
         });
         updated++;
-      } else if (truck && truck.pingSource === PROVIDER && speed === 0) {
+        changed = true;
+      } else if (truck && truck.pingSource === PROVIDER && speed === 0 && truck.speedKmh !== 0) {
         await db.truck.update({ where: { id: truck.id }, data: { speedKmh: 0 } });
+        changed = true;
       }
     }
+    if (unchanged.length) await db.eldUnit.updateMany({ where: { id: { in: unchanged } }, data: { seenAt: now } });
 
     // A unit TrackPro no longer lists (or lists under another id, as its two API versions do) lets go of a truck
     // that a listed unit has now, so the truck page never reads the old one.
     const seen = new Set(vehicles.map((v) => v.externalId));
     const stale = known.filter((u) => !seen.has(u.externalId) && u.truckId && claimedNow.has(u.truckId)).map((u) => u.id);
-    if (stale.length) await db.eldUnit.updateMany({ where: { id: { in: stale } }, data: { truckId: null } });
+    if (stale.length) {
+      await db.eldUnit.updateMany({ where: { id: { in: stale } }, data: { truckId: null } });
+      changed = true;
+    }
     // Gone from TrackPro for a week: off the list.
     if (vehicles.length) await db.eldUnit.deleteMany({ where: { connectionId: conn.id, seenAt: { lt: new Date(now.getTime() - 7 * 86_400_000) } } });
 
     // TrackPro answered; an empty list still needs someone to act, so it shows as the connection's problem.
-    await db.eldConnection.update({ where: { id: conn.id }, data: { lastSuccessAt: now, lastError: empty, vehicles: vehicles.length } });
-    return { status: "ok", vehicles: vehicles.length, matched, updated, note: empty } as const;
+    await db.eldConnection.update({
+      where: { id: conn.id },
+      data: { lastSuccessAt: now, lastError: empty, vehicles: vehicles.length, ...(changed ? { lastChangeAt: now } : {}) },
+    });
+    return { status: "ok", vehicles: vehicles.length, matched, updated, changed, note: empty } as const;
   });
+}
+
+/**
+ * For the heartbeat: whether the company has an ELD, and when a sync last changed a reading (open pages refresh when
+ * this moves on, whoever's sync it was).
+ */
+export async function eldPulse(companyId: string) {
+  const conn = await rootDb.eldConnection.findFirst({ where: { companyId, provider: PROVIDER, active: true }, select: { lastChangeAt: true, lastSuccessAt: true } });
+  return { connected: Boolean(conn), changeAt: conn?.lastChangeAt?.toISOString() ?? null, syncedAt: conn?.lastSuccessAt?.toISOString() ?? null };
 }
 
 /** Every company with an active connection, one after the other (the cron route). */

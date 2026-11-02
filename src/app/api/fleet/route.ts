@@ -12,7 +12,7 @@ const SYNC_WAIT_MS = 4_000;
 /**
  * Live map polling: the active company's trucks in service with their last known position, oil service and defect
  * hold (see fleetSnapshot). Distances and speeds are in the company's own unit. Each poll also gives the ELD sync a
- * chance (at most once a minute): a quick one shows up in this answer, a slow one finishes in the background.
+ * chance (at most every 5 s): a quick one shows up in this answer, a slow one finishes in the background.
  */
 export async function GET() {
   const user = await getCurrentUser();

@@ -57,7 +57,7 @@ export default async function IntegrationsPage() {
           <div className="grid gap-3 text-[12.5px] text-fg-muted sm:grid-cols-2">
             <div>
               <p className="font-medium text-fg">Comes in from TrackPro</p>
-              <p>Position, place and heading of every truck, the time of the fix, fuel and DEF level, the driver logged in. Matched to your trucks by VIN, then unit number. Refreshed about every minute while anyone has FleetCore open.</p>
+              <p>Position, place and heading of every truck, the time of the fix, fuel and DEF level, the driver logged in. Matched to your trucks by VIN, then unit number. Synced every 5 seconds while anyone has FleetCore open on screen, and open pages update by themselves.</p>
             </div>
             <div>
               <p className="font-medium text-fg">Worked out by FleetCore</p>
