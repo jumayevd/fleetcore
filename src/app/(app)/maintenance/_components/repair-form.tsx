@@ -174,10 +174,10 @@ export function RepairForm({ action, trucks, trailers, drivers, vendors, initial
             <Field label="Technician">
               <Input name="technician" defaultValue={initial.technician ?? ""} placeholder="Who is working on it" />
             </Field>
-            {/* Once a truck is picked: the company's vendors by distance from where the truck is now; picking one sets the shop. */}
-            {mode === "truck" && truck ? (
+            {/* Once a unit is picked: the company's vendors by distance from where it is now; picking one sets the shop. */}
+            {unit ? (
               <div className="flex items-end">
-                <VendorsNear truckId={truck.id} unitNumber={truck.unitNumber} selectedId={vendorId} onPick={setVendorId} />
+                <VendorsNear kind={mode} unitId={unit.id} unitNumber={unit.unitNumber} selectedId={vendorId} onPick={setVendorId} />
               </div>
             ) : <div className="hidden sm:block" />}
             <Field label="Description" className="sm:col-span-2">

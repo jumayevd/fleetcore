@@ -123,16 +123,20 @@ export async function createVendorFromName(name: string): Promise<ActionState> {
 
 export type NearVendor = {
   id: string; name: string; type: string; phone: string | null; address: string | null; city: string | null;
-  /** Straight-line distance from the truck's last position; null when the truck or the vendor has no location. */
+  /** Straight-line distance from the unit's last position; null when the unit or the vendor has no location. */
   distanceKm: number | null;
   /** How the vendor was placed: its street address, or only its city. */
   precision: "ADDRESS" | "CITY" | null;
-  /** Repair orders with this vendor: all of them, and on this truck. */
-  visits: number; truckVisits: number; lastVisit: string | null;
+  /** Repair orders with this vendor: all of them, and on this unit. */
+  visits: number; unitVisits: number; lastVisit: string | null;
 };
 export type VendorsNearResult = {
   error?: string;
-  truck?: { unitNumber: string; locationName: string | null; at: string | null; source: string | null; located: boolean };
+  unit?: {
+    unitNumber: string; locationName: string | null; at: string | null; source: string | null; located: boolean;
+    /** A trailer placed by the truck pulling it: that truck's number. */
+    viaTruck: string | null;
+  };
   vendors?: NearVendor[];
 };
 
@@ -142,31 +146,58 @@ const greatCircleKm = (a: { lat: number; lng: number }, b: { lat: number; lng: n
   return 2 * 6371 * Math.asin(Math.sqrt(s));
 };
 
+type Fix = { lat: number; lng: number; locationName: string | null; at: Date | null; source: string | null; viaTruck: string | null };
+const fixOf = (u: { lat: number | null; lng: number | null; locationName: string | null; at: Date | null; source: string | null }, viaTruck: string | null = null): Fix | null =>
+  u.lat != null && u.lng != null ? { lat: u.lat, lng: u.lng, locationName: u.locationName, at: u.at, source: u.source, viaTruck } : null;
+
+/** Where a unit is now. A truck: its ELD. A trailer: its own tracker or the truck pulling it, whichever reported last. */
+async function unitFix(kind: "truck" | "trailer", id: string) {
+  if (kind === "truck") {
+    const t = await db.truck.findUnique({ where: { id }, select: { unitNumber: true, lat: true, lng: true, locationName: true, lastPingAt: true, pingSource: true } });
+    return t && { unitNumber: t.unitNumber, fix: fixOf({ ...t, at: t.lastPingAt, source: t.pingSource }) };
+  }
+  const t = await db.trailer.findUnique({
+    where: { id },
+    select: {
+      unitNumber: true, lat: true, lng: true, locationName: true, lastPingAt: true, gpsProvider: true,
+      truck: { select: { unitNumber: true, lat: true, lng: true, locationName: true, lastPingAt: true, pingSource: true } },
+    },
+  });
+  if (!t) return null;
+  const own = fixOf({ ...t, at: t.lastPingAt, source: t.gpsProvider });
+  const pulled = t.truck ? fixOf({ ...t.truck, at: t.truck.lastPingAt, source: t.truck.pingSource }, t.truck.unitNumber) : null;
+  const fix = own && pulled ? ((pulled.at?.getTime() ?? 0) > (own.at?.getTime() ?? 0) ? pulled : own) : own ?? pulled;
+  return { unitNumber: t.unitNumber, fix };
+}
+
 /**
- * "Vendors near this truck" on the repair form: every active vendor with how far it is from the truck's last position
- * (ELD / tracker, as the crow flies) and how often the company used it, overall and on this truck. Vendors never
- * placed on the map are looked up first, a few at a time (src/lib/geocode.ts).
+ * "Vendors near this unit" on the repair form: every active vendor with how far it is from the truck's or trailer's
+ * last position (ELD / tracker, as the crow flies) and how often the company used it, overall and on this unit.
+ * Vendors never placed on the map are looked up first, a few at a time (src/lib/geocode.ts).
  */
-export async function vendorsNear(truckId: string): Promise<VendorsNearResult> {
+export async function vendorsNear(kind: "truck" | "trailer", id: string): Promise<VendorsNearResult> {
   await requireUser("fleet.view");
-  const truck = await db.truck.findUnique({ where: { id: truckId }, select: { unitNumber: true, lat: true, lng: true, locationName: true, lastPingAt: true, pingSource: true } });
-  if (!truck) return { error: "That truck no longer exists. Pick another one." };
+  const unit = await unitFix(kind, id);
+  if (!unit) return { error: `That ${kind} no longer exists. Pick another one.` };
   await geocodeMissingVendors().catch(() => 0);
-  const [vendors, all, onTruck] = await Promise.all([
+  const [vendors, all, onUnit] = await Promise.all([
     db.vendor.findMany({ where: { active: true }, select: { id: true, name: true, type: true, phone: true, address: true, city: true, lat: true, lng: true, geoPrecision: true } }),
     db.workOrder.groupBy({ by: ["vendorId"], where: { vendorId: { not: null }, voidedAt: null }, _count: true, _max: { scheduledAt: true } }),
-    db.workOrder.groupBy({ by: ["vendorId"], where: { vendorId: { not: null }, voidedAt: null, truckId }, _count: true }),
+    db.workOrder.groupBy({ by: ["vendorId"], where: { vendorId: { not: null }, voidedAt: null, ...(kind === "truck" ? { truckId: id } : { trailerId: id }) }, _count: true }),
   ]);
   const visits = new Map(all.map((r) => [r.vendorId!, r]));
-  const truckVisits = new Map(onTruck.map((r) => [r.vendorId!, r._count]));
-  const here = truck.lat != null && truck.lng != null ? { lat: truck.lat, lng: truck.lng } : null;
+  const unitVisits = new Map(onUnit.map((r) => [r.vendorId!, r._count]));
+  const here = unit.fix;
   return {
-    truck: { unitNumber: truck.unitNumber, locationName: truck.locationName, at: truck.lastPingAt?.toISOString() ?? null, source: truck.pingSource, located: Boolean(here) },
+    unit: {
+      unitNumber: unit.unitNumber, locationName: here?.locationName ?? null, at: here?.at?.toISOString() ?? null,
+      source: here?.source ?? null, located: Boolean(here), viaTruck: here?.viaTruck ?? null,
+    },
     vendors: vendors.map((v): NearVendor => ({
       id: v.id, name: v.name, type: v.type, phone: v.phone, address: v.address, city: v.city,
       distanceKm: here && v.lat != null && v.lng != null ? greatCircleKm(here, { lat: v.lat, lng: v.lng }) : null,
       precision: v.lat != null && (v.geoPrecision === "ADDRESS" || v.geoPrecision === "CITY") ? v.geoPrecision : null,
-      visits: visits.get(v.id)?._count ?? 0, truckVisits: truckVisits.get(v.id) ?? 0,
+      visits: visits.get(v.id)?._count ?? 0, unitVisits: unitVisits.get(v.id) ?? 0,
       lastVisit: visits.get(v.id)?._max.scheduledAt?.toISOString() ?? null,
     })),
   };
