@@ -64,7 +64,7 @@ export default async function VendorPage({ params }: PageProps<"/vendors/[id]">)
     <>
       <PageHeader
         title={vendor.name}
-        subtitle={<span className="inline-flex flex-wrap items-center gap-2">{VENDOR_TYPE_LABELS[vendor.type] ?? vendor.type}{vendor.city && <span>· {vendor.city}</span>}{!vendor.active && <Chip>Inactive</Chip>}</span>}
+        subtitle={<span className="inline-flex flex-wrap items-center gap-2">{VENDOR_TYPE_LABELS[vendor.type] ?? vendor.type}{vendor.city && <span>· {vendor.city}</span>}{!vendor.active && <Chip tone="danger">Inactive</Chip>}</span>}
         actions={editable && (
           <>
             <LinkButton href={`/vendors/${id}/edit`} variant="secondary"><Pencil />Edit</LinkButton>

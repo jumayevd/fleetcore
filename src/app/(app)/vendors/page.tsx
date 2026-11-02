@@ -167,7 +167,7 @@ export default async function VendorsPage({ searchParams }: PageProps<"/vendors"
                 <td className="num">{n ? <Link href={workOrdersHref({ shop: v.id, status: "all" })} className="hover:underline">{n}</Link> : <span className="text-fg-faint">0</span>}</td>
                 {money && <td className="num font-medium">{spentBy.get(v.id) ? f.money(spentBy.get(v.id)) : <span className="font-normal text-fg-faint">—</span>}</td>}
                 <td className="num whitespace-nowrap text-fg-muted">{last ? f.date(last) : <span className="text-fg-faint">Never</span>}</td>
-                <td>{v.active ? <Chip tone="ok">Active</Chip> : <Chip>Inactive</Chip>}</td>
+                <td>{v.active ? <Chip tone="ok">Active</Chip> : <Chip tone="danger">Inactive</Chip>}</td>
               </tr>
             );
           })}
