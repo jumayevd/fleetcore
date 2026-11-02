@@ -15,7 +15,7 @@ import { ListFilters } from "../filters";
 import { LinkRow } from "../link-row";
 import { ColumnChooser, type ColumnDef } from "../column-chooser";
 import { openDefects, openRepairs, unitDocRows } from "../data";
-import { daysSince, docExpiryByUnit, docsByUnit, EXPIRY_SOON_DAYS, expiryCounts, LIST_LIMIT, missingDocs, paperworkExpiry, pingStale, sinceShort } from "../lib";
+import { daysSince, docExpiryByUnit, docsByUnit, expiryCounts, LIST_LIMIT, missingDocs, paperworkExpiry, pingStale, sinceShort } from "../lib";
 import { TrailerStatusControl } from "./status-control";
 import { TrailerRowMenu } from "./row-menu";
 
@@ -121,10 +121,6 @@ export default async function TrailersPage({ searchParams }: PageProps<"/fleet/t
   const inShop = byStatus("SHOP").length;
   const pairedCount = working.filter((t) => t.truckId).length;
   const unpaired = working.length - pairedCount;
-  const expiringHint = [
-    expiredUnits ? `${expiredUnits} expired` : null,
-    expiringUnits > expiredUnits ? `${expiringUnits - expiredUnits} within ${EXPIRY_SOON_DAYS} days` : null,
-  ].filter(Boolean).join(" · ") || `none in the next ${EXPIRY_SOON_DAYS} days`;
 
   const qs = (patch: Partial<typeof params>) => {
     const p = new URLSearchParams();
@@ -160,16 +156,15 @@ export default async function TrailersPage({ searchParams }: PageProps<"/fleet/t
       />
 
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        {tile(filtered ? "/fleet/trailers" : null, <Stat className={tileClass} label="Trailers" value={working.length} hint={`${pairedCount} paired · ${truckCount} trucks`} icon={<Container />} />)}
-        {counter(paired === "no", only({ paired: "no" }), <Stat className={tileClass} label="Not paired" value={unpaired} hint="in the yard, dropped, in shop or loose" icon={<Unlink />} />)}
+        {tile(filtered ? "/fleet/trailers" : null, <Stat className={tileClass} label="Trailers" value={working.length} icon={<Container />} />)}
+        {counter(paired === "no", only({ paired: "no" }), <Stat className={tileClass} label="Not paired" value={unpaired} icon={<Unlink />} />)}
         {counter(status === "DROPPED", only({ status: "DROPPED" }), <Stat className={tileClass} label="Dropped" value={byStatus("DROPPED").length}
-          hint={dropOldest ? `oldest ${daysSince(dropOldest.statusSince)}d · ${dropOldest.unitNumber}` : "none left at a site"} tone={dropOldest && daysSince(dropOldest.statusSince) > 14 ? "warn" : "neutral"} icon={<MapPinned />} />)}
+          tone={dropOldest && daysSince(dropOldest.statusSince) > 14 ? "warn" : "neutral"} icon={<MapPinned />} />)}
         {counter(status === "INACTIVE", only({ status: "INACTIVE" }),
-          <Stat className={tileClass} label="Inactive" value={byStatus("INACTIVE").length} icon={<Archive />} hint="sold, retired or parked for good" />)}
+          <Stat className={tileClass} label="Inactive" value={byStatus("INACTIVE").length} icon={<Archive />} />)}
         {counter(status === "SHOP", only({ status: "SHOP" }),
-          <Stat className={tileClass} label="In shop" value={inShop} icon={<Wrench />} tone={inShop ? "warn" : "neutral"}
-            hint={inShop ? "open the repair from the Repair column" : "nothing in the shop"} />)}
-        {counter(docsFilter === "expiring", only({ docs: "expiring" }), <Stat className={tileClass} label="Paperwork expiring" value={expiringUnits} hint={expiringHint} tone={expiredUnits ? "danger" : expiringUnits ? "warn" : "ok"} icon={<CalendarClock />} />)}
+          <Stat className={tileClass} label="In shop" value={inShop} icon={<Wrench />} tone={inShop ? "warn" : "neutral"} />)}
+        {counter(docsFilter === "expiring", only({ docs: "expiring" }), <Stat className={tileClass} label="Paperwork expiring" value={expiringUnits} tone={expiredUnits ? "danger" : expiringUnits ? "warn" : "ok"} icon={<CalendarClock />} />)}
       </div>
 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

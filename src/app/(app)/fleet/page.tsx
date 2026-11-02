@@ -242,22 +242,17 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
 
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 2xl:grid-cols-6">
         {counter(status === "ACTIVE" && driver === "none", only({ status: "ACTIVE", driver: "none" }),
-          <Stat className={tileClass} label="Available" value={available} icon={<CircleCheck />} tone="ok"
-            hint={`no driver, not in shop · of ${working.length} in the fleet`} />)}
+          <Stat className={tileClass} label="Available" value={available} icon={<CircleCheck />} tone="ok" />)}
         {counter(status === "ACTIVE" && driver === "assigned", only({ status: "ACTIVE", driver: "assigned" }),
-          <Stat className={tileClass} label="Assigned" value={assigned} icon={<Users />} tone="info"
-            hint="in service with a driver" />)}
+          <Stat className={tileClass} label="Assigned" value={assigned} icon={<Users />} tone="info" />)}
         {counter(view === "archived", only({ view: "archived" }),
-          <Stat className={tileClass} label="Inactive" value={count("INACTIVE")} icon={<Archive />} hint="sold, stolen, total loss, returned…" />)}
+          <Stat className={tileClass} label="Inactive" value={count("INACTIVE")} icon={<Archive />} />)}
         {counter(status === "MAINTENANCE", only({ status: "MAINTENANCE" }),
-          <Stat className={tileClass} label="In shop" value={count("MAINTENANCE")} icon={<Wrench />} tone={count("MAINTENANCE") ? "warn" : "neutral"}
-            hint={count("MAINTENANCE") ? "open the repair from the Repair column" : "nothing in the shop"} />)}
+          <Stat className={tileClass} label="In shop" value={count("MAINTENANCE")} icon={<Wrench />} tone={count("MAINTENANCE") ? "warn" : "neutral"} />)}
         {counter(Boolean(attention), only({ attention: "1" }),
-          <Stat className={tileClass} label="Needs attention" value={attentionCount} icon={<TriangleAlert />} tone={attentionCount ? "danger" : "ok"}
-            hint={attentionCount ? `${findingCounts.filter((d) => d.tone !== "info").length} kinds of problem · open to see them` : "nothing to follow up"} />)}
+          <Stat className={tileClass} label="Needs attention" value={attentionCount} icon={<TriangleAlert />} tone={attentionCount ? "danger" : "ok"} />)}
         {counter(Boolean(vendor) && !status, only({ vendor: "1" }),
-          <Stat className={tileClass} label="Vendor" value={vendors} icon={<Store />} tone={vendors ? "progress" : "neutral"}
-            hint="another company's or owner's trucks, in any status" />)}
+          <Stat className={tileClass} label="Vendor" value={vendors} icon={<Store />} tone={vendors ? "progress" : "neutral"} />)}
       </div>
 
       {attention && (
