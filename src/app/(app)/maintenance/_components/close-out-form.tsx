@@ -39,7 +39,7 @@ export function CloseOutForm({ action, lines, money, truck, odometerIn, now, nee
     <ActionForm action={action} className="space-y-4">
       <div>
         <p className="mb-1.5 text-[12px] font-medium text-fg-muted">What was done <span className="text-danger">*</span></p>
-        <LinesEditor initial={lines} money={money} defaultSystem={defaultSystem} onTotal={setLinesTotal} />
+        <LinesEditor kind={truck ? "truck" : "trailer"} initial={lines} money={money} defaultSystem={defaultSystem} onTotal={setLinesTotal} />
       </div>
       <div className="grid grid-cols-2 gap-3">
         {needsInAt && (

@@ -187,7 +187,7 @@ export function RepairForm({ action, trucks, trailers, drivers, vendors, initial
 
         <Card title={completed ? <span>What was done <span className="text-danger">*</span></span> : "Work to do"}
           actions={<span className="text-[11px] text-fg-subtle">{completed ? "At least one line" : "Optional until it is completed"}</span>}>
-          <LinesEditor initial={initial.lines} money={money} defaultSystem={SYSTEM_FOR_TYPE[repairType] ?? "OTHER"} onTotal={setLinesTotal} />
+          <LinesEditor kind={mode} initial={initial.lines} money={money} defaultSystem={SYSTEM_FOR_TYPE[repairType] ?? "OTHER"} onTotal={setLinesTotal} />
         </Card>
 
         <Card title="Who pays">

@@ -2,18 +2,20 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import { REPAIR_SYSTEMS, REPAIR_SYSTEM_LABELS } from "@/lib/constants";
+import { TRAILER_LINE_SYSTEMS, TRUCK_LINE_SYSTEMS } from "@/lib/constants";
 import { IconButton, cn, inputClass } from "@/components/ui";
 import { useFormat } from "@/components/locale";
-import type { LineValue } from "./shared";
+import { systemLabel, type LineValue } from "./shared";
 
 type Row = { key: number; system: string; work: string; amount: string };
 
 /**
  * "What was done": one row per job (system, work performed, amount). Submits repeated lineSystem / lineWork /
  * lineAmount fields (read by readLines in src/lib/work-orders.ts). Amounts only for people who can see money.
+ * The systems are the unit's repair types plus Labor and Miscellaneous; a line from before keeps its own.
  */
-export function LinesEditor({ initial = [], money, defaultSystem = "OTHER", onTotal, placeholder = "e.g. Replaced front brake pads and rotors", minRows = 1, addLabel = "Add line" }: {
+export function LinesEditor({ kind = "truck", initial = [], money, defaultSystem = "OTHER", onTotal, placeholder = "e.g. Replaced front brake pads and rotors", minRows = 1, addLabel = "Add line" }: {
+  kind?: "truck" | "trailer";
   initial?: LineValue[];
   money: boolean;
   defaultSystem?: string;
@@ -37,6 +39,7 @@ export function LinesEditor({ initial = [], money, defaultSystem = "OTHER", onTo
   useEffect(() => { onTotalRef.current = onTotal; });
   useEffect(() => { onTotalRef.current?.(Math.round(total * 100) / 100); }, [total]);
 
+  const systems: readonly string[] = kind === "truck" ? TRUCK_LINE_SYSTEMS : TRAILER_LINE_SYSTEMS;
   const set = (key: number, patch: Partial<Row>) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   const add = () => setRows((rs) => [...rs, { key: next.current++, system: rs[rs.length - 1]?.system ?? defaultSystem, work: "", amount: "" }]);
   const remove = (key: number) => setRows((rs) => (rs.length > Math.max(1, minRows) || minRows === 0 ? rs.filter((r) => r.key !== key) : rs.map((r) => ({ ...r, work: "", amount: "" }))));
@@ -52,7 +55,7 @@ export function LinesEditor({ initial = [], money, defaultSystem = "OTHER", onTo
         {rows.map((r, i) => (
           <li key={r.key} className={cn("grid grid-cols-[1fr_1.75rem] gap-2", money ? "sm:grid-cols-[10rem_1fr_7rem_1.75rem]" : "sm:grid-cols-[10rem_1fr_1.75rem]")}>
             <select name="lineSystem" value={r.system} onChange={(e) => set(r.key, { system: e.target.value })} aria-label={`System, line ${i + 1}`} className={cn(inputClass, "col-span-2 sm:col-span-1")}>
-              {REPAIR_SYSTEMS.map((s) => <option key={s} value={s}>{REPAIR_SYSTEM_LABELS[s]}</option>)}
+              {(systems.includes(r.system) ? systems : [...systems, r.system]).map((s) => <option key={s} value={s}>{systemLabel(s)}</option>)}
             </select>
             <input name="lineWork" value={r.work} onChange={(e) => set(r.key, { work: e.target.value })} placeholder={i === 0 ? placeholder : "Work performed"}
               aria-label={`Work performed, line ${i + 1}`} maxLength={300} className={cn(inputClass, money ? "col-span-1" : "col-span-1")} />

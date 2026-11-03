@@ -102,11 +102,20 @@ export const REPAIR_TYPE_LABELS: Record<string, string> = {
   PM_INSPECTION: "PM / mid-trip inspection", REPAIR: "Repair", STEER: "Steering components", INJECTOR: "Injectors", COMPUTER: "Computer / module",
 };
 
-/** The system a line of work belongs to (WorkOrderLine.system), so repeat problems show up per system. */
-export const REPAIR_SYSTEMS = ["BODY", "BRAKES", "ELECTRICAL", "TIRES", "ENGINE", "COOLING", "EXHAUST", "HVAC", "SUSPENSION", "PM", "FEES", "OTHER"] as const;
+/**
+ * The system a line of work belongs to (WorkOrderLine.system), so repeat problems show up per system: the unit's repair
+ * types, plus Labor and Miscellaneous (lines only), with Other last. REPAIR_SYSTEMS is every system a line can have,
+ * including Cooling and HVAC, which lines from before keep.
+ */
+const LINE_ONLY_SYSTEMS = ["LABOR", "MISC"];
+const lineSystems = (types: readonly string[]) => [...types.filter((t) => t !== "OTHER"), ...LINE_ONLY_SYSTEMS, "OTHER"];
+export const TRUCK_LINE_SYSTEMS = lineSystems(TRUCK_REPAIR_TYPES);
+export const TRAILER_LINE_SYSTEMS = lineSystems(TRAILER_REPAIR_TYPES);
+export const REPAIR_SYSTEMS = [...new Set([...TRUCK_LINE_SYSTEMS, ...TRAILER_LINE_SYSTEMS, "COOLING", "HVAC"])];
 export const REPAIR_SYSTEM_LABELS: Record<string, string> = {
-  BODY: "Body & doors", BRAKES: "Brakes", ELECTRICAL: "Electrical & lights", TIRES: "Tires & wheels", ENGINE: "Engine", COOLING: "Cooling",
-  EXHAUST: "Exhaust / aftertreatment", HVAC: "HVAC", SUSPENSION: "Suspension & steering", PM: "PM / oil change", FEES: "Fees & supplies", OTHER: "Other",
+  ...REPAIR_TYPE_LABELS, LABOR: "Labor", MISC: "Miscellaneous",
+  // Lines from before.
+  COOLING: "Cooling", HVAC: "HVAC", PM: "PM / oil change", EXHAUST: "Exhaust / aftertreatment", FEES: "Fees & supplies",
 };
 
 /** Where a job in the shop has got to (WorkOrder.stage, while IN_PROGRESS), in order. */

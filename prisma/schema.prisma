@@ -564,7 +564,7 @@ model WorkOrderLine {
   company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
   workOrderId String
   workOrder   WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
-  /// BODY | BRAKES | ELECTRICAL | TIRES | ENGINE | COOLING | EXHAUST | HVAC | SUSPENSION | PM | FEES | OTHER
+  /// A repair type (OIL_CHANGE, ENGINE, BRAKES, …), LABOR or MISC (REPAIR_SYSTEMS in src/lib/constants.ts); COOLING and HVAC on older lines
   system      String
   work        String
   amount      Float     @default(0)

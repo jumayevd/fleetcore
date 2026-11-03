@@ -92,8 +92,11 @@ export const CHART_WEEKS: Record<ReportPeriod, number> = { month: 5, quarter: 13
 export const REPEAT_VISITS = 2;
 /** … within this many days. */
 export const REPEAT_WINDOW_DAYS = 90;
-/** Systems that come back by design (oil changes) or are not a fault (fees), so never count as a repeat problem. */
-export const REPEAT_IGNORED_SYSTEMS = ["PM", "FEES"] as const;
+/**
+ * Systems that come back by design (oil changes, inspections) or are not a fault (labor, miscellaneous, towing), so
+ * never count as a repeat problem. PM and FEES are their names on lines from before.
+ */
+export const REPEAT_IGNORED_SYSTEMS = ["OIL_CHANGE", "DOT_INSPECTION", "LABOR", "MISC", "TOWING", "PM", "FEES"] as const;
 
 /* ------------------------------------------------------------------ */
 /* CSV export                                                          */

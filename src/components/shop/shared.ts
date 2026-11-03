@@ -2,7 +2,7 @@
  * Repair orders and oil service: plain values and rules shared by the shop pages, the truck / trailer page components
  * and the server actions. Client-safe (no Prisma, no server-only imports).
  */
-import { PAYER_LABELS, REPAIR_STAGE_LABELS, REPAIR_SYSTEM_LABELS, REPAIR_TYPE_LABELS, VENDOR_TYPE_LABELS, humanize } from "@/lib/constants";
+import { PAYER_LABELS, REPAIR_STAGE_LABELS, REPAIR_SYSTEMS, REPAIR_SYSTEM_LABELS, REPAIR_TYPE_LABELS, VENDOR_TYPE_LABELS, humanize } from "@/lib/constants";
 import type { Tone } from "@/components/ui";
 
 /* ------------------------------------------------------------------ */
@@ -62,11 +62,10 @@ export const systemLabel = (s: string) => REPAIR_SYSTEM_LABELS[s] ?? humanize(s)
 export const stageLabel = (s: string | null | undefined) => (s ? REPAIR_STAGE_LABELS[s] ?? humanize(s) : null);
 export const payerLabel = (p: string) => PAYER_LABELS[p] ?? humanize(p);
 
-/** Default system for the first line of a new repair of this type. */
+/** Default system for the first line of a new repair of this type: the type itself; an older type, the nearest one. */
 export const SYSTEM_FOR_TYPE: Record<string, string> = {
-  OIL_CHANGE: "PM", PM_INSPECTION: "PM", DOT_INSPECTION: "OTHER", ENGINE: "ENGINE", FUEL_SYSTEM: "ENGINE", INJECTOR: "ENGINE", DPF: "EXHAUST",
-  ELECTRICAL: "ELECTRICAL", LIGHTS: "ELECTRICAL", COMPUTER: "ELECTRICAL", BODY: "BODY", FRAME: "BODY", ACCIDENT: "BODY", MUD_FLAP: "BODY",
-  TIRES: "TIRES", BRAKES: "BRAKES", SUSPENSION: "SUSPENSION", TANDEM: "SUSPENSION", STEER: "SUSPENSION", TOWING: "FEES", REPAIR: "OTHER", OTHER: "OTHER",
+  ...Object.fromEntries(REPAIR_SYSTEMS.map((s) => [s, s])),
+  PM_INSPECTION: "OIL_CHANGE", REPAIR: "OTHER", STEER: "SUSPENSION", INJECTOR: "ENGINE", COMPUTER: "ELECTRICAL",
 };
 
 /* ------------------------------------------------------------------ */

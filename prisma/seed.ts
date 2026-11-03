@@ -554,7 +554,7 @@ async function seedCompany(spec: CompanySpec, people: { owner: string; members: 
         cost: 395, partsCost: 145, laborCost: 250, invoiceNumber: `RC-${int(1000, 9999)}`, invoiceTotal: 395, paymentStatus: "PAY_LATER", createdById: specialist, createdAt: ago(3.4),
       },
     });
-    await db.workOrderLine.createMany({ data: [{ companyId, workOrderId: wo.id, system: "BRAKES", work: "Brake chamber 30/30", amount: 145, position: 0 }, { companyId, workOrderId: wo.id, system: "FEES", work: "Road call", amount: 250, position: 1 }] });
+    await db.workOrderLine.createMany({ data: [{ companyId, workOrderId: wo.id, system: "BRAKES", work: "Brake chamber 30/30", amount: 145, position: 0 }, { companyId, workOrderId: wo.id, system: "MISC", work: "Road call", amount: 250, position: 1 }] });
     await db.defect.updateMany({ where: { companyId, truckId: brakeTruck.id, status: "REPAIRED" }, data: { workOrderId: wo.id } });
   }
 

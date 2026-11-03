@@ -221,7 +221,7 @@ export async function logOilChange(_: ActionState, fd: FormData): Promise<Action
     const checked = OIL_CHECKLIST.filter((c) => f.bool(`check_${c.key}`));
     const oil = checked.some((c) => c.key === "OIL_FILTER");
     const other = readLines(fd, money);
-    const lines = [...checked.map((c) => ({ system: "PM", work: c.work, amount: 0 })), ...other];
+    const lines = [...checked.map((c) => ({ system: "OIL_CHANGE", work: c.work, amount: 0 })), ...other];
     if (!lines.length) throw new FormError("Tick what was done, or add a line of other work");
 
     const invoice = { invoiceTotal: null as number | null, invoiceNumber: null as string | null, paymentStatus: null as string | null };

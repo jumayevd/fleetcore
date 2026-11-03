@@ -76,7 +76,7 @@ export function OilLogForm({ trucks, vendors, money, now, defaultTruckId, cancel
         </fieldset>
         <div>
           <p className="mb-1.5 text-[12px] font-medium text-fg-muted">Other work</p>
-          <LinesEditor money={money} defaultSystem="PM" minRows={0} addLabel="Add other work" onTotal={setLinesTotal} placeholder="e.g. Replaced wiper blades" />
+          <LinesEditor kind="truck" money={money} defaultSystem="OIL_CHANGE" minRows={0} addLabel="Add other work" onTotal={setLinesTotal} placeholder="e.g. Replaced wiper blades" />
         </div>
       </div>
 
