@@ -11,6 +11,7 @@ import type { ActionState } from "@/lib/action";
 import { LinesEditor } from "@/components/shop/lines-editor";
 import { VendorPicker } from "@/components/shop/vendor-picker";
 import { VendorsNear } from "@/components/shop/vendors-near";
+import { UnitPicker } from "@/components/shop/unit-picker";
 import { FORM_STATUSES, SYSTEM_FOR_TYPE, type LineValue, type VendorOption } from "@/components/shop/shared";
 import type { UnitOption } from "../_lib/data";
 
@@ -155,13 +156,11 @@ export function RepairForm({ action, trucks, trailers, drivers, vendors, initial
               </Field>
             ) : mode === "truck" ? (
               <Field label="Truck" required className="sm:col-span-2" hint={truck?.odometerKm != null ? `Odometer ${f.dist(truck.odometerKm)}` : undefined}>
-                <Select name="truckId" required value={truckId} onChange={(e) => pickTruck(e.target.value)} placeholder="Pick a truck…"
-                  options={trucks.map((t) => ({ value: t.id, label: `${t.unitNumber} · ${t.detail}` }))} />
+                <UnitPicker kind="truck" name="truckId" required units={trucks} value={truckId} onChange={pickTruck} />
               </Field>
             ) : (
               <Field label="Trailer" required className="sm:col-span-2">
-                <Select name="trailerId" required value={trailerId} onChange={(e) => setTrailerId(e.target.value)} placeholder="Pick a trailer…"
-                  options={trailers.map((t) => ({ value: t.id, label: `${t.unitNumber} · ${t.detail}` }))} />
+                <UnitPicker kind="trailer" name="trailerId" required units={trailers} value={trailerId} onChange={setTrailerId} />
               </Field>
             )}
             <TipField id={`${uid}-type`} label="Repair type" tip="Completing an oil change restarts the oil interval; an annual DOT inspection moves the inspection expiry a year on.">
