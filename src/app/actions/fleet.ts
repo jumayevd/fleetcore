@@ -11,6 +11,7 @@ import { OWNERSHIP } from "@/lib/constants";
 import { getFormat } from "@/lib/format-server";
 import { dayKey, parseDateInput, startOfDayIn } from "@/lib/locale";
 import { setTruckDriver } from "@/lib/assignments";
+import { truckOf } from "@/lib/assignments-shared";
 import { serviceStatus } from "@/lib/service";
 import { ODOMETER_JUMP_KM, placeFromText } from "@/app/(app)/fleet/lib";
 
@@ -51,10 +52,15 @@ export async function saveTruck(truckId: string | null, _: ActionState, fd: Form
     if (clash) throw new FormError(`There is already a truck ${unitNumber}. Pick another unit number.`);
 
     const driverId = f.str("driverId");
-    if (driverId) {
-      const driver = await db.driver.findUnique({ where: { id: driverId }, select: { name: true, truck: { select: { id: true, unitNumber: true } } } });
+    const coDriverId = f.str("coDriverId");
+    if (coDriverId && !driverId) throw new FormError("A team driver needs an assigned driver beside them. Pick the assigned driver too.");
+    if (coDriverId && coDriverId === driverId) throw new FormError("Pick two different drivers for a team truck.");
+    for (const pick of [driverId, coDriverId]) {
+      if (!pick) continue;
+      const driver = await db.driver.findUnique({ where: { id: pick }, select: { name: true, truck: { select: { id: true, unitNumber: true } }, teamTruck: { select: { id: true, unitNumber: true } } } });
       if (!driver) throw new FormError("That driver no longer exists. Reload the page and pick again.");
-      if (driver.truck && driver.truck.id !== truckId) throw new FormError(`${driver.name} already drives ${driver.truck.unitNumber}. Unassign them there first.`);
+      const other = truckOf(driver);
+      if (other && other.id !== truckId) throw new FormError(`${driver.name} already drives ${other.unitNumber}. Unassign them there first.`);
     }
     const truckTypeId = f.str("truckTypeId");
     if (truckTypeId && !(await db.truckType.count({ where: { id: truckTypeId } }))) {
@@ -118,10 +124,19 @@ export async function saveTruck(truckId: string | null, _: ActionState, fd: Form
       id = t.id;
       await audit(me.id, "create", "truck", t.id, data.unitNumber);
     }
-    // The driver picked on the form starts (or ends) a stint today, so the truck's driver history stays whole.
-    if (id && driverId !== driverBefore) {
-      await setTruckDriver({ truckId: id, driverId, day: startOfDayIn(new Date(), me.company.timezone), userId: me.id });
-      await audit(me.id, driverId ? "assign driver" : "unassign driver", "truck", id, driverId ? `from ${fmt.date(new Date())} (truck form)` : "driver taken off (truck form)");
+    // The drivers picked on the form start (or end) a stint today, so the truck's driver history stays whole. The
+    // driver's seat first: a team driver moving up to it then frees the team seat for the form's pick.
+    if (id) {
+      const day = startOfDayIn(new Date(), me.company.timezone);
+      if (driverId !== driverBefore) {
+        await setTruckDriver({ truckId: id, driverId, seat: "lead", day, userId: me.id });
+        await audit(me.id, driverId ? "assign driver" : "unassign driver", "truck", id, driverId ? `from ${fmt.date(new Date())} (truck form)` : "driver taken off (truck form)");
+      }
+      const now = await db.truck.findUnique({ where: { id }, select: { coDriverId: true } });
+      if ((now?.coDriverId ?? null) !== coDriverId) {
+        await setTruckDriver({ truckId: id, driverId: coDriverId, seat: "team", day, userId: me.id });
+        await audit(me.id, coDriverId ? "assign team driver" : "unassign team driver", "truck", id, coDriverId ? `from ${fmt.date(new Date())} (truck form)` : "team driver taken off (truck form)");
+      }
     }
   });
   if (res?.error) return res;

@@ -276,7 +276,7 @@ export async function updateProfile(_: ActionState, fd: FormData): Promise<Actio
   return attempt(async () => {
     const f = fields(fd);
     const profile = readProfile(f, me.role !== "OWNER");
-    await rootDb.user.update({ where: { id: me.id }, data: { ...profile, phone: f.str("phone") } });
+    await rootDb.user.update({ where: { id: me.id }, data: { ...profile, phone: f.phone("phone") } });
     forgetSessions();
     revalidatePath("/", "layout");
     return { ok: "Profile saved. It shows in every company you work for." };
@@ -291,7 +291,7 @@ export async function completeProfile(_: ActionState, fd: FormData): Promise<Act
   const res = await attempt(async () => {
     const f = fields(fd);
     const profile = readProfile(f, true);
-    await rootDb.user.update({ where: { id: userId }, data: { ...profile, phone: f.str("phone") ?? undefined } });
+    await rootDb.user.update({ where: { id: userId }, data: { ...profile, phone: f.phone("phone") ?? undefined } });
     await rootDb.auditLog.create({ data: { companyId: ctx.active!.company.id, userId, action: "update", entity: "user", entityId: userId, details: "Personal details added" } });
     forgetSessions();
   });

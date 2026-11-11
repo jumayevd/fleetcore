@@ -14,10 +14,18 @@ import { HoldControl } from "./hold-control";
 import { EmploymentMenu } from "./employment-menu";
 import { TruckAssignment } from "./truck-assignment";
 import { truckOptions } from "../data";
+import { truckOf } from "@/lib/assignments-shared";
 import { truckStatusLabel, truckStatusTone } from "../../fleet/lib";
 import { AT_RISK_SCORE, DRIVER_TYPE_TONE, EMPLOYMENT_LABELS, clearance, riskReasons, scoreGrade, tenure } from "../shared";
 
 const TABS = ["overview", "documents", "fuel"] as const;
+
+const TRUCK_PICK = {
+  select: {
+    id: true, unitNumber: true, make: true, model: true, year: true, plate: true, status: true, odometerKm: true, locationName: true, lastPingAt: true,
+    driver: { select: { id: true, name: true } }, coDriver: { select: { id: true, name: true } },
+  },
+} as const;
 type Tab = (typeof TABS)[number];
 const TAB_LABELS: Record<Tab, string> = { overview: "Overview", documents: "Documents", fuel: "Fuel" };
 const DOC_FIELD: Record<string, "licenseExpiry" | "medicalExpiry"> = { LICENSE: "licenseExpiry", MEDICAL: "medicalExpiry" };
@@ -41,12 +49,12 @@ export default async function DriverDetail({ params, searchParams }: PageProps<"
 
   const driver = await db.driver.findUnique({
     where: { id },
-    include: {
-      truck: { select: { id: true, unitNumber: true, make: true, model: true, year: true, plate: true, status: true, odometerKm: true, locationName: true, lastPingAt: true } },
-      _count: { select: { fuelLogs: true } },
-    },
+    include: { truck: TRUCK_PICK, teamTruck: TRUCK_PICK, _count: { select: { fuelLogs: true } } },
   });
   if (!driver) notFound();
+  // Their truck in either seat, and who drives it with them on a team truck.
+  const truck = truckOf(driver);
+  const partner = truck ? (truck.team ? truck.driver : truck.coDriver) : null;
 
   const [docRows, options, stints] = await Promise.all([
     db.document.findMany({ where: { driverId: id, kind: { in: [...REQUIRED_DRIVER_DOCS] } }, orderBy: { createdAt: "desc" }, select: { id: true, kind: true, name: true, expiresAt: true } }),
@@ -75,7 +83,7 @@ export default async function DriverDetail({ params, searchParams }: PageProps<"
   if (missingDocs.length) {
     attention.push({ tone: "warn", text: `Scans missing: ${missingDocs.map((k) => DOC_KIND_LABELS[k].toLowerCase()).join(", ")}`, href: docsHref });
   }
-  if (driver.status === "ACTIVE" && !driver.truck) attention.push({ tone: "info", text: "No truck assigned", href: canAssign ? `/drivers/${id}#truck` : undefined });
+  if (driver.status === "ACTIVE" && !truck) attention.push({ tone: "info", text: "No truck assigned", href: canAssign ? `/drivers/${id}#truck` : undefined });
   attention.sort((a, b) => toneRank(a.tone) - toneRank(b.tone));
 
   const tabs = TABS.map((t) => ({
@@ -94,8 +102,8 @@ export default async function DriverDetail({ params, searchParams }: PageProps<"
               {clear.detail && <span className="max-w-80 truncate text-[12px] text-fg-muted">{clear.detail}</span>}
             </span>
             <Chip tone={DRIVER_TYPE_TONE[driver.type]}>{DRIVER_TYPE_LABELS[driver.type] ?? driver.type}</Chip>
-            {driver.truck
-              ? <span className="inline-flex items-center gap-1.5 text-fg-muted"><TruckIcon className="h-3.5 w-3.5" />Drives <Link href={`/fleet/${driver.truck.id}`} className="num unit-no font-medium text-fg hover:underline">{driver.truck.unitNumber}</Link></span>
+            {truck
+              ? <span className="inline-flex items-center gap-1.5 text-fg-muted"><TruckIcon className="h-3.5 w-3.5" />Drives <Link href={`/fleet/${truck.id}`} className="num unit-no font-medium text-fg hover:underline">{truck.unitNumber}</Link>{partner && <> · team with <Link href={`/drivers/${partner.id}`} className="text-fg hover:underline">{partner.name}</Link></>}</span>
               : <span className="inline-flex items-center gap-1.5 text-fg-subtle"><TruckIcon className="h-3.5 w-3.5" />No truck</span>}
             {driver.dispatcher && <span className="inline-flex items-center gap-1.5 text-fg-muted"><Headset className="h-3.5 w-3.5" />Dispatch {driver.dispatcher}</span>}
           </span>
@@ -138,21 +146,23 @@ export default async function DriverDetail({ params, searchParams }: PageProps<"
             </Card>
 
             <Card id="truck" title="Truck" icon={<TruckIcon />}
-              actions={driver.truck && <Link href={`/fleet/${driver.truck.id}`} className="text-[11px] font-medium text-fg-muted hover:text-fg">Open truck →</Link>}>
-              {driver.truck ? (
+              actions={truck && <Link href={`/fleet/${truck.id}`} className="text-[11px] font-medium text-fg-muted hover:text-fg">Open truck →</Link>}>
+              {truck ? (
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <Link href={`/fleet/${driver.truck.id}`} className="num text-[16px] font-semibold text-fg hover:underline">{driver.truck.unitNumber}</Link>
-                      <Badge value={truckStatusTone(driver.truck.status, true)} label={truckStatusLabel(driver.truck.status, true)} />
+                      <Link href={`/fleet/${truck.id}`} className="num text-[16px] font-semibold text-fg hover:underline">{truck.unitNumber}</Link>
+                      <Badge value={truckStatusTone(truck.status, true)} label={truckStatusLabel(truck.status, true)} />
+                      {(truck.team || partner) && <Chip tone="info">{truck.team ? "Team driver" : "Team truck"}</Chip>}
                     </div>
-                    <p className="mt-0.5 truncate text-[12px] text-fg-muted">{driver.truck.year} {driver.truck.make} {driver.truck.model} · <span className="num">{driver.truck.plate}</span></p>
+                    <p className="mt-0.5 truncate text-[12px] text-fg-muted">{truck.year} {truck.make} {truck.model} · <span className="num">{truck.plate}</span></p>
+                    {partner && <p className="mt-0.5 text-[12px] text-fg-muted">Drives it with <Link href={`/drivers/${partner.id}`} className="font-medium text-fg hover:underline">{partner.name}</Link></p>}
                     <p className="mt-0.5 text-[11px] text-fg-subtle">
-                      <span className="num">{f.dist(driver.truck.odometerKm)}</span>
-                      {driver.truck.locationName && <> · {driver.truck.locationName}{driver.truck.lastPingAt && ` · ${ago(driver.truck.lastPingAt)}`}</>}
+                      <span className="num">{f.dist(truck.odometerKm)}</span>
+                      {truck.locationName && <> · {truck.locationName}{truck.lastPingAt && ` · ${ago(truck.lastPingAt)}`}</>}
                     </p>
                   </div>
-                  {canAssign && <TruckAssignment driverId={id} driverName={driver.name} current={{ id: driver.truck.id, unitNumber: driver.truck.unitNumber }} options={options.filter((o) => o.value !== driver.truck?.id)} />}
+                  {canAssign && <TruckAssignment driverId={id} driverName={driver.name} current={{ id: truck.id, unitNumber: truck.unitNumber }} options={options.filter((o) => o.value !== truck.id)} />}
                 </div>
               ) : driver.status === "INACTIVE" ? (
                 <p className="text-[13px] text-fg-muted">No truck. Inactive drivers can&apos;t be given one; set {driver.name} back to active first.</p>
@@ -284,7 +294,7 @@ export default async function DriverDetail({ params, searchParams }: PageProps<"
         </div>
       )}
 
-      {tab === "fuel" && <FuelTab driverId={id} truck={driver.truck} canLog={can(user.role, "fleet.edit")} showMoney={can(user.role, "money.view")} />}
+      {tab === "fuel" && <FuelTab driverId={id} truck={truck} canLog={can(user.role, "fleet.edit")} showMoney={can(user.role, "money.view")} />}
     </>
   );
 }

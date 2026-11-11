@@ -2,7 +2,8 @@
 
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeftRight, Camera, Check, ChevronDown, ImageIcon, Pencil, Plus, Search, UserMinus, UserPlus, X } from "lucide-react";
+import { ArrowLeftRight, Camera, Check, ChevronDown, ImageIcon, Pencil, Plus, Search, UserMinus, UserPlus, Users, X } from "lucide-react";
+import type { Seat } from "@/lib/assignments-shared";
 import { Button, Field, IconButton, Textarea, buttonClass, cn, inputClass } from "@/components/ui";
 import { FormMessage } from "@/components/forms";
 import { Overlay } from "@/components/inspections/overlay";
@@ -22,10 +23,14 @@ export type StintView = {
 
 type Mode = "change" | "unassign" | "edit";
 
-/** The Assigned driver card's buttons: Assign (no driver), or Edit · Change · Unassign. */
-export function DriverActions({ truckId, unit, today, current, drivers, path }: {
-  truckId: string; unit: string; today: string; current: StintView | null; drivers: DriverOption[]; path: string;
+/**
+ * One seat's buttons: Assign (or Add team driver) when it is empty, else Edit · Change · Unassign. `seat` "team" acts on
+ * the team driver (src/lib/assignments.ts).
+ */
+export function DriverActions({ truckId, unit, today, current, drivers, path, seat = "lead" }: {
+  truckId: string; unit: string; today: string; current: StintView | null; drivers: DriverOption[]; path: string; seat?: Seat;
 }) {
+  const team = seat === "team";
   const [mode, setMode] = useState<Mode | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const done = (msg?: string) => { setMode(null); if (msg) setNotice(msg); };
@@ -38,14 +43,16 @@ export function DriverActions({ truckId, unit, today, current, drivers, path }: 
       {current ? (
         <>
           <Button size="sm" variant="secondary" onClick={() => open("edit")} aria-label="Edit" title="Edit the date, the handover and the note"><Pencil />{label("Edit")}</Button>
-          <Button size="sm" variant="secondary" onClick={() => open("change")} aria-label="Change driver" title="Give the truck to another driver"><ArrowLeftRight />{label("Change")}</Button>
+          <Button size="sm" variant="secondary" onClick={() => open("change")} aria-label={team ? "Change team driver" : "Change driver"} title={team ? "Put another team driver in" : "Give the truck to another driver"}><ArrowLeftRight />{label("Change")}</Button>
           <Button size="sm" variant="secondary" onClick={() => open("unassign")} aria-label="Unassign" title="Take the driver off the truck"><UserMinus />{label("Unassign")}</Button>
         </>
+      ) : team ? (
+        <Button size="sm" variant="secondary" onClick={() => open("change")} title="A second driver for a team truck"><Users />Add team driver</Button>
       ) : (
         <Button size="sm" onClick={() => open("change")}><UserPlus />Assign driver</Button>
       )}
-      {mode === "change" && <ChangeDriver truckId={truckId} unit={unit} today={today} drivers={drivers} first={!current} onDone={done} />}
-      {mode === "unassign" && current && <Unassign truckId={truckId} unit={unit} today={today} current={current} onDone={done} />}
+      {mode === "change" && <ChangeDriver truckId={truckId} unit={unit} today={today} drivers={drivers} first={!current} seat={seat} onDone={done} />}
+      {mode === "unassign" && current && <Unassign truckId={truckId} unit={unit} today={today} current={current} seat={seat} onDone={done} />}
       {mode === "edit" && current && <EditStint unit={unit} today={today} stint={current} path={path} onDone={done} />}
     </span>
   );
@@ -100,20 +107,25 @@ function useSubmit(save: (fd: FormData) => Promise<AssignResult>, picked: Picked
   return { busy, error, status, submit };
 }
 
-function ChangeDriver({ truckId, unit, today, drivers, first, onDone }: {
-  truckId: string; unit: string; today: string; drivers: DriverOption[]; first: boolean; onDone: (msg?: string) => void;
+function ChangeDriver({ truckId, unit, today, drivers, first, seat, onDone }: {
+  truckId: string; unit: string; today: string; drivers: DriverOption[]; first: boolean; seat: Seat; onDone: (msg?: string) => void;
 }) {
   const formId = useId();
   const [driverId, setDriverId] = useState("");
   const [photos, setPhotos] = usePicked();
   const { busy, error, status, submit } = useSubmit((fd) => changeTruckDriver(truckId, fd), photos, onDone);
   const picked = drivers.find((d) => d.id === driverId);
+  const team = seat === "team";
+  const title = team ? (first ? "Add team driver" : "Change team driver") : first ? "Assign driver" : "Change driver";
   return (
-    <Overlay onClose={() => onDone()} title={first ? "Assign driver" : "Change driver"}
-      subtitle={`Unit ${unit}. The driver, the date, what goes with the unit and the photos stay on the record.`}
-      footer={<Footer formId={formId} busy={busy} label={first ? "Assign driver" : "Change driver"} disabled={!driverId} onCancel={() => onDone()} />}>
+    <Overlay onClose={() => onDone()} title={title}
+      subtitle={team
+        ? `Unit ${unit}. The second driver of a team truck; both drivers keep their own stints and pickup photos.`
+        : `Unit ${unit}. The driver, the date, what goes with the unit and the photos stay on the record.`}
+      footer={<Footer formId={formId} busy={busy} label={title} disabled={!driverId} onCancel={() => onDone()} />}>
       <form id={formId} onSubmit={submit} className="space-y-4">
-        <Field label="New driver" required hint={picked?.truck ? `${picked.name} drives ${picked.truck} now; that truck will have no driver.` : "From the Drivers page. Search by name."}>
+        <input type="hidden" name="seat" value={seat} />
+        <Field label={team ? "Team driver" : "New driver"} required hint={picked?.truck ? `${picked.name} drives ${picked.truck} now and moves off it.` : "From the Drivers page. Search by name."}>
           <DriverPicker drivers={drivers} value={driverId} onChange={setDriverId} />
         </Field>
         <Field label="Assigned date" required hint="The day the driver took the unit.">
@@ -128,13 +140,15 @@ function ChangeDriver({ truckId, unit, today, drivers, first, onDone }: {
   );
 }
 
-function Unassign({ truckId, unit, today, current, onDone }: { truckId: string; unit: string; today: string; current: StintView; onDone: (msg?: string) => void }) {
+function Unassign({ truckId, unit, today, current, seat, onDone }: { truckId: string; unit: string; today: string; current: StintView; seat: Seat; onDone: (msg?: string) => void }) {
   const formId = useId();
   const { busy, error, status, submit } = useSubmit((fd) => unassignTruckDriver(truckId, fd), [], onDone);
   return (
-    <Overlay variant="dialog" onClose={() => onDone()} title={`Take ${current.driverName} off ${unit}`} subtitle="Their stint goes into the truck's driver history."
+    <Overlay variant="dialog" onClose={() => onDone()} title={`Take ${current.driverName} off ${unit}`}
+      subtitle={seat === "lead" ? "Their stint goes into the truck's driver history. A team driver on the truck becomes its driver." : "Their stint goes into the truck's driver history."}
       footer={<Footer formId={formId} busy={busy} label="Unassign" onCancel={() => onDone()} />}>
       <form id={formId} onSubmit={submit} className="space-y-4">
+        <input type="hidden" name="seat" value={seat} />
         <Field label="Last day" required hint="The day the driver gave the unit back.">
           <input type="date" name="endedAt" required defaultValue={today} min={current.startedAt} max={today} className={inputClass} />
         </Field>

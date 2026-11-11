@@ -13,6 +13,7 @@ import { Badge, Card, Field, InfoTip, Input, LinkButton, PageHeader, Stat, Texta
 import { getCompanyCompliance, getCompanyProfileRecord } from "./profile";
 import { REQUIRED_COMPANY_DOCS, complianceCounts, type DocCompliance, type DocComplianceStatus } from "./shared";
 import { ColorPicker, DeleteCompany, RegionSettings } from "./controls";
+import { PhoneInput } from "@/components/phone-input";
 
 export const metadata = { title: "Company profile" };
 
@@ -91,7 +92,7 @@ export default async function CompanyPage() {
 
               <Card title="Contacts">
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Phone"><Input name="phone" type="tel" defaultValue={profile.phone} placeholder={us ? "(555) 010-0100" : "+998 71 000 00 00"} className="num" /></Field>
+                  <Field label="Phone"><PhoneInput name="phone" defaultValue={profile.phone} placeholder={us ? "+1 (305) 555 0100" : "+998 71 000 00 00"} autoComplete="off" /></Field>
                   <Field label="Email"><Input name="email" type="email" defaultValue={profile.email} placeholder="office@company.com" /></Field>
                   <Field label="Address" className="sm:col-span-2"><Textarea name="address" rows={2} defaultValue={profile.address} placeholder="Street, city, postcode, country" /></Field>
                 </div>

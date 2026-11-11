@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { CalendarDays, ChevronRight, History, IdCard, Package, Phone, UserRound } from "lucide-react";
+import { CalendarDays, ChevronRight, History, IdCard, Package, Phone, UserRound, Users } from "lucide-react";
+import { truckOf, type Seat } from "@/lib/assignments-shared";
 import { db } from "@/lib/db";
 import { DRIVER_TYPE_LABELS } from "@/lib/constants";
 import { daysUntil } from "@/lib/format";
@@ -13,11 +14,13 @@ const DAY = 86_400_000;
 
 /**
  * The truck's Driver tab: who drives it now (since when, what went with the unit, pickup photos), the driver's papers
- * at a glance, and every driver who had it before (DriverAssignment, src/lib/assignments.ts).
+ * at a glance, and every driver who had it before (DriverAssignment, src/lib/assignments.ts). A team truck shows both
+ * drivers: the driver and the team driver, each with their own stint.
  */
 export async function DriverTab({ truckId, unit, editable }: { truckId: string; unit: string; editable: boolean }) {
   const f = await getFormat();
-  const [stints, drivers] = await Promise.all([
+  const [seats, stints, drivers] = await Promise.all([
+    db.truck.findUnique({ where: { id: truckId }, select: { driverId: true, coDriverId: true } }),
     db.driverAssignment.findMany({
       where: { truckId },
       orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
@@ -36,11 +39,14 @@ export async function DriverTab({ truckId, unit, editable }: { truckId: string; 
     editable
       ? db.driver.findMany({
         where: { status: { not: "INACTIVE" } }, orderBy: { name: "asc" },
-        select: { id: true, name: true, status: true, hold: true, truck: { select: { id: true, unitNumber: true } } },
+        select: { id: true, name: true, status: true, hold: true, truck: { select: { id: true, unitNumber: true } }, teamTruck: { select: { id: true, unitNumber: true } } },
       })
       : Promise.resolve([]),
   ]);
-  const current = stints.find((s) => !s.endedAt) ?? null;
+  // The open stint of each seat's driver (the history keeps the rest).
+  const open = (driverId: string | null | undefined) => (driverId ? stints.find((s) => !s.endedAt && s.driverId === driverId) ?? null : null);
+  const lead = open(seats?.driverId);
+  const team = open(seats?.coDriverId);
   const today = f.dateInput(new Date());
   const path = `/fleet/${truckId}`;
   const view = (s: (typeof stints)[number]): StintView => ({
@@ -48,56 +54,74 @@ export async function DriverTab({ truckId, unit, editable }: { truckId: string; 
     handover: parseHandover(s.handover), note: s.note, endNote: s.endNote, photos: s.documents,
   });
   const options: DriverOption[] = drivers
-    .filter((d) => d.id !== current?.driverId)
-    .map((d) => ({ id: d.id, name: d.name, status: d.status, hold: d.hold, truck: d.truck && d.truck.id !== truckId ? d.truck.unitNumber : null }));
+    .filter((d) => d.id !== seats?.driverId && d.id !== seats?.coDriverId)
+    .map((d) => {
+      const other = truckOf(d);
+      return { id: d.id, name: d.name, status: d.status, hold: d.hold, truck: other && other.id !== truckId ? other.unitNumber : null };
+    });
   const days = (s: { startedAt: Date; endedAt: Date | null }) => Math.max(1, Math.round(((s.endedAt ?? new Date()).getTime() - s.startedAt.getTime()) / DAY));
   const since = (s: { startedAt: Date; backfilled: boolean }) => `${s.backfilled ? "about " : ""}${f.date(s.startedAt)}`;
+  const actions = (seat: Seat, stint: (typeof stints)[number] | null) =>
+    editable && <DriverActions truckId={truckId} unit={unit} today={today} current={stint ? view(stint) : null} drivers={options} path={path} seat={seat} />;
+
+  const seatBlock = (seat: Seat, current: (typeof stints)[number]) => (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <Avatar name={current.driver.name} size={36} />
+          <div className="min-w-0">
+            <span className="flex items-center gap-2">
+              <Link href={`/drivers/${current.driver.id}`} className="truncate text-[14px] font-semibold text-fg hover:underline">{current.driver.name}</Link>
+              {team && <Chip tone={seat === "team" ? "info" : "neutral"}>{seat === "team" ? "Team driver" : "Driver"}</Chip>}
+            </span>
+            <p className="truncate text-[12px] text-fg-subtle">
+              {DRIVER_TYPE_LABELS[current.driver.type] ?? current.driver.type} · in unit <span className="num unit-no text-fg-muted">{unit}</span>
+              {current.driver.dispatcher && <> · dispatch {current.driver.dispatcher}</>}
+            </p>
+          </div>
+        </div>
+        <span className="flex shrink-0 flex-wrap items-center gap-1.5">
+          {actions(seat, current)}
+          <LinkButton href={`/drivers/${current.driver.id}`} variant="secondary" size="sm" className="shrink-0">Driver profile<ChevronRight /></LinkButton>
+        </span>
+      </div>
+      <div className="grid gap-px overflow-hidden rounded-md border border-line bg-line sm:grid-cols-2">
+        <Fact icon={<CalendarDays />} label="Assigned on">
+          <p className="text-[13px] font-medium text-fg">{since(current)} <span className="font-normal text-fg-subtle">· {days(current)} day{days(current) === 1 ? "" : "s"}</span></p>
+          <p className="text-[11px] text-fg-subtle">
+            {current.backfilled
+              ? "Driving it when driver history started; Edit sets the real day."
+              : `by ${current.createdBy?.name ?? "someone no longer here"} · ${f.dateTime(current.createdAt)}`}
+          </p>
+        </Fact>
+        <Fact icon={<Package />} label="Handed over with the unit">
+          <HandoverList items={parseHandover(current.handover)} />
+        </Fact>
+      </div>
+      {current.documents.length > 0 && (
+        <div>
+          <p className="eyebrow mb-1.5">Pickup photos</p>
+          <PhotoStrip photos={current.documents} />
+        </div>
+      )}
+      {current.note && <p className="whitespace-pre-wrap rounded-md bg-sunken px-3 py-2 text-[13px] text-fg">{current.note}</p>}
+    </div>
+  );
 
   return (
     <div className="grid gap-4 xl:grid-cols-3">
       {/* min-w-0: the history table scrolls inside its card instead of widening the page on a phone. */}
       <div className="min-w-0 space-y-4 xl:col-span-2">
-        <Card title="Assigned driver" icon={<UserRound />}
-          actions={editable && <DriverActions truckId={truckId} unit={unit} today={today} current={current ? view(current) : null} drivers={options} path={path} />}>
-          {current ? (
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-3">
-                  <Avatar name={current.driver.name} size={36} />
-                  <div className="min-w-0">
-                    <Link href={`/drivers/${current.driver.id}`} className="block truncate text-[14px] font-semibold text-fg hover:underline">{current.driver.name}</Link>
-                    <p className="truncate text-[12px] text-fg-subtle">
-                      {DRIVER_TYPE_LABELS[current.driver.type] ?? current.driver.type} · in unit <span className="num unit-no text-fg-muted">{unit}</span>
-                      {current.driver.dispatcher && <> · dispatch {current.driver.dispatcher}</>}
-                    </p>
-                  </div>
-                </div>
-                <LinkButton href={`/drivers/${current.driver.id}`} variant="secondary" size="sm" className="shrink-0">Driver profile<ChevronRight /></LinkButton>
-              </div>
-              <div className="grid gap-px overflow-hidden rounded-md border border-line bg-line sm:grid-cols-2">
-                <Fact icon={<CalendarDays />} label="Assigned on">
-                  <p className="text-[13px] font-medium text-fg">{since(current)} <span className="font-normal text-fg-subtle">· {days(current)} day{days(current) === 1 ? "" : "s"}</span></p>
-                  <p className="text-[11px] text-fg-subtle">
-                    {current.backfilled
-                      ? "Driving it when driver history started; Edit sets the real day."
-                      : `by ${current.createdBy?.name ?? "someone no longer here"} · ${f.dateTime(current.createdAt)}`}
-                  </p>
-                </Fact>
-                <Fact icon={<Package />} label="Handed over with the unit">
-                  <HandoverList items={parseHandover(current.handover)} />
-                </Fact>
-              </div>
-              {current.documents.length > 0 && (
-                <div>
-                  <p className="eyebrow mb-1.5">Pickup photos</p>
-                  <PhotoStrip photos={current.documents} />
-                </div>
-              )}
-              {current.note && <p className="whitespace-pre-wrap rounded-md bg-sunken px-3 py-2 text-[13px] text-fg">{current.note}</p>}
+        <Card title={team ? "Assigned drivers · team" : "Assigned driver"} icon={team ? <Users /> : <UserRound />}
+          actions={lead ? !team && actions("team", null) : actions("lead", null)}>
+          {lead ? (
+            <div className="space-y-4">
+              {seatBlock("lead", lead)}
+              {team && <div className="border-t border-line pt-4">{seatBlock("team", team)}</div>}
             </div>
           ) : (
             <EmptyState icon={<UserRound />} title={`No driver on ${unit}`}
-              description={editable ? "Assign one to start its stint: the date, what goes with the unit and pickup photos." : "Nobody drives this truck right now."} />
+              description={editable ? "Assign one to start its stint: the date, what goes with the unit and pickup photos. A team truck gets its second driver after." : "Nobody drives this truck right now."} />
           )}
         </Card>
 
@@ -131,7 +155,8 @@ export async function DriverTab({ truckId, unit, editable }: { truckId: string; 
       </div>
 
       <div className="min-w-0 space-y-4">
-        <DriverInfo driver={current?.driver ?? null} f={f} />
+        <DriverInfo driver={lead?.driver ?? null} f={f} title={team ? "Driver" : undefined} />
+        {team && <DriverInfo driver={team.driver} f={f} title="Team driver" />}
       </div>
     </div>
   );
@@ -142,7 +167,7 @@ type InfoDriver = {
   licenseNumber: string; licenseClass: string; licenseExpiry: Date; medicalExpiry: Date | null;
 };
 
-function DriverInfo({ driver, f }: { driver: InfoDriver | null; f: Awaited<ReturnType<typeof getFormat>> }) {
+function DriverInfo({ driver, f, title }: { driver: InfoDriver | null; f: Awaited<ReturnType<typeof getFormat>>; title?: string }) {
   if (!driver) {
     return (
       <Card title="Driver information" icon={<IdCard />}>
@@ -153,7 +178,7 @@ function DriverInfo({ driver, f }: { driver: InfoDriver | null; f: Awaited<Retur
   const clear = clearance(driver);
   const grade = scoreGrade(driver.score);
   return (
-    <Card title="Driver information" icon={<IdCard />}
+    <Card title={title ? `${title} · ${driver.name}` : "Driver information"} icon={<IdCard />}
       actions={<Link href={`/drivers/${driver.id}`} className="text-[11px] font-medium text-fg-muted hover:text-fg">Profile →</Link>}>
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <Badge value={clear.label} tone={clear.tone} label={clear.cleared ? "Cleared to drive" : clear.label} dot />

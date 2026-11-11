@@ -187,7 +187,7 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
       q ? {
         OR: [
           { unitNumber: like }, { plate: like }, { vin: like }, { make: like }, { model: like }, { locationName: like }, { homeTerminal: like },
-          { group: like }, { driver: { is: { name: like } } },
+          { group: like }, { driver: { is: { name: like } } }, { coDriver: { is: { name: like } } },
         ],
       } : {},
       computed ? { id: { in: computed } } : {},
@@ -195,7 +195,10 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
   };
   const rows = await db.truck.findMany({
     where, orderBy: { unitNumber: "asc" }, take: LIST_LIMIT + 1,
-    include: { driver: { select: { id: true, name: true, hold: true, dispatcher: true } }, truckType: { select: { name: true } } },
+    include: {
+      driver: { select: { id: true, name: true, hold: true, dispatcher: true } }, coDriver: { select: { id: true, name: true, hold: true } },
+      truckType: { select: { name: true } },
+    },
   });
   const capped = rows.length > LIST_LIMIT;
   const trucks = capped ? rows.slice(0, LIST_LIMIT) : rows;
@@ -357,7 +360,9 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
                   <td data-col="driver">
                     {t.driver ? (
                       <Cell primary={<span className="inline-flex items-center gap-1.5"><Link href={`/drivers/${t.driver.id}`} className="hover:underline">{t.driver.name}</Link>{t.driver.hold && <Chip tone="warn">Hold</Chip>}</span>}
-                        secondary={t.driver.dispatcher ? `Dispatch: ${t.driver.dispatcher}` : undefined} />
+                        secondary={t.coDriver
+                          ? <span className="inline-flex items-center gap-1">Team: <Link href={`/drivers/${t.coDriver.id}`} className="hover:underline">{t.coDriver.name}</Link>{t.coDriver.hold && <Chip tone="warn">Hold</Chip>}</span>
+                          : t.driver.dispatcher ? `Dispatch: ${t.driver.dispatcher}` : undefined} />
                     ) : editable && t.status !== "INACTIVE"
                       ? <Link href={`/fleet/${t.id}/edit#driver`} className="text-[12px] text-fg-subtle hover:text-fg hover:underline">Assign driver</Link>
                       : <span className="text-fg-faint">No driver</span>}

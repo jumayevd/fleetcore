@@ -5,6 +5,7 @@ import { DRIVER_STATUSES, DRIVER_TYPES, DRIVER_TYPE_LABELS } from "@/lib/constan
 import { getFormat } from "@/lib/format-server";
 import type { ActionState } from "@/lib/action";
 import { HoldField } from "./hold-field";
+import { PhoneInput } from "@/components/phone-input";
 import { AT_RISK_SCORE, EMPLOYMENT_LABELS } from "./shared";
 
 export type TruckOption = { value: string; label: string };
@@ -33,8 +34,8 @@ export async function DriverForm({ action, driver, trucks, truckId, dispatchers 
           <Card title="Profile">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <Field label="Full name" required className="sm:col-span-2 lg:col-span-1"><Input name="name" required defaultValue={driver?.name} placeholder="As on the licence" autoFocus={!editing} /></Field>
-              <Field label="Phone"><Input name="phone" type="tel" defaultValue={driver?.phone ?? ""} placeholder="Mobile number" className="num" /></Field>
-              <Field label="Second phone"><Input name="phone2" type="tel" defaultValue={driver?.phone2 ?? ""} placeholder="Spare phone or family contact" className="num" /></Field>
+              <Field label="Phone"><PhoneInput name="phone" defaultValue={driver?.phone ?? ""} autoComplete="off" /></Field>
+              <Field label="Second phone"><PhoneInput name="phone2" defaultValue={driver?.phone2 ?? ""} placeholder="Spare phone or family contact" autoComplete="off" /></Field>
               <Field label="Email"><Input name="email" type="email" defaultValue={driver?.email ?? ""} /></Field>
               <Field label="Hire date"><Input name="hireDate" type="date" defaultValue={f.dateInput(driver?.hireDate ?? new Date())} className="num" /></Field>
             </div>
@@ -74,8 +75,8 @@ export async function DriverForm({ action, driver, trucks, truckId, dispatchers 
           </Card>
 
           {trucks && (
-            <Card title={<span className="flex items-center gap-1.5">Truck<InfoTip>One driver per truck: only trucks without a driver are listed. To move a truck from another driver, unassign it on their page first.</InfoTip></span>}>
-              <Field label="Assigned truck" hint={trucks.length === 0 && !truckId ? "Every truck already has a driver." : undefined}>
+            <Card title={<span className="flex items-center gap-1.5">Truck<InfoTip>Trucks with a free seat. A truck that already has a driver (&ldquo;team with …&rdquo;) gets this one as its team driver; a truck with two drivers isn&apos;t listed.</InfoTip></span>}>
+              <Field label="Assigned truck" hint={trucks.length === 0 && !truckId ? "Every truck already has two drivers." : undefined}>
                 <Select name="truckId" defaultValue={truckId ?? ""} placeholder="No truck" options={trucks} />
               </Field>
             </Card>

@@ -17,7 +17,7 @@ import { SpendChart } from "./spend-chart";
 import { WeekChart } from "./week-chart";
 import {
   DOWNTIME_LIMIT, DowntimeTable, DriverChargeTable, LIST_LIMIT, PaperworkTable, REPEAT_LIMIT, RepairTypeTable, RepeatTable, RoadsideLevelTable,
-  RoadsideList, SystemTable, TruckCostTable, VENDOR_LIMIT, VendorTable, WarrantyTable,
+  RoadsideList, SystemTable, TruckCategoryTable, TruckCostTable, VENDOR_LIMIT, VendorTable, WarrantyTable,
 } from "./tables";
 
 export const metadata = { title: "Reports" };
@@ -177,6 +177,13 @@ export default async function ReportsPage({ searchParams }: PageProps<"/reports"
             <PaperworkTable rows={r.paperwork} />
           </Card>
         </div>
+
+        {money && (
+          <Card id="truck-kinds" flush className="mt-4 scroll-mt-20"
+            title={titled("Cost by kind of truck", "Fuel and completed repairs in the period for company, vendor, owner-operator and lease trucks. A truck marked Vendor counts as a vendor truck whatever its ownership; trailer work is not in here.")}>
+            <TruckCategoryTable f={f} rows={r.categories} />
+          </Card>
+        )}
 
         <Card id="trucks" flush className="mt-4 scroll-mt-20"
           title={titled(money ? "Cost per truck" : "Distance and fuel per truck", "Every truck in service. Orange figures are well off the fleet average and worth a look: driving style, idling, a fuel card, or a repair that keeps coming back.")}

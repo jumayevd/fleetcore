@@ -64,6 +64,27 @@ model User {
   roadside           RoadsideInspection[]
   assignmentsMade    DriverAssignment[]   @relation("AssignmentCreator")
   assignmentsEnded   DriverAssignment[]   @relation("AssignmentEnder")
+  mailAccounts       MailAccount[]
+}
+
+/// A person's own Gmail or Outlook mailbox, connected once (OAuth) so FleetCore can send email as them (src/lib/mail).
+/// Belongs to the account, not a company: the same mailbox works in every company they work for. Tokens are encrypted
+/// (src/lib/secret-box.ts); FleetCore may only send, never read the mailbox.
+model MailAccount {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// GOOGLE | MICROSOFT
+  provider        String
+  /// The mailbox address mail goes out from.
+  email           String
+  refreshTokenEnc String
+  accessTokenEnc  String?
+  accessExpiresAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([userId, provider])
 }
 
 /// One fleet's workspace. Everything a fleet specialist works with belongs to exactly one company.
@@ -199,6 +220,8 @@ model Driver {
   notes         String?
   createdAt     DateTime             @default(now())
   truck         Truck?               @relation("TruckDriver")
+  /// The truck this driver is the team (second) driver of; see truckOf() in src/lib/assignments-shared.ts.
+  teamTruck     Truck?               @relation("TruckTeamDriver")
   fuelLogs      FuelLog[]
   documents     Document[]
   charges       WorkOrder[]          @relation("WorkOrderDriverCharge")
@@ -261,6 +284,10 @@ model Truck {
   pingSource         String? // MANUAL | DEVICE | SAMSARA | …
   driverId           String?              @unique
   driver             Driver?              @relation("TruckDriver", fields: [driverId], references: [id], onDelete: SetNull)
+  /// The second driver of a team truck (src/lib/assignments.ts). Only with a driver: when the driver comes off, the team
+  /// driver takes their seat. A driver sits in one seat of one truck at most.
+  coDriverId         String?              @unique
+  coDriver           Driver?              @relation("TruckTeamDriver", fields: [coDriverId], references: [id], onDelete: SetNull)
   /// The type sets the oil-change interval (pmIntervalKm is the truck's own interval when it has no type).
   truckTypeId        String?
   truckType          TruckType?           @relation(fields: [truckTypeId], references: [id], onDelete: SetNull)
@@ -357,7 +384,8 @@ model WorkOrder {
   technician       String?
   vendorId         String?
   vendorRef        Vendor?          @relation(fields: [vendorId], references: [id], onDelete: SetNull)
-  /// Who pays: COMPANY | DRIVER (charged to chargeDriverId) | INVESTIGATION (held) | WARRANTY (claimed back)
+  /// Who pays: COMPANY | DRIVER (charged to chargeDriverId) | INVESTIGATION (held) | WARRANTY (claimed back) |
+  /// VENDOR (the vendor whose unit it is) | LEASING (the leasing company)
   payer            String           @default("COMPANY")
   chargeDriverId   String?
   chargeDriver     Driver?          @relation("WorkOrderDriverCharge", fields: [chargeDriverId], references: [id], onDelete: SetNull)

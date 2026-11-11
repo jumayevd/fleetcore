@@ -4,6 +4,7 @@ import { ActionForm, SubmitButton } from "@/components/forms";
 import { Card, Checkbox, Field, Input, Textarea, buttonClass } from "@/components/ui";
 import { VENDOR_TYPES, VENDOR_TYPE_LABELS } from "@/lib/constants";
 import { vendorTypes } from "@/components/shop/shared";
+import { PhoneInput } from "@/components/phone-input";
 import type { ActionState } from "@/lib/action";
 
 /** Add / edit vendor. Server-rendered fields inside the client ActionForm. */
@@ -45,7 +46,7 @@ export function VendorForm({ action, vendor, cancelHref, submitLabel }: {
         <Card title="Contact">
           <div className="space-y-3">
             <Field label="Contact person"><Input name="contactName" defaultValue={vendor?.contactName ?? ""} /></Field>
-            <Field label="Phone"><Input name="phone" type="tel" inputMode="tel" defaultValue={vendor?.phone ?? ""} className="num" /></Field>
+            <Field label="Phone"><PhoneInput name="phone" defaultValue={vendor?.phone ?? ""} autoComplete="off" /></Field>
             <Field label="Email"><Input name="email" type="email" defaultValue={vendor?.email ?? ""} /></Field>
           </div>
         </Card>

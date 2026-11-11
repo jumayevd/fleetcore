@@ -1,4 +1,5 @@
 import { parseDateInput, parseDateTimeInput } from "./locale";
+import { formatPhone } from "./phone";
 
 export type ActionState = { error?: string; ok?: string } | undefined;
 
@@ -35,6 +36,8 @@ export function fields(fd: FormData, tz?: string) {
       return d;
     },
     bool: (k: string) => fd.get(k) === "on" || fd.get(k) === "true",
+    /** A phone number, saved in the one format (src/lib/phone.ts); null when empty. */
+    phone: (k: string) => formatPhone(str(k)),
   };
 }
 

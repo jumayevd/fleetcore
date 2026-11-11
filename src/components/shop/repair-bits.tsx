@@ -39,6 +39,7 @@ export function RepairTags({ w, showType = true, className }: { w: RepairLike; s
       {notTold && <Chip tone="warn">Driver not told</Chip>}
       {w.payer === "WARRANTY" && <Chip tone="info">Warranty claim</Chip>}
       {w.payer === "INVESTIGATION" && <Chip tone="warn">Under investigation</Chip>}
+      {(w.payer === "VENDOR" || w.payer === "LEASING") && <Chip tone="info">{payerLabel(w.payer)} pays</Chip>}
     </span>
   );
 }

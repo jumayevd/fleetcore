@@ -16,13 +16,13 @@ export async function generateMetadata({ params }: PageProps<"/drivers/[id]/edit
 export default async function EditDriver({ params }: PageProps<"/drivers/[id]/edit">) {
   const user = await requireUser("drivers.edit");
   const { id } = await params;
-  const driver = await db.driver.findUnique({ where: { id }, include: { truck: { select: { id: true } } } });
+  const driver = await db.driver.findUnique({ where: { id }, include: { truck: { select: { id: true } }, teamTruck: { select: { id: true } } } });
   if (!driver) notFound();
   const [trucks, dispatchers] = await Promise.all([can(user.role, "fleet.edit") ? truckOptions(id) : Promise.resolve(null), dispatcherOptions()]);
   return (
     <>
       <PageHeader title={`Edit ${driver.name}`} />
-      <DriverForm action={saveDriver.bind(null, id)} driver={driver} trucks={trucks} truckId={driver.truck?.id ?? null} dispatchers={dispatchers} cancelHref={`/drivers/${id}`} />
+      <DriverForm action={saveDriver.bind(null, id)} driver={driver} trucks={trucks} truckId={driver.truck?.id ?? driver.teamTruck?.id ?? null} dispatchers={dispatchers} cancelHref={`/drivers/${id}`} />
     </>
   );
 }

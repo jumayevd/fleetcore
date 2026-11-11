@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition, type KeyboardEvent } from "react";
 import { Check, ChevronDown, Plus, Search, Store, X } from "lucide-react";
 import { VENDOR_TYPES, VENDOR_TYPE_LABELS } from "@/lib/constants";
+import { formatPhone } from "@/lib/phone";
 import { Button, cn, inputClass } from "@/components/ui";
 import { createVendorInline } from "@/app/actions/vendors";
 import { vendorKey, vendorTypeLabel, type VendorOption } from "./shared";
@@ -123,7 +124,7 @@ export function VendorPicker({ vendors, defaultVendorId, legacyName, canCreate =
                 </select>
                 <input value={draft.city} onChange={(e) => setDraft({ ...draft, city: e.target.value })} onKeyDown={onDraftKey} placeholder="City" aria-label="City" className={inputClass} />
               </div>
-              <input value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} onKeyDown={onDraftKey} placeholder="Phone" aria-label="Phone" inputMode="tel" className={inputClass} />
+              <input value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} onBlur={(e) => setDraft({ ...draft, phone: formatPhone(e.target.value) ?? "" })} onKeyDown={onDraftKey} placeholder="Phone" aria-label="Phone" inputMode="tel" className={inputClass} />
               {error && <p role="alert" className="text-[11px] text-danger">{error}</p>}
               <div className="flex justify-end gap-2 pt-1">
                 <Button size="sm" variant="ghost" onClick={() => setCreating(false)}>Back</Button>

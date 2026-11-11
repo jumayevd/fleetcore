@@ -117,7 +117,7 @@ export async function loadPaperwork(kit: Kit, now: number) {
     seesDrivers
       ? db.driver.findMany({
         where: { status: { not: "INACTIVE" } }, orderBy: { name: "asc" }, take: SCAN,
-        select: { id: true, name: true, status: true, hold: true, licenseExpiry: true, medicalExpiry: true, truck: { select: { unitNumber: true } } },
+        select: { id: true, name: true, status: true, hold: true, licenseExpiry: true, medicalExpiry: true, truck: { select: { unitNumber: true } }, teamTruck: { select: { unitNumber: true } } },
       })
       : [],
     docIndex("truck"),
@@ -135,7 +135,7 @@ export async function loadPaperwork(kit: Kit, now: number) {
       href: link(`/fleet/trailers/${t.id}`), papers: trailerPapers(t, trailerDocs.get(t.id), now),
     })),
     ...drivers.map((d): Holder => ({
-      owner: "driver", id: d.id, name: d.name, status: humanize(d.status), active: d.status === "ACTIVE", assigned: d.truck?.unitNumber ?? null, onHold: d.hold,
+      owner: "driver", id: d.id, name: d.name, status: humanize(d.status), active: d.status === "ACTIVE", assigned: (d.truck ?? d.teamTruck)?.unitNumber ?? null, onHold: d.hold,
       href: link(`/drivers/${d.id}`), papers: driverPapers(d, driverDocs.get(d.id), now),
     })),
   ];

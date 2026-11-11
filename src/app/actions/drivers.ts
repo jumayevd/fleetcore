@@ -13,8 +13,8 @@ import { startOfDayIn } from "@/lib/locale";
 
 /* ------------------------------------------------------------------ */
 /* Driver actions. Truck assignment goes through the truck's driver     */
-/* history (src/lib/assignments.ts): a truck has at most one driver and */
-/* a driver at most one truck.                                          */
+/* history (src/lib/assignments.ts): a truck has a driver and, for a    */
+/* team, a team driver; a driver is on one truck at most.               */
 /* ------------------------------------------------------------------ */
 
 const EMPLOYMENT: Record<string, string> = { ACTIVE: "active", ON_LEAVE: "on leave", INACTIVE: "inactive" };
@@ -32,19 +32,21 @@ function refresh(driverId?: string | null, fleet = false) {
 }
 
 /**
- * The truck `truckId` may be given to `driverId` (null = a driver being created): it exists, is not retired, and has
- * no other driver. Throws a FormError that says how to fix it otherwise.
+ * The truck `truckId` may be given to `driverId` (null = a driver being created): it exists, is not retired, and has a
+ * free seat (no driver yet, or a driver without a team driver: then this one joins as the team driver). Throws a
+ * FormError that says how to fix it otherwise.
  */
 async function checkTruck(truckId: string, driverId: string | null) {
   const truck = await db.truck.findUnique({
     where: { id: truckId },
-    select: { id: true, unitNumber: true, status: true, driverId: true, driver: { select: { name: true } } },
+    select: { id: true, unitNumber: true, status: true, driverId: true, coDriverId: true, driver: { select: { name: true } }, coDriver: { select: { name: true } } },
   });
   if (!truck) throw new FormError("That truck no longer exists. Pick another one.");
-  if (truck.driverId && truck.driverId !== driverId) {
-    throw new FormError(`${truck.unitNumber} already has a driver (${truck.driver?.name ?? "someone else"}). Unassign it from them first.`);
+  const aboard = driverId != null && (truck.driverId === driverId || truck.coDriverId === driverId);
+  if (!aboard && truck.driverId && truck.coDriverId) {
+    throw new FormError(`${truck.unitNumber} already has two drivers (${truck.driver?.name ?? "a driver"} and ${truck.coDriver?.name ?? "a team driver"}). Take one off first.`);
   }
-  if (truck.status === "INACTIVE" && truck.driverId !== driverId) {
+  if (truck.status === "INACTIVE" && !aboard) {
     throw new FormError(`${truck.unitNumber} is inactive. Reactivate it in Fleet before giving it a driver.`);
   }
   return truck;
@@ -52,26 +54,30 @@ async function checkTruck(truckId: string, driverId: string | null) {
 
 /**
  * Point `driverId` at `truckId` (or at no truck), from today, through the truck's driver history
- * (src/lib/assignments.ts). Returns the units that changed, for messages and the audit log.
+ * (src/lib/assignments.ts). A truck that already has a driver gets this one as its team driver. Returns the units that
+ * changed, for messages and the audit log.
  */
 async function linkTruck(me: CurrentUser, driverId: string, truckId: string | null) {
-  const current = await db.truck.findFirst({ where: { driverId }, select: { id: true, unitNumber: true } });
-  if ((current?.id ?? null) === truckId) return { changed: false, from: current, to: current };
+  const current = await db.truck.findFirst({ where: { OR: [{ driverId }, { coDriverId: driverId }] }, select: { id: true, unitNumber: true, driverId: true } });
+  if ((current?.id ?? null) === truckId) return { changed: false, from: current, to: current, team: false };
   const day = startOfDayIn(new Date(), me.company.timezone);
   let to: { id: string; unitNumber: string } | null = null;
+  let team = false;
   if (truckId) {
-    // Takes the driver off their old truck too (Truck.driverId is unique).
-    const r = await setTruckDriver({ truckId, driverId, day, userId: me.id });
+    // Takes the driver off their old truck too (a driver sits in one seat of one truck).
+    const target = await db.truck.findUnique({ where: { id: truckId }, select: { driverId: true } });
+    const r = await setTruckDriver({ truckId, driverId, seat: target?.driverId && target.driverId !== driverId ? "team" : "lead", day, userId: me.id });
     to = { id: truckId, unitNumber: r.unitNumber };
+    team = r.seat === "team";
   } else if (current) {
-    await setTruckDriver({ truckId: current.id, driverId: null, day, userId: me.id });
+    await setTruckDriver({ truckId: current.id, driverId: null, seat: current.driverId === driverId ? "lead" : "team", day, userId: me.id });
   }
-  return { changed: true, from: current, to };
+  return { changed: true, from: current, to, team };
 }
 
-function auditTruckChange(me: CurrentUser, driverId: string, name: string, from: { unitNumber: string } | null, to: { unitNumber: string } | null) {
+function auditTruckChange(me: CurrentUser, driverId: string, name: string, from: { unitNumber: string } | null, to: { unitNumber: string } | null, team = false) {
   return to
-    ? audit(me.id, "assign truck", "driver", driverId, `${name} → ${to.unitNumber}${from ? ` (was ${from.unitNumber})` : ""}`)
+    ? audit(me.id, "assign truck", "driver", driverId, `${name} → ${to.unitNumber}${team ? " (team driver)" : ""}${from ? ` (was ${from.unitNumber})` : ""}`)
     : audit(me.id, "unassign truck", "driver", driverId, `${name} no longer drives ${from?.unitNumber ?? "a truck"}`);
 }
 
@@ -101,8 +107,8 @@ export async function saveDriver(driverId: string | null, _: ActionState, fd: Fo
     const hold = f.bool("hold");
     const data = {
       name: f.req("name", "Full name"),
-      phone: f.str("phone"),
-      phone2: f.str("phone2"),
+      phone: f.phone("phone"),
+      phone2: f.phone("phone2"),
       email: f.str("email")?.toLowerCase() ?? null,
       licenseNumber: f.req("licenseNumber", "Licence number"),
       licenseClass: f.str("licenseClass") ?? "CE",
@@ -138,7 +144,7 @@ export async function saveDriver(driverId: string | null, _: ActionState, fd: Fo
       const link = await linkTruck(me, id, truckId);
       if (link.changed) {
         fleetChanged = true;
-        await auditTruckChange(me, id, data.name, link.from, link.to);
+        await auditTruckChange(me, id, data.name, link.from, link.to, link.team);
       }
     }
   });
@@ -186,7 +192,7 @@ export async function setDriverEmployment(driverId: string, status: string): Pro
       if (link.changed) {
         fleetChanged = true;
         await auditTruckChange(me, driverId, prev.name, link.from, null);
-        return { ok: `${prev.name} is inactive. ${link.from?.unitNumber} no longer has a driver.` };
+        return { ok: `${prev.name} is inactive and no longer drives ${link.from?.unitNumber}.` };
       }
     }
     return { ok: `${prev.name} is ${EMPLOYMENT[status]}` };
@@ -196,8 +202,8 @@ export async function setDriverEmployment(driverId: string, status: string): Pro
 }
 
 /**
- * Give `driverId` the truck `truckId`, or take their truck away (null). One driver per truck: a truck that already has
- * another driver is refused (unassign it there first); the driver's previous truck is freed.
+ * Give `driverId` the truck `truckId`, or take their truck away (null). A truck that already has a driver gets this one
+ * as its team driver; one with two drivers is refused (take one off first). The driver's previous truck is freed.
  */
 export async function assignTruck(driverId: string, truckId: string | null): Promise<ActionState> {
   const me = await requireUser("drivers.edit");
@@ -213,8 +219,8 @@ export async function assignTruck(driverId: string, truckId: string | null): Pro
     const link = await linkTruck(me, driverId, truckId || null);
     if (!link.changed) return { ok: "No change" };
     changed = true;
-    await auditTruckChange(me, driverId, driver.name, link.from, link.to);
-    return { ok: link.to ? `${driver.name} now drives ${link.to.unitNumber}` : `${link.from?.unitNumber} no longer has a driver` };
+    await auditTruckChange(me, driverId, driver.name, link.from, link.to, link.team);
+    return { ok: link.to ? `${driver.name} now drives ${link.to.unitNumber}${link.team ? " as the team driver" : ""}` : `${driver.name} no longer drives ${link.from?.unitNumber}` };
   });
   if (changed) refresh(driverId, true);
   return res;

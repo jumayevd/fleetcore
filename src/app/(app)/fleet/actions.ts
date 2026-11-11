@@ -11,7 +11,7 @@ import { EQUIPMENT, INACTIVE_REASONS, INACTIVE_REASON_LABELS, TRAILER_STATUSES, 
 import { getFormat } from "@/lib/format-server";
 import { parseDateInput } from "@/lib/locale";
 import { defectLabel, roLabel } from "@/lib/service";
-import { setTruckDriver } from "@/lib/assignments";
+import { clearTruckDrivers } from "@/lib/assignments";
 import { can } from "@/lib/permissions";
 import { deleteFile } from "@/lib/storage";
 import { placeFromText, truckStatusLabel, UNHOOKED_TRAILER_STATUSES } from "./lib";
@@ -59,7 +59,7 @@ export async function setTruckStatus(truckId: string, status: string, details?: 
 
     const now = new Date();
     let data: Prisma.TruckUncheckedUpdateInput = { status, statusReason: null, statusNote: null, statusSince: now };
-    let ended = false;
+    let ended: boolean = false;
     if (status === "INACTIVE") {
       const reason = details?.reason ?? "";
       if (!(INACTIVE_REASONS as readonly string[]).includes(reason)) throw new FormError(`Pick why ${u} is inactive.`);
@@ -68,11 +68,8 @@ export async function setTruckStatus(truckId: string, status: string, details?: 
       const since = details?.date ? parseDateInput(details.date, me.company.timezone) : fmt.startOfDay(now);
       if (!since) throw new FormError("Pick a valid date.");
       if (since.getTime() > now.getTime()) throw new FormError("The date can't be in the future.");
-      // An inactive truck has no driver: their stint ends the day it went inactive.
-      if (truck.driverId) {
-        await setTruckDriver({ truckId, driverId: null, day: since, userId: me.id, endNote: `Truck set inactive: ${INACTIVE_REASON_LABELS[reason].toLowerCase()}`, dayLabel: (d) => fmt.date(d) });
-        ended = true;
-      }
+      // An inactive truck has no driver: their stints (both, for a team) end the day it went inactive.
+      ended = await clearTruckDrivers({ truckId, day: since, userId: me.id, endNote: `Truck set inactive: ${INACTIVE_REASON_LABELS[reason].toLowerCase()}`, dayLabel: (d) => fmt.date(d) });
       data = { ...data, statusReason: reason, statusNote: note, statusSince: since };
     }
     await db.truck.update({ where: { id: truckId }, data });

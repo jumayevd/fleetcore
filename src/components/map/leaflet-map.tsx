@@ -3,8 +3,10 @@
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { MapContainer, TileLayer, Marker, Polyline, Popup, CircleMarker, useMap } from "react-leaflet";
-import { useEffect, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
+import { Maximize2, Minimize2 } from "lucide-react";
 import { useFormat } from "@/components/locale";
+import { IconButton, cn } from "@/components/ui";
 import { MapLayerButton, useMapLayer } from "./layer";
 
 // Default: OpenStreetMap (fine for dev/low volume). For production traffic set a
@@ -218,6 +220,41 @@ function FlyTo({ target }: { target: [number, number] | null }) {
   return null;
 }
 
+/**
+ * The map over the whole screen, and back (the button, Escape, or the browser's own exit). Uses the browser's full
+ * screen where it can (computers, Android); where it can't (iPhone Safari) the map covers the window instead. Leaflet
+ * stays mounted either way, so the zoom and position are kept; FitBounds' ResizeObserver re-measures the map.
+ */
+function useFullScreen(box: RefObject<HTMLDivElement | null>): [boolean, () => void] {
+  const [full, setFull] = useState(false);
+  useEffect(() => {
+    if (!full) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    // Leaving the browser's full screen (Escape, F11, the system gesture) leaves ours too.
+    const onChange = () => { if (!document.fullscreenElement) setFull(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setFull(false); };
+    document.addEventListener("fullscreenchange", onChange);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      document.removeEventListener("fullscreenchange", onChange);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [full]);
+  const toggle = () => {
+    if (full) {
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+      setFull(false);
+      return;
+    }
+    setFull(true);
+    const el = box.current;
+    if (el?.requestFullscreen && document.fullscreenEnabled) void el.requestFullscreen().catch(() => undefined);
+  };
+  return [full, toggle];
+}
+
 export default function LeafletMap({ trucks = [], points = [], selectedId, onSelect, renderPopup, height = 520, fitKey = "all", flyTo = null, className, center, zoom, layerSwitch }: {
   trucks?: MapTruck[];
   points?: MapPoint[];
@@ -234,7 +271,7 @@ export default function LeafletMap({ trucks = [], points = [], selectedId, onSel
   /** Opening view before any position is known (defaults to the company's region, from its time zone). */
   center?: [number, number];
   zoom?: number;
-  /** Street map / satellite button in the top-right corner (the live map places its own). */
+  /** Full-screen and street map / satellite buttons in the top-right corner (the live map places its own). */
   layerSwitch?: boolean;
 }) {
   const v = useThemeVars();
@@ -247,10 +284,21 @@ export default function LeafletMap({ trucks = [], points = [], selectedId, onSel
     ...positioned.map((t) => [t.lat!, t.lng!] as [number, number]),
     ...points.map((p) => [p.lat, p.lng] as [number, number]),
   ];
+  const box = useRef<HTMLDivElement>(null);
+  const [full, toggleFull] = useFullScreen(box);
 
   return (
-    <div style={{ height }} className={`relative overflow-hidden rounded-lg ${satellite ? "map-satellite" : ""} ${className ?? ""}`}>
-      {layerSwitch && <MapLayerButton className="absolute right-2.5 top-2.5 z-[1000]" />}
+    <div ref={box} style={{ height: full ? "100%" : height }}
+      className={cn("relative overflow-hidden", full ? "fixed inset-0 z-[95] bg-canvas" : "rounded-lg", satellite && "map-satellite", className)}>
+      {layerSwitch && (
+        <div className="absolute right-2.5 top-2.5 z-[1000] flex gap-1.5">
+          <IconButton label={full ? "Exit full screen" : "Full screen"} aria-pressed={full} onClick={toggleFull}
+            className="border border-line bg-overlay shadow-float hover:bg-raised">
+            {full ? <Minimize2 /> : <Maximize2 />}
+          </IconButton>
+          <MapLayerButton />
+        </div>
+      )}
       <MapContainer center={center ?? start.center} zoom={zoom ?? start.zoom} style={{ height: "100%", width: "100%" }} scrollWheelZoom>
         {satellite ? (
           <>

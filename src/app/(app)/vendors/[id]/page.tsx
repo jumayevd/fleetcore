@@ -15,11 +15,18 @@ import { setVendorActive } from "@/app/actions/vendors";
 import { newWorkOrderHref, workOrderHref, workOrdersHref } from "@/app/(app)/maintenance/_lib/links";
 import { plural } from "@/app/(app)/maintenance/_lib/shared";
 import { UnitLink } from "@/app/(app)/maintenance/_components/unit-link";
+import { CallButton, EmailButton, MapButton } from "../_components/contact-actions";
+import { mailboxes } from "@/lib/mail/accounts";
 
 export async function generateMetadata({ params }: PageProps<"/vendors/[id]">) {
   if (!(await getCurrentUser())) return {};
   const v = await db.vendor.findUnique({ where: { id: (await params).id }, select: { name: true } });
   return { title: v?.name ?? "Not found" };
+}
+
+/** A contact value with its action button (Call / Email / Map) on the right. */
+function WithAction({ children, action }: { children: React.ReactNode; action: React.ReactNode }) {
+  return <span className="flex items-start justify-between gap-2"><span className="min-w-0 pt-0.5">{children}</span>{action}</span>;
 }
 
 const YEAR = 365 * 86_400_000;
@@ -57,6 +64,11 @@ export default async function VendorPage({ params }: PageProps<"/vendors/[id]">)
   const avgShop = timed.length ? timed.reduce((a, d) => a + d.ms, 0) / timed.length : null;
   const lastMs = Math.max(lastAt._max.completedAt?.getTime() ?? 0, lastAt._max.scheduledAt?.getTime() ?? 0);
   const last = lastMs ? new Date(lastMs) : null;
+  // The viewer's own connected Gmail / Outlook, for "Write in FleetCore".
+  const boxes = editable && vendor.email ? await mailboxes(user.id) : [];
+  // Google Maps search: the street address, with the city when the address doesn't already name it.
+  const mapQuery = [vendor.address, vendor.city && !vendor.address?.toLowerCase().includes(vendor.city.split(",")[0].trim().toLowerCase()) ? vendor.city : null]
+    .filter(Boolean).join(", ");
   const types = typeRows.map((t) => ({ t: t.repairType, count: t._count._all, cost: t._sum.cost ?? 0 })).sort((a, b) => (money ? b.cost - a.cost : b.count - a.count));
 
   return (
@@ -113,9 +125,9 @@ export default async function VendorPage({ params }: PageProps<"/vendors/[id]">)
           <Card title="Contact">
             <DL cols={1} items={[
               ["Contact person", vendor.contactName ?? "—"],
-              ["Phone", vendor.phone ? <a key="p" href={`tel:${vendor.phone}`} className="num hover:underline">{vendor.phone}</a> : "—"],
-              ["Email", vendor.email ? <a key="e" href={`mailto:${vendor.email}`} className="hover:underline">{vendor.email}</a> : "—"],
-              ["Address", vendor.address ?? "—"],
+              ["Phone", vendor.phone ? <WithAction key="p" action={<CallButton phone={vendor.phone} />}><span className="num">{vendor.phone}</span></WithAction> : "—"],
+              ["Email", vendor.email ? <WithAction key="e" action={<EmailButton email={vendor.email} vendorId={id} vendorName={vendor.name} mailboxes={boxes} canSend={editable} />}><span className="break-all">{vendor.email}</span></WithAction> : "—"],
+              ["Address", vendor.address ? <WithAction key="a" action={<MapButton address={mapQuery} />}>{vendor.address}</WithAction> : "—"],
               ["City", vendor.city ?? "—"],
               ["Last used", last ? f.date(last) : "Never"],
             ]} />

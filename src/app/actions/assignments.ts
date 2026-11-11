@@ -10,6 +10,7 @@ import { getFormat } from "@/lib/format-server";
 import { startOfDayIn } from "@/lib/locale";
 import { setTruckDriver } from "@/lib/assignments";
 import { parseHandover } from "@/lib/handover";
+import { isSeat, type Seat } from "@/lib/assignments-shared";
 
 /*
  * The truck page's Driver tab: change, take off and edit a driver's stint on a truck (src/lib/assignments.ts).
@@ -48,34 +49,40 @@ async function run(fn: () => Promise<AssignResult>): Promise<AssignResult> {
   }
 }
 
-/** Give the truck a new driver (or its first). A driver who drives another truck moves over from it the same day. */
+const seatOf = (f: ReturnType<typeof fields>): Seat => (isSeat(f.str("seat")) ? (f.str("seat") as Seat) : "lead");
+
+/**
+ * Give the truck a new driver (or its first), or a team driver (seat "team"). A driver who drives another truck moves
+ * over from it the same day.
+ */
 export async function changeTruckDriver(truckId: string, fd: FormData): Promise<AssignResult> {
   const me = await requireUser("fleet.edit");
   const fmt = await getFormat();
   let touched: (string | null)[] = [];
   const res = await run(async () => {
     const f = fields(fd, me.company.timezone);
-    const driverId = f.req("driverId", "New driver");
+    const seat = seatOf(f);
+    const driverId = f.req("driverId", seat === "team" ? "Team driver" : "New driver");
     const day = readDay(f, "startedAt", "Assigned date", me.company.timezone);
     const [driver, truck] = await Promise.all([
       db.driver.findUnique({ where: { id: driverId }, select: { name: true, status: true } }),
-      db.truck.findUnique({ where: { id: truckId }, select: { unitNumber: true, status: true } }),
+      db.truck.findUnique({ where: { id: truckId }, select: { unitNumber: true, status: true, driverId: true, coDriverId: true } }),
     ]);
     if (!driver) throw new FormError("That driver no longer exists. Pick another one.");
     if (!truck) throw new FormError("This truck no longer exists.");
     if (driver.status === "INACTIVE") throw new FormError(`${driver.name} is inactive. Set them back to active on their page first.`);
     if (truck.status === "INACTIVE") throw new FormError(`${truck.unitNumber} is inactive. Reactivate it before giving it a driver.`);
-    const before = await db.truck.findUnique({ where: { id: truckId }, select: { driverId: true } });
     const r = await setTruckDriver({
-      truckId, driverId, day, userId: me.id, handover: parseHandover(f.str("handover")), note: note(f.str("note")), dayLabel: fmt.date,
+      truckId, driverId, seat, day, userId: me.id, handover: parseHandover(f.str("handover")), note: note(f.str("note")), dayLabel: fmt.date,
     });
     if (!r.changed) throw new FormError(`${driver.name} already drives ${truck.unitNumber}. Use Edit to change the date, the handover or the note.`);
-    touched = [driverId, before?.driverId ?? null];
-    await audit(me.id, "assign driver", "truck", truckId,
+    touched = [driverId, truck.driverId, truck.coDriverId];
+    const role = r.seat === "team" ? "team driver" : "driver";
+    await audit(me.id, `assign ${role}`, "truck", truckId,
       `${driver.name} from ${fmt.date(day)}${r.previous ? ` (was ${r.previous})` : ""}${r.moved ? `; moved from ${r.moved.unitNumber}` : ""}`);
-    await audit(me.id, "assign truck", "driver", driverId, `${driver.name} → ${truck.unitNumber}${r.moved ? ` (was ${r.moved.unitNumber})` : ""}`);
+    await audit(me.id, "assign truck", "driver", driverId, `${driver.name} → ${truck.unitNumber}${r.seat === "team" ? " (team driver)" : ""}${r.moved ? ` (was ${r.moved.unitNumber})` : ""}`);
     return {
-      ok: `${driver.name} now drives ${truck.unitNumber}${r.moved ? `; ${r.moved.unitNumber} has no driver now` : ""}.`,
+      ok: `${driver.name} now drives ${truck.unitNumber}${r.seat === "team" ? " as the team driver" : ""}${r.moved ? `; moved off ${r.moved.unitNumber}` : ""}.`,
       assignmentId: r.assignmentId ?? undefined,
     };
   });
@@ -83,24 +90,33 @@ export async function changeTruckDriver(truckId: string, fd: FormData): Promise<
   return res;
 }
 
-/** Take the driver off the truck: their stint ends on the given day. */
+/** Take a driver (seat "lead") or the team driver (seat "team") off the truck: their stint ends on the given day. */
 export async function unassignTruckDriver(truckId: string, fd: FormData): Promise<AssignResult> {
   const me = await requireUser("fleet.edit");
   const fmt = await getFormat();
-  let driverId: string | null = null;
+  let touched: (string | null)[] = [];
   const res = await run(async () => {
     const f = fields(fd, me.company.timezone);
+    const seat = seatOf(f);
     const day = readDay(f, "endedAt", "Last day", me.company.timezone);
-    const truck = await db.truck.findUnique({ where: { id: truckId }, select: { unitNumber: true, driverId: true, driver: { select: { name: true } } } });
+    const truck = await db.truck.findUnique({
+      where: { id: truckId },
+      select: { unitNumber: true, driverId: true, coDriverId: true, driver: { select: { name: true } }, coDriver: { select: { name: true } } },
+    });
     if (!truck) throw new FormError("This truck no longer exists.");
-    if (!truck.driverId) throw new FormError(`${truck.unitNumber} has no driver.`);
-    driverId = truck.driverId;
-    await setTruckDriver({ truckId, driverId: null, day, userId: me.id, endNote: note(f.str("endNote")), dayLabel: fmt.date });
-    await audit(me.id, "unassign driver", "truck", truckId, `${truck.driver?.name ?? "Driver"} until ${fmt.date(day)}`);
-    await audit(me.id, "unassign truck", "driver", truck.driverId, `${truck.driver?.name ?? "Driver"} no longer drives ${truck.unitNumber}`);
-    return { ok: `${truck.driver?.name ?? "The driver"} no longer drives ${truck.unitNumber}.` };
+    const driverId = seat === "team" ? truck.coDriverId : truck.driverId;
+    const name = (seat === "team" ? truck.coDriver?.name : truck.driver?.name) ?? "The driver";
+    if (!driverId) throw new FormError(`${truck.unitNumber} has no ${seat === "team" ? "team driver" : "driver"}.`);
+    touched = [truck.driverId, truck.coDriverId];
+    await setTruckDriver({ truckId, driverId: null, seat, day, userId: me.id, endNote: note(f.str("endNote")), dayLabel: fmt.date });
+    // Without the driver, a team driver aboard takes their seat (src/lib/assignments.ts).
+    const promoted = seat === "lead" && truck.coDriver ? truck.coDriver.name : null;
+    await audit(me.id, seat === "team" ? "unassign team driver" : "unassign driver", "truck", truckId,
+      `${name} until ${fmt.date(day)}${promoted ? `; ${promoted} is the driver now` : ""}`);
+    await audit(me.id, "unassign truck", "driver", driverId, `${name} no longer drives ${truck.unitNumber}`);
+    return { ok: `${name} no longer drives ${truck.unitNumber}.${promoted ? ` ${promoted} is its driver now.` : ""}` };
   });
-  if (!res.error) refresh(truckId, driverId);
+  if (!res.error) refresh(truckId, ...touched);
   return res;
 }
 
@@ -119,13 +135,27 @@ export async function updateAssignment(assignmentId: string, fd: FormData): Prom
     const startedAt = readDay(f, "startedAt", "Assigned date", me.company.timezone);
     const endedAt = a.endedAt ? readDay(f, "endedAt", "Last day", me.company.timezone) : null;
     if (endedAt && endedAt.getTime() < startedAt.getTime()) throw new FormError("The last day can't be before the assigned date.");
-    // Stints of one truck follow each other: this one can't reach into the one before or after it.
-    const [prev, next] = await Promise.all([
-      db.driverAssignment.findFirst({ where: { truckId: a.truckId, id: { not: a.id }, startedAt: { lt: startedAt } }, orderBy: { startedAt: "desc" }, select: { endedAt: true, driver: { select: { name: true } } } }),
-      a.endedAt ? db.driverAssignment.findFirst({ where: { truckId: a.truckId, id: { not: a.id }, startedAt: { gte: a.endedAt } }, orderBy: { startedAt: "asc" }, select: { startedAt: true, driver: { select: { name: true } } } }) : null,
-    ]);
-    if (prev?.endedAt && prev.endedAt.getTime() > startedAt.getTime()) throw new FormError(`${prev.driver.name} had the truck until ${fmt.date(prev.endedAt)}. Start on that day or later.`);
-    if (next && endedAt && endedAt.getTime() > next.startedAt.getTime()) throw new FormError(`${next.driver.name} took the truck on ${fmt.date(next.startedAt)}. End on that day or earlier.`);
+    // A truck holds two drivers at most (a team), so a stint can't stretch over days when two others already had it.
+    // The same driver can't have two stints at once either.
+    const overlapping = await db.driverAssignment.findMany({
+      where: {
+        truckId: a.truckId, id: { not: a.id },
+        startedAt: endedAt ? { lt: endedAt } : undefined,
+        OR: [{ endedAt: null }, { endedAt: { gt: startedAt } }],
+      },
+      orderBy: { startedAt: "asc" },
+      select: { driverId: true, startedAt: true, endedAt: true, driver: { select: { name: true } } },
+    });
+    const self = overlapping.find((s) => s.driverId === a.driverId);
+    if (self) throw new FormError(`${a.driver.name} has another stint on this truck from ${fmt.date(self.startedAt)}. Make the days not overlap.`);
+    // Two others on the same day inside this stint: the truck would have three drivers that day.
+    const end = (s: { endedAt: Date | null }) => s.endedAt?.getTime() ?? Infinity;
+    const myEnd = endedAt?.getTime() ?? Infinity;
+    for (const [i, x] of overlapping.entries()) {
+      const third = overlapping.slice(i + 1).find((y) =>
+        Math.max(x.startedAt.getTime(), y.startedAt.getTime(), startedAt.getTime()) < Math.min(end(x), end(y), myEnd));
+      if (third) throw new FormError(`${x.driver.name} and ${third.driver.name} already had the truck on some of those days. A truck takes two drivers at most.`);
+    }
     await db.driverAssignment.update({
       where: { id: a.id },
       data: {

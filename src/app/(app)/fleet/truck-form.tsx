@@ -96,6 +96,9 @@ export function TruckForm({ action, truck, drivers, groups, types, cancelHref }:
                   <Select name="driverId" defaultValue={truck?.driverId ?? ""} placeholder="No driver" options={drivers.map((x) => ({ value: x.id, label: x.name }))} />
                 </Field>
               </div>
+              <Field label="Team driver" hint="The second driver of a team truck. Needs an assigned driver beside them.">
+                <Select name="coDriverId" defaultValue={truck?.coDriverId ?? ""} placeholder="No team driver (solo)" options={drivers.map((x) => ({ value: x.id, label: x.name }))} />
+              </Field>
               {!truck && (
                 <Field label="Current location" hint="Optional. A known city puts the truck on the map.">
                   <Input name="locationName" list="truck-cities" placeholder="Joliet, IL" />

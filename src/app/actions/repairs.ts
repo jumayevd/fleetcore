@@ -77,6 +77,7 @@ export async function saveWorkOrder(workOrderId: string | null, _: ActionState, 
     const category = f.str("category");
     const repairType = f.str("repairType") ?? (category ? repairTypeForCategory(category) : null);
     if (!repairType || !(REPAIR_TYPES as readonly string[]).includes(repairType)) throw new FormError("Pick a repair type");
+    if (unit.trailerId && repairType === "COOLING") throw new FormError("Cooling system is for trucks. Pick another repair type for the trailer.");
     const rawStatus = f.str("status") ?? "OPEN";
     const status = rawStatus === "SCHEDULED" ? "OPEN" : rawStatus;
     if (!FORM_STATUSES.includes(status)) throw new FormError("Pick whether the unit is scheduled, in the shop or done");

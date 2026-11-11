@@ -87,7 +87,7 @@ export const WORK_ORDER_STATUSES = ["DRAFT", "OPEN", "IN_PROGRESS", "DONE", "CAN
  * Steering, Injectors, Computer).
  */
 export const TRUCK_REPAIR_TYPES = [
-  "OIL_CHANGE", "DOT_INSPECTION", "ENGINE", "FUEL_SYSTEM", "DPF", "ELECTRICAL", "LIGHTS", "TIRES", "BRAKES", "SUSPENSION", "MUD_FLAP",
+  "OIL_CHANGE", "DOT_INSPECTION", "ENGINE", "COOLING", "FUEL_SYSTEM", "DPF", "ELECTRICAL", "LIGHTS", "TIRES", "BRAKES", "SUSPENSION", "MUD_FLAP",
   "ACCIDENT", "TOWING", "FRAME", "BODY", "OTHER",
 ] as const;
 export const TRAILER_REPAIR_TYPES = [
@@ -95,7 +95,7 @@ export const TRAILER_REPAIR_TYPES = [
 ] as const;
 export const REPAIR_TYPES = [...new Set([...TRUCK_REPAIR_TYPES, ...TRAILER_REPAIR_TYPES, "PM_INSPECTION", "REPAIR", "STEER", "INJECTOR", "COMPUTER"] as const)];
 export const REPAIR_TYPE_LABELS: Record<string, string> = {
-  OIL_CHANGE: "Oil change", DOT_INSPECTION: "DOT inspection", ENGINE: "Engine", FUEL_SYSTEM: "Emissions / fuel system", DPF: "Aftertreatment",
+  OIL_CHANGE: "Oil change", DOT_INSPECTION: "DOT inspection", ENGINE: "Engine", COOLING: "Cooling system", FUEL_SYSTEM: "Emissions / fuel system", DPF: "Aftertreatment",
   ELECTRICAL: "Electrical", LIGHTS: "Lights", TIRES: "Tires", BRAKES: "Brakes", SUSPENSION: "Suspension", TANDEM: "Tandem", MUD_FLAP: "Mud flap",
   ACCIDENT: "Accident repair", TOWING: "Towing", FRAME: "Frame", BODY: "Body", OTHER: "Other",
   // Not on either list: PM visits from the oil board, and older orders.
@@ -105,17 +105,17 @@ export const REPAIR_TYPE_LABELS: Record<string, string> = {
 /**
  * The system a line of work belongs to (WorkOrderLine.system), so repeat problems show up per system: the unit's repair
  * types, plus Labor and Miscellaneous (lines only), with Other last. REPAIR_SYSTEMS is every system a line can have,
- * including Cooling and HVAC, which lines from before keep.
+ * including HVAC, which lines from before keep. Cooling system is a truck type, so a trailer's lines don't offer it.
  */
 const LINE_ONLY_SYSTEMS = ["LABOR", "MISC"];
 const lineSystems = (types: readonly string[]) => [...types.filter((t) => t !== "OTHER"), ...LINE_ONLY_SYSTEMS, "OTHER"];
 export const TRUCK_LINE_SYSTEMS = lineSystems(TRUCK_REPAIR_TYPES);
 export const TRAILER_LINE_SYSTEMS = lineSystems(TRAILER_REPAIR_TYPES);
-export const REPAIR_SYSTEMS = [...new Set([...TRUCK_LINE_SYSTEMS, ...TRAILER_LINE_SYSTEMS, "COOLING", "HVAC"])];
+export const REPAIR_SYSTEMS = [...new Set([...TRUCK_LINE_SYSTEMS, ...TRAILER_LINE_SYSTEMS, "HVAC"])];
 export const REPAIR_SYSTEM_LABELS: Record<string, string> = {
   ...REPAIR_TYPE_LABELS, LABOR: "Labor", MISC: "Miscellaneous",
   // Lines from before.
-  COOLING: "Cooling", HVAC: "HVAC", PM: "PM / oil change", EXHAUST: "Exhaust / aftertreatment", FEES: "Fees & supplies",
+  HVAC: "HVAC", PM: "PM / oil change", EXHAUST: "Exhaust / aftertreatment", FEES: "Fees & supplies",
 };
 
 /** Where a job in the shop has got to (WorkOrder.stage, while IN_PROGRESS), in order. */
@@ -126,15 +126,18 @@ export const REPAIR_STAGE_LABELS: Record<string, string> = {
 };
 
 /** Who pays for a repair (WorkOrder.payer). */
-export const PAYERS = ["COMPANY", "DRIVER", "INVESTIGATION", "WARRANTY"] as const;
+export const PAYERS = ["COMPANY", "DRIVER", "INVESTIGATION", "WARRANTY", "VENDOR", "LEASING"] as const;
 export const PAYER_LABELS: Record<string, string> = {
   COMPANY: "Company expense", DRIVER: "Driver charge", INVESTIGATION: "Under investigation", WARRANTY: "Warranty claim",
+  VENDOR: "Vendor", LEASING: "Leasing",
 };
 export const PAYER_HINTS: Record<string, string> = {
   COMPANY: "Goes on the company's books.",
   DRIVER: "Taken off what the driver earns, and only once the driver has been told.",
   INVESTIGATION: "Held until a manager or safety decides who pays.",
   WARRANTY: "Claimed back from the maker or the shop.",
+  VENDOR: "Paid by the vendor whose truck or trailer it is.",
+  LEASING: "Paid by the leasing company under the lease.",
 };
 export const PAYMENT_STATUSES = ["PAID", "PAY_LATER"] as const;
 export const PAYMENT_STATUS_LABELS: Record<string, string> = { PAID: "Paid", PAY_LATER: "To pay" };

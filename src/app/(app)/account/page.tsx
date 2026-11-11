@@ -15,6 +15,7 @@ import { Avatar, Badge, Card, Chip, DL, Disclosure, Field, InfoTip, Input, Kbd, 
 import { ROLE_TONE } from "../admin/shared";
 import { LeaveCompanyButton } from "./leave";
 import { ProfileFields } from "@/components/profile-fields";
+import { PhoneInput } from "@/components/phone-input";
 import { birthDateValue, nameParts } from "@/lib/profile";
 
 export const metadata = { title: "My account" };
@@ -49,7 +50,7 @@ export default async function AccountPage() {
             <ActionForm action={updateProfile} className="space-y-3">
               <ProfileFields required={me.role !== "OWNER"}
                 defaults={{ ...nameParts(user), idNumber: user.idNumber, birthDate: birthDateValue(user.birthDate) }} />
-              <Field label="Phone"><Input name="phone" type="tel" defaultValue={user.phone ?? ""} placeholder="+998 90 000 00 00" className="num" autoComplete="tel" /></Field>
+              <Field label="Phone"><PhoneInput name="phone" defaultValue={user.phone ?? ""} /></Field>
               <div className="flex items-center justify-between gap-3">
                 <DL cols={2} items={[
                   ["Member since", date(user.createdAt)],

@@ -29,7 +29,7 @@ const WHERE_OPS = new Set([
 type Ref = "driver" | "truck" | "trailer" | "workOrder" | "truckType" | "vendor" | "walkAround" | "roadside" | "eldConnection" | "assignment";
 /** Foreign keys per model that must stay inside the company. */
 const REFS: Record<string, Record<string, Ref>> = {
-  Truck: { driverId: "driver", truckTypeId: "truckType" },
+  Truck: { driverId: "driver", coDriverId: "driver", truckTypeId: "truckType" },
   Trailer: { truckId: "truck" },
   WorkOrder: { truckId: "truck", trailerId: "trailer", vendorId: "vendor", chargeDriverId: "driver" },
   WorkOrderLine: { workOrderId: "workOrder" },

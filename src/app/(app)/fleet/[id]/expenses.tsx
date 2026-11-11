@@ -68,7 +68,7 @@ export async function ExpensesTab({ truck, editable, showMoney }: { truck: Expen
   const notTold = driverCharges.filter((w) => !w.driverInformedAt).length;
   const companyCost = sum(byPayer("COMPANY"), (w) => w.cost);
   const driverCost = sum(driverCharges, (w) => w.cost);
-  const otherPayers = (["WARRANTY", "INVESTIGATION"] as const).map((k) => ({ k, rows: byPayer(k) })).filter((x) => x.rows.length);
+  const otherPayers = (["WARRANTY", "INVESTIGATION", "VENDOR", "LEASING"] as const).map((k) => ({ k, rows: byPayer(k) })).filter((x) => x.rows.length);
   const repairTotal = companyCost + driverCost + sum(otherPayers.flatMap((x) => x.rows), (w) => w.cost);
 
   // Six months, by company month.

@@ -36,7 +36,7 @@ export const FORM_STATUSES = [
 
 /** Older reports group by WorkOrder.category; every repair type maps to one so those keep adding up. */
 const CATEGORY_FOR_TYPE: Record<string, string> = {
-  OIL_CHANGE: "PM", PM_INSPECTION: "PM", DOT_INSPECTION: "INSPECTION", ENGINE: "ENGINE", FUEL_SYSTEM: "ENGINE", INJECTOR: "ENGINE", DPF: "ENGINE",
+  OIL_CHANGE: "PM", PM_INSPECTION: "PM", DOT_INSPECTION: "INSPECTION", ENGINE: "ENGINE", COOLING: "COOLING", FUEL_SYSTEM: "ENGINE", INJECTOR: "ENGINE", DPF: "ENGINE",
   ELECTRICAL: "ELECTRICAL", LIGHTS: "ELECTRICAL", COMPUTER: "ELECTRICAL", BODY: "BODY", FRAME: "BODY", ACCIDENT: "BODY", MUD_FLAP: "BODY",
   TIRES: "TIRES", BRAKES: "BRAKES", TOWING: "TOWING", SUSPENSION: "OTHER", TANDEM: "OTHER", STEER: "OTHER", REPAIR: "OTHER", OTHER: "OTHER",
 };
@@ -44,7 +44,7 @@ export const categoryForRepairType = (t: string) => CATEGORY_FOR_TYPE[t] ?? "OTH
 
 /** For callers that still send a category (the quick form on the truck page). */
 const TYPE_FOR_CATEGORY: Record<string, string> = {
-  PM: "OIL_CHANGE", INSPECTION: "DOT_INSPECTION", ENGINE: "ENGINE", COOLING: "ENGINE", ELECTRICAL: "ELECTRICAL", BODY: "BODY",
+  PM: "OIL_CHANGE", INSPECTION: "DOT_INSPECTION", ENGINE: "ENGINE", COOLING: "COOLING", ELECTRICAL: "ELECTRICAL", BODY: "BODY",
   TIRES: "TIRES", BRAKES: "BRAKES", TOWING: "TOWING", OTHER: "OTHER",
 };
 export const repairTypeForCategory = (c: string) => TYPE_FOR_CATEGORY[c] ?? "OTHER";

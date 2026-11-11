@@ -8,6 +8,7 @@ import { can } from "@/lib/permissions";
 import { audit } from "@/lib/audit";
 import { attempt, fields, FormError, type ActionState } from "@/lib/action";
 import { VENDOR_TYPES } from "@/lib/constants";
+import { formatPhone } from "@/lib/phone";
 import { looksLikeAddress, type VendorOption } from "@/components/shop/shared";
 import { geocodeMissingVendors, geocodeVendor } from "@/lib/geocode";
 
@@ -44,7 +45,7 @@ export async function saveVendor(vendorId: string | null, _: ActionState, fd: Fo
     const clash = await findByName(name, vendorId);
     if (clash) throw new FormError(`There is already a vendor called ${clash.name}`);
     const data = {
-      name, type: types[0], types: [...types], phone: f.str("phone"), email, contactName: f.str("contactName"), address: f.str("address"), city: f.str("city"),
+      name, type: types[0], types: [...types], phone: f.phone("phone"), email, contactName: f.str("contactName"), address: f.str("address"), city: f.str("city"),
       notes: f.str("notes"), active: vendorId ? f.bool("active") : true,
     };
     let moved = true;
@@ -80,7 +81,7 @@ export async function createVendorInline(input: { name: string; type?: string; p
   const existing = await findByName(name);
   if (existing) return { vendor: existing, existed: true };
   const v = await db.vendor.create({
-    data: { name, type, types: [type], phone: input.phone?.trim() || null, city: input.city?.trim() || null, address: looksLikeAddress(name) ? name : null },
+    data: { name, type, types: [type], phone: formatPhone(input.phone), city: input.city?.trim() || null, address: looksLikeAddress(name) ? name : null },
     select: pick,
   });
   await audit(me.id, "create", "vendor", v.id, name);

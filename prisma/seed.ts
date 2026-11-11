@@ -2,6 +2,7 @@ import { PrismaClient, type Driver, type Prisma, type Trailer, type Truck } from
 import bcrypt from "bcryptjs";
 import { CITIES, DEFECT_DUE_DAYS, PTI_COMPONENTS, nearestCity } from "../src/lib/constants";
 import { dateOnly, weekStartIn, type CompanyLocale } from "../src/lib/locale";
+import { formatPhone } from "../src/lib/phone";
 
 /*
  * Demo data for FleetCore: two US fleets (miles, gallons, US time zones) and one metric fleet in Uzbekistan, worked by
@@ -119,7 +120,7 @@ async function seedCompany(spec: CompanySpec, people: { owner: string; members: 
   const vendors: { id: string; name: string; type: string }[] = [];
   for (const v of spec.vendors) {
     vendors.push(await db.vendor.create({
-      data: { companyId, name: v.name, type: v.type, types: [v.type], city: v.city, phone: v.phone, contactName: v.contactName ?? null, email: v.email ?? null, address: v.address ?? null, createdAt: ago(int(100, 300)) },
+      data: { companyId, name: v.name, type: v.type, types: [v.type], city: v.city, phone: formatPhone(v.phone), contactName: v.contactName ?? null, email: v.email ?? null, address: v.address ?? null, createdAt: ago(int(100, 300)) },
     }));
   }
   const vendorFor = (kinds: string[]) => {
@@ -675,7 +676,7 @@ async function seedCompany(spec: CompanySpec, people: { owner: string; members: 
 /* Companies and accounts                                              */
 /* ------------------------------------------------------------------ */
 
-const usPhone = (areas: string[]) => () => `(${pick(areas)}) 555-01${String(int(0, 99)).padStart(2, "0")}`;
+const usPhone = (areas: string[]) => () => formatPhone(`(${pick(areas)}) 555-01${String(int(0, 99)).padStart(2, "0")}`)!;
 const cdl = (letter: string) => () => `${letter}${int(100, 999)}-${int(1000, 9999)}-${int(1000, 9999)}`;
 const US_MODELS: [string, string, string | null, string][] = [
   ["Freightliner", "Cascadia 126", "Freightliner Cascadia", "3AKJHHDR"], ["Volvo", "VNL 860", "Volvo VNL", "4V4NC9EH"], ["Kenworth", "T680", "Kenworth T680", "1XKYD49X"],
@@ -747,7 +748,7 @@ async function main() {
     trailerTypes: ["DRY_VAN", "DRY_VAN", "REEFER", "DRY_VAN", "FLATBED", "REEFER"], capacity: US_CAPACITY, speed: [55, 68],
     leaseLimit: 120_000, leaseRate: 0.15, states: ["IL", "IN", "OH", "PA", "TN"], roadside: true,
     technicians: ["Mike D.", "Luis", "Dave R.", "Tony", "Sergei"],
-    profile: { legalName: "Silk Road Freight Inc.", brand: "", taxId: "36-4820193", licenseNumber: "USDOT 9900412 · MC 9900412", director: "Aziza Karimova", phone: "(630) 555-0100", email: "fleet@silkroadfreight.example", address: "1200 Commerce Dr, Naperville, IL 60563", bank: { name: "Prairie Commerce Bank", account: "000123456789", mfo: "071000000", swift: "PRCBUS44" }, insurance: { carrier: "Great Lakes Mutual", policy: "AL-2026-00419", agent: "Nina Brooks, (630) 555-0177" } },
+    profile: { legalName: "Silk Road Freight Inc.", brand: "", taxId: "36-4820193", licenseNumber: "USDOT 9900412 · MC 9900412", director: "Aziza Karimova", phone: "+1 (630) 555 0100", email: "fleet@silkroadfreight.example", address: "1200 Commerce Dr, Naperville, IL 60563", bank: { name: "Prairie Commerce Bank", account: "000123456789", mfo: "071000000", swift: "PRCBUS44" }, insurance: { carrier: "Great Lakes Mutual", policy: "AL-2026-00419", agent: "Nina Brooks, (630) 555-0177" } },
     companyDocs: [["COMPANY_LICENSE", "USDOT_MC_operating_authority", null], ["COMPANY_INSURANCE", "Auto_liability_and_cargo_COI", int(120, 300)], ["TAX_CERT", "IRS_EIN_letter", null]],
   }, { owner: aziza.id, members: [{ userId: bekzod.id, role: "SPECIALIST" }, { userId: dilnoza.id, role: "VIEWER", lastActiveDays: 4 }] });
   // Silk Road is where Aziza worked last: it is listed first when she picks a company.
@@ -775,7 +776,7 @@ async function main() {
     trailerTypes: ["DRY_VAN", "REEFER", "DRY_VAN"], capacity: US_CAPACITY, speed: [55, 65],
     leaseLimit: 110_000, leaseRate: 0.14, states: ["PA", "NJ", "MD", "VA", "NY"], roadside: true,
     technicians: ["Frank", "Jose M.", "Eddie", "Rich"],
-    profile: { legalName: "Caspian Carriers LLC", brand: "", taxId: "82-1907735", licenseNumber: "USDOT 9900688 · MC 9900688", director: "Kamron Rakhimov", phone: "(610) 555-0101", email: "ops@caspiancarriers.example", address: "75 Hamilton Blvd, Allentown, PA 18103", bank: { name: "Keystone Savings Bank", account: "000987654321", mfo: "031000000", swift: "KSSBUS33" }, insurance: { carrier: "Atlantic Commercial Insurance", policy: "TRK-88213", agent: "Paul Grant, (610) 555-0155" } },
+    profile: { legalName: "Caspian Carriers LLC", brand: "", taxId: "82-1907735", licenseNumber: "USDOT 9900688 · MC 9900688", director: "Kamron Rakhimov", phone: "+1 (610) 555 0101", email: "ops@caspiancarriers.example", address: "75 Hamilton Blvd, Allentown, PA 18103", bank: { name: "Keystone Savings Bank", account: "000987654321", mfo: "031000000", swift: "KSSBUS33" }, insurance: { carrier: "Atlantic Commercial Insurance", policy: "TRK-88213", agent: "Paul Grant, (610) 555-0155" } },
     companyDocs: [["COMPANY_LICENSE", "USDOT_MC_operating_authority", null], ["COMPANY_INSURANCE", "Auto_liability_and_cargo_COI", 21], ["TAX_CERT", "IRS_EIN_letter", null]],
   }, { owner: kamron.id, members: [{ userId: aziza.id, role: "SPECIALIST", lastActiveDays: 1.1 }] });
 

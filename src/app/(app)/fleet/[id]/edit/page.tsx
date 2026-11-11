@@ -30,7 +30,7 @@ export default async function EditTruck({ params }: PageProps<"/fleet/[id]/edit"
     countOf(c.fuelLogs, "fuel entry", "fuel entries"), countOf(c.assignments, "driver stint"),
   ].filter((x): x is string => Boolean(x));
   const [drivers, groups, types] = await Promise.all([
-    driverOptions(truck.driverId),
+    driverOptions(truck.driverId, truck.coDriverId),
     db.truck.findMany({ where: { group: { not: null } }, distinct: ["group"], select: { group: true } }),
     truckTypeOptions(),
   ]);

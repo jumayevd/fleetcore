@@ -6,7 +6,7 @@ import { REPAIR_STAGE_LABELS, humanize } from "@/lib/constants";
 import { roLabel } from "@/lib/service";
 import { Badge, InfoTip, Progress, Table, cn } from "@/components/ui";
 import type {
-  DriverChargeRow, LevelRow, PaperworkGroup, RepairTypeRow, RepeatRow, ReportData, RoadsideRow, SystemRow, TruckRow, UnitRef, VendorRow, WarrantyRow,
+  CategoryRow, DriverChargeRow, LevelRow, PaperworkGroup, RepairTypeRow, RepeatRow, ReportData, RoadsideRow, SystemRow, TruckRow, UnitRef, VendorRow, WarrantyRow,
 } from "./data";
 import { driverHref, repairHref, repairsHref, roadsideHref, unitHref, vendorHref } from "./links";
 import {
@@ -153,6 +153,48 @@ export function TruckCostTable({ f, money, rows, totals, trailers, fleetCostPerD
           {money && <td className="num text-right" title={truckCostPerDistance != null ? `Trucks only: ${f.money2(truckCostPerDistance)}` : undefined}>{fleetCostPerDistance != null ? f.money2(fleetCostPerDistance) : "—"}</td>}
         </tr>
       )}
+    </Table>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Cost by kind of truck                                               */
+/* ------------------------------------------------------------------ */
+
+export function TruckCategoryTable({ f, rows }: { f: Formatter; rows: CategoryRow[] }) {
+  const L = f.labels;
+  const all = rows.reduce((a, r) => ({ trucks: a.trucks + r.trucks, km: a.km + r.km, fuel: a.fuel + r.fuel, maintenance: a.maintenance + r.maintenance, jobs: a.jobs + r.jobs, total: a.total + r.total }),
+    { trucks: 0, km: 0, fuel: 0, maintenance: 0, jobs: 0, total: 0 });
+  return (
+    <Table dense stickyHead={false}
+      head={[
+        "Trucks", R("n", "Count"), R("fuel", "Fuel"), RT("maint", "Maintenance", "Completed repair orders on these trucks in the period."), R("total", "Total"),
+        RT("per", "Per truck", "Total divided by the number of these trucks in service."),
+        RT("cpd", `Cost ${L.perDistance}`, "Total divided by the distance these trucks drove (trucks with odometer readings)."),
+      ]}
+      empty={all.trucks === 0} emptyTitle="No trucks yet" emptyDescription="Add trucks to the fleet; their costs add up here by company, vendor, owner-operator and lease.">
+      {rows.map((r) => (
+        <tr key={r.category} className={r.trucks ? undefined : "text-fg-faint"}>
+          <td className="whitespace-nowrap font-medium text-fg">{r.label}</td>
+          <td className="num text-right text-fg-muted">{r.trucks || dash}</td>
+          <td className="num text-right">{r.fuel ? f.money(r.fuel) : dash}</td>
+          <td className="num whitespace-nowrap text-right">
+            {r.jobs ? <>{f.money(r.maintenance)} <span className="text-[11px] text-fg-subtle">· {r.jobs}</span></> : dash}
+          </td>
+          <td className="num text-right font-medium">{r.total ? f.money(r.total) : dash}</td>
+          <td className="num text-right font-medium">{r.perTruck ? f.money(r.perTruck) : dash}</td>
+          <td className="num text-right text-fg-muted">{r.costPerKm != null ? f.money2(r.costPerKm) : dash}</td>
+        </tr>
+      ))}
+      <tr className={totalRow}>
+        <td className="text-[12px] text-fg-muted">All trucks</td>
+        <td className="num text-right">{f.number(all.trucks)}</td>
+        <td className="num text-right">{f.money(all.fuel)}</td>
+        <td className="num text-right">{f.money(all.maintenance)}</td>
+        <td className="num text-right">{f.money(all.total)}</td>
+        <td className="num text-right">{all.trucks ? f.money(all.total / all.trucks) : "—"}</td>
+        <td className="num text-right">{all.km > 0 ? f.money2(all.total / all.km) : "—"}</td>
+      </tr>
     </Table>
   );
 }

@@ -11,6 +11,9 @@ import { Avatar, Badge, Card, Chip, EmptyState, ExpiryBadge, InfoTip, LinkButton
 import { DriverFilters } from "./filters";
 import { LinkRow } from "./link-row";
 import { dispatcherOptions } from "./data";
+import { NO_TRUCK, truckOf } from "@/lib/assignments-shared";
+
+const TRUCK_PICK = { select: { id: true, unitNumber: true, make: true, model: true, status: true } } as const;
 import {
   AT_RISK_SCORE, DRIVER_TYPE_TONE, EMPLOYMENT_LABELS, atRiskWhere, clearance, clearedWhere, expiredWhere, expiringWhere, riskReasons, scoreGrade,
 } from "./shared";
@@ -52,12 +55,13 @@ export default async function DriversPage({ searchParams }: PageProps<"/drivers"
       params.hold ? { hold: true } : {},
       params.atRisk ? atRiskWhere(now) : {},
       params.papers ? expiringWhere(now) : {},
-      params.truck ? { truck: { is: null } } : {},
+      params.truck ? NO_TRUCK : {},
       params.dispatcher === "none" ? { dispatcher: null } : params.dispatcher ? { dispatcher: params.dispatcher } : {},
       params.q ? {
         OR: [
           { name: text }, { phone: text }, { phone2: text }, { email: text }, { licenseNumber: text }, { dispatcher: text },
           { truck: { is: { unitNumber: text } } }, { truck: { is: { plate: text } } },
+          { teamTruck: { is: { unitNumber: text } } }, { teamTruck: { is: { plate: text } } },
         ],
       } : {},
     ],
@@ -66,13 +70,13 @@ export default async function DriversPage({ searchParams }: PageProps<"/drivers"
   const [drivers, matched, byState, cleared, noTruck, papersDue, papersExpired, risky, dispatchers] = await Promise.all([
     db.driver.findMany({
       where, orderBy: { name: "asc" }, take: LIMIT,
-      include: { truck: { select: { id: true, unitNumber: true, make: true, model: true, status: true } } },
+      include: { truck: TRUCK_PICK, teamTruck: TRUCK_PICK },
     }),
     db.driver.count({ where }),
     // Roster KPIs are fleet-wide (not affected by the filters).
     db.driver.groupBy({ by: ["status", "hold"], _count: true }),
     db.driver.count({ where: clearedWhere(now) }),
-    db.driver.count({ where: { status: "ACTIVE", truck: { is: null } } }),
+    db.driver.count({ where: { status: "ACTIVE", ...NO_TRUCK } }),
     db.driver.count({ where: { AND: [working, expiringWhere(now)] } }),
     db.driver.count({ where: { AND: [working, expiredWhere(now)] } }),
     db.driver.count({ where: { AND: [working, atRiskWhere(now)] } }),
@@ -180,6 +184,7 @@ export default async function DriversPage({ searchParams }: PageProps<"/drivers"
             const g = scoreGrade(d.score);
             const risks = riskReasons(d);
             const c = clearance(d);
+            const truck = truckOf(d);
             const have = scansFor.get(d.id);
             const missing = REQUIRED_DRIVER_DOCS.filter((k) => !have?.has(k));
             return (
@@ -201,10 +206,13 @@ export default async function DriversPage({ searchParams }: PageProps<"/drivers"
                   {c.detail && <p className="mt-0.5 truncate text-[11px] text-fg-subtle" title={c.reasons.join(" · ")}>{c.detail}</p>}
                 </td>
                 <td>
-                  {d.truck ? (
+                  {truck ? (
                     <div className="min-w-0">
-                      <Link href={`/fleet/${d.truck.id}`} className="num unit-no font-medium text-fg hover:underline">{d.truck.unitNumber}</Link>
-                      <p className="truncate text-[11px] text-fg-subtle">{d.truck.make} {d.truck.model}{d.truck.status !== "ACTIVE" && <> · <span className="text-warn">{humanize(d.truck.status).toLowerCase()}</span></>}</p>
+                      <span className="flex items-center gap-1.5">
+                        <Link href={`/fleet/${truck.id}`} className="num unit-no font-medium text-fg hover:underline">{truck.unitNumber}</Link>
+                        {truck.team && <Chip tone="info" title="Team driver: the second driver of this truck">Team</Chip>}
+                      </span>
+                      <p className="truncate text-[11px] text-fg-subtle">{truck.make} {truck.model}{truck.status !== "ACTIVE" && <> · <span className="text-warn">{humanize(truck.status).toLowerCase()}</span></>}</p>
                     </div>
                   ) : d.status === "ACTIVE" && editable && can(user.role, "fleet.edit") ? (
                     <Link href={`/drivers/${d.id}#truck`} className="text-[12px] font-medium text-accent-text hover:underline">Assign truck</Link>

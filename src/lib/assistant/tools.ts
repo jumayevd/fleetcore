@@ -16,6 +16,7 @@ import {
   ROADSIDE_STATUS_LABELS, TRAILER_STATUSES, TRAILER_STATUS_LABELS, TRUCK_STATUSES, VENDOR_TYPES, WORK_ORDER_PRIORITIES, humanize,
 } from "@/lib/constants";
 import { vendorTypeLabel } from "@/components/shop/shared";
+import { HAS_TRUCK, NO_TRUCK, truckOf } from "@/lib/assignments-shared";
 import { TRAILER_POSITION_FIELDS, TRUCK_POSITION_FIELDS, lastSeen } from "./motion";
 import { COSTS_HIDDEN, DAY_MS as DAY, daysSince, daysUntil, makeKit, round, sumOf, type Kit } from "./kit";
 import {
@@ -157,6 +158,7 @@ const TRUCK_ROW = {
   ...SERVICE_FIELDS, ...LEASE_FIELDS, ...TRUCK_POSITION_FIELDS,
   insuranceExpiry: true, inspectionExpiry: true, registrationExpiry: true,
   driver: { select: { id: true, name: true, phone: true, hold: true, holdReason: true, dispatcher: true } },
+  coDriver: { select: { id: true, name: true, phone: true, hold: true } },
   trailers: { select: { id: true, unitNumber: true } },
   defects: { where: { status: { not: "CLOSED" } }, select: { holdsUnit: true } },
   _count: { select: { workOrders: { where: { status: { in: ACTIVE_WO }, voidedAt: null } } } },
@@ -175,6 +177,7 @@ function truckView(t: TruckRow, docs: DocIndex, kit: Kit, now: number) {
         ? { name: t.driver.name, phone: t.driver.phone, dispatcher: t.driver.dispatcher, onHold: t.driver.hold, holdReason: t.driver.hold ? (t.driver.holdReason ?? "no reason recorded") : null, href: link(`/drivers/${t.driver.id}`) }
         : "assigned"
       : null,
+    ...(t.coDriver ? { teamDriver: seesDrivers ? { name: t.coDriver.name, phone: t.coDriver.phone, onHold: t.coDriver.hold, href: link(`/drivers/${t.coDriver.id}`) } : "assigned" } : {}),
     trailers: t.trailers.map((x) => ({ unit: x.unitNumber, href: link(`/fleet/trailers/${x.id}`) })),
     odometer: f.dist(t.odometerKm), odometerAsOf: kit.date(t.odometerAt),
     oil: oilView(t, s, kit),
@@ -379,7 +382,7 @@ export function buildAssistantTools(ctx: ToolContext) {
           db.truck.groupBy({ by: ["status"], _count: true }),
           db.truck.findMany({ where: { status: { not: "INACTIVE" } }, take: SCAN, select: { id: true, status: true, driverId: true, ...SERVICE_FIELDS, ...LEASE_FIELDS } }),
           db.trailer.groupBy({ by: ["status"], _count: true }),
-          db.driver.findMany({ where: { status: { not: "INACTIVE" } }, take: SCAN, select: { status: true, hold: true, licenseExpiry: true, medicalExpiry: true, truck: { select: { id: true } } } }),
+          db.driver.findMany({ where: { status: { not: "INACTIVE" } }, take: SCAN, select: { status: true, hold: true, licenseExpiry: true, medicalExpiry: true, truck: { select: { id: true } }, teamTruck: { select: { id: true } } } }),
           db.workOrder.groupBy({ by: ["status", "stage"], where: { status: { in: ACTIVE_WO }, voidedAt: null }, _count: true }),
           db.workOrder.count({ where: { status: { in: NOT_STARTED_WO }, voidedAt: null, scheduledAt: { lt: today } } }),
           db.workOrder.findMany({ where: { status: "IN_PROGRESS", voidedAt: null }, take: SCAN, select: { truckId: true, trailerId: true, promisedAt: true } }),
@@ -423,7 +426,7 @@ export function buildAssistantTools(ctx: ToolContext) {
             ? {
               drivers: {
                 working: drivers.length, onHold: count(drivers, (d) => d.hold), onLeave: count(drivers, (d) => d.status === "ON_LEAVE"),
-                activeWithoutTruck: count(drivers, (d) => d.status === "ACTIVE" && !d.hold && !d.truck),
+                activeWithoutTruck: count(drivers, (d) => d.status === "ACTIVE" && !d.hold && !truckOf(d)),
                 licenceOrMedicalExpired: count(drivers, (d) => d.licenseExpiry.getTime() < now || (d.medicalExpiry != null && d.medicalExpiry.getTime() < now)),
                 licenceOrMedicalExpiringOrExpired: count(drivers, expiringPeople),
                 href: link("/drivers"),
@@ -744,11 +747,11 @@ export function buildAssistantTools(ctx: ToolContext) {
     }),
 
     workOrders: tool({
-      description: "Repair orders (RO-0137) with filters. status: active (draft, scheduled or in the shop; default), overdue (scheduled before today, not started), in_shop (in the shop now), past_promised (in the shop past the promised date), DRAFT, OPEN (scheduled), IN_PROGRESS, DONE (completed), CANCELLED, voided, all. Also stage (where a job in the shop has got to), payer (who pays: COMPANY / DRIVER / INVESTIGATION / WARRANTY), driverNotTold (driver charges the driver has not been told about), repairType, unit, vendor, priority and a date range (completion date for DONE, scheduled date otherwise). Returns the total and up to 25 orders with unit, type, status and stage, downtime, promised date, vendor, technician, who pays and whether the driver was told, what was done, and (for roles that see money) cost and invoice.",
+      description: "Repair orders (RO-0137) with filters. status: active (draft, scheduled or in the shop; default), overdue (scheduled before today, not started), in_shop (in the shop now), past_promised (in the shop past the promised date), DRAFT, OPEN (scheduled), IN_PROGRESS, DONE (completed), CANCELLED, voided, all. Also stage (where a job in the shop has got to), payer (who pays: COMPANY / DRIVER / INVESTIGATION / WARRANTY / VENDOR / LEASING), driverNotTold (driver charges the driver has not been told about), repairType, unit, vendor, priority and a date range (completion date for DONE, scheduled date otherwise). Returns the total and up to 25 orders with unit, type, status and stage, downtime, promised date, vendor, technician, who pays and whether the driver was told, what was done, and (for roles that see money) cost and invoice.",
       inputSchema: z.object({
         status: z.enum(WO_FILTERS).optional(),
         stage: z.enum(REPAIR_STAGES).optional().describe("DIAGNOSING | WAITING_APPROVAL | WAITING_PARTS | IN_REPAIR | QUALITY_CHECK | READY_PICKUP"),
-        payer: z.enum(PAYERS).optional().describe("COMPANY | DRIVER | INVESTIGATION | WARRANTY"),
+        payer: z.enum(PAYERS).optional().describe("COMPANY | DRIVER | INVESTIGATION | WARRANTY | VENDOR | LEASING"),
         driverNotTold: z.boolean().optional().describe("true = only driver charges the driver has not been told about"),
         repairType: z.enum(REPAIR_TYPES).optional(),
         unit: filterText("Truck or trailer unit number"),
@@ -1287,7 +1290,7 @@ export function buildAssistantTools(ctx: ToolContext) {
         status: z.enum(DRIVER_STATUSES).optional().describe("ACTIVE | ON_LEAVE | INACTIVE (former drivers)"),
         type: z.enum(DRIVER_TYPES).optional().describe("COMPANY | OWNER_OPERATOR | LEASE"),
         hold: z.boolean().optional().describe("true = only drivers on hold; false = only drivers not on hold"),
-        hasTruck: z.boolean().optional().describe("true = only drivers with a truck assigned; false = only drivers without a truck"),
+        hasTruck: z.boolean().optional().describe("true = only drivers with a truck assigned (as its driver or its team driver); false = only drivers without a truck"),
         expiringWithinDays: z.number().int().min(0).max(366).optional(),
         atRisk: z.boolean().optional(),
         q: filterText("Name, phone, licence number or dispatcher (case-insensitive contains)"),
@@ -1301,7 +1304,7 @@ export function buildAssistantTools(ctx: ToolContext) {
             q.status ? { status: q.status } : { status: { not: "INACTIVE" } },
             q.type ? { type: q.type } : {},
             q.hold === true ? { hold: true } : q.hold === false ? { hold: false } : {},
-            q.hasTruck === true ? { truck: { isNot: null } } : q.hasTruck === false ? { truck: { is: null } } : {},
+            q.hasTruck === true ? HAS_TRUCK : q.hasTruck === false ? NO_TRUCK : {},
             cutoff ? { OR: [{ licenseExpiry: { lte: cutoff } }, { medicalExpiry: { lte: cutoff } }] } : {},
             // Same rule as riskReasons(): "expiring within 30 days" includes already expired.
             q.atRisk ? { OR: [{ score: { lt: 75 } }, { licenseExpiry: { lte: soon } }, { medicalExpiry: { lte: soon } }] } : {},
@@ -1311,7 +1314,7 @@ export function buildAssistantTools(ctx: ToolContext) {
         const select = {
           id: true, name: true, phone: true, email: true, status: true, type: true, hold: true, holdReason: true, score: true, dispatcher: true,
           licenseClass: true, licenseExpiry: true, medicalExpiry: true, hireDate: true,
-          truck: { select: { id: true, unitNumber: true } },
+          truck: { select: { id: true, unitNumber: true } }, teamTruck: { select: { id: true, unitNumber: true } },
           documents: { where: { kind: { in: [...REQUIRED_DRIVER_DOCS] } }, select: { kind: true } },
           _count: { select: { charges: { where: { payer: "DRIVER", driverInformedAt: null, voidedAt: null, status: { not: "CANCELLED" } } } } },
         } satisfies Prisma.DriverSelect;
@@ -1326,11 +1329,12 @@ export function buildAssistantTools(ctx: ToolContext) {
           filters: q, total, showing: drivers.length, truncated: total > drivers.length,
           drivers: drivers.map((x) => {
             const have = new Set(x.documents.map((d) => d.kind));
+            const t = truckOf(x);
             return {
               name: x.name, href: link(`/drivers/${x.id}`), phone: x.phone, email: x.email, dispatcher: x.dispatcher,
               employment: humanize(x.status), type: kit.label(DRIVER_TYPE_LABELS, x.type),
               onHold: x.hold, holdReason: x.hold ? (x.holdReason ?? "no reason recorded") : null,
-              truck: x.truck ? { unit: x.truck.unitNumber, href: link(`/fleet/${x.truck.id}`) } : null,
+              truck: t ? { unit: t.unitNumber, href: link(`/fleet/${t.id}`), ...(t.team ? { asTeamDriver: true } : {}) } : null,
               licence: { class: x.licenseClass, expires: kit.date(x.licenseExpiry), daysLeft: daysUntil(x.licenseExpiry, now) },
               medical: { expires: kit.date(x.medicalExpiry), daysLeft: daysUntil(x.medicalExpiry, now) },
               missingFiles: REQUIRED_DRIVER_DOCS.filter((k) => !have.has(k)).map((k) => DOC_KIND_LABELS[k]),
@@ -1361,7 +1365,7 @@ export function buildAssistantTools(ctx: ToolContext) {
           seesDrivers
             ? db.driver.findMany({
               where: { OR: [{ name: like(q) }, { phone: like(q) }, { licenseNumber: like(q) }] },
-              take: 5, orderBy: { name: "asc" }, select: { id: true, name: true, phone: true, status: true, hold: true, truck: { select: { unitNumber: true } } },
+              take: 5, orderBy: { name: "asc" }, select: { id: true, name: true, phone: true, status: true, hold: true, truck: { select: { unitNumber: true } }, teamTruck: { select: { unitNumber: true } } },
             })
             : Promise.resolve([]),
           db.workOrder.findMany({
@@ -1378,7 +1382,7 @@ export function buildAssistantTools(ctx: ToolContext) {
           query: q,
           trucks: trucks.map((x) => ({ unit: x.unitNumber, vehicle: `${x.make} ${x.model}`, plate: x.plate, status: truckStatusLabel(x.status), driver: seesDrivers ? (x.driver?.name ?? null) : undefined, location: x.locationName, href: link(`/fleet/${x.id}`) })),
           trailers: trailers.map((x) => ({ unit: x.unitNumber, type: kit.label(EQUIPMENT_LABELS, x.type), status: kit.label(TRAILER_STATUS_LABELS, x.status), pairedTruck: x.truck?.unitNumber ?? null, location: x.locationName, href: link(`/fleet/trailers/${x.id}`) })),
-          drivers: drivers.map((x) => ({ name: x.name, phone: x.phone, employment: humanize(x.status), onHold: x.hold, truck: x.truck?.unitNumber ?? null, href: link(`/drivers/${x.id}`) })),
+          drivers: drivers.map((x) => ({ name: x.name, phone: x.phone, employment: humanize(x.status), onHold: x.hold, truck: truckOf(x)?.unitNumber ?? null, href: link(`/drivers/${x.id}`) })),
           repairOrders: workOrders.map((w) => woView(w, kit, now, today)),
           vendors: vendors.map((v) => ({ name: v.name, type: vendorTypeLabel(v), phone: v.phone, city: v.city, href: link(`/vendors/${v.id}`) })),
           defects: defects.map((d) => defectView(d, kit, now)),

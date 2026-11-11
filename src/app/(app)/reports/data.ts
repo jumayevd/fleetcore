@@ -2,7 +2,7 @@ import "server-only";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { kmDriven } from "@/lib/mileage";
-import { shopDowntime, truckCosts, type TruckCostRow } from "@/lib/stats";
+import { TRUCK_CATEGORIES, TRUCK_CATEGORY_LABELS, shopDowntime, truckCosts, type TruckCategory, type TruckCostRow } from "@/lib/stats";
 import { REQUIRED_UNIT_DOCS } from "@/lib/documents";
 import { dateOnly, dayKey, makeFormat, type CompanyLocale } from "@/lib/locale";
 import { INSPECTION_LEVEL_LABELS, REPAIR_SYSTEM_LABELS, REPAIR_TYPE_LABELS, TRAILER_OFF_PAPERWORK, humanize } from "@/lib/constants";
@@ -52,6 +52,11 @@ const UNIT_SELECT = { truck: { select: { id: true, unitNumber: true } }, trailer
 /* ------------------------------------------------------------------ */
 
 export type TruckRow = TruckCostRow & { economy: number | null };
+/** Trucks of one kind (company, vendor, owner-operator, lease): what they cost together and per truck. */
+export type CategoryRow = {
+  category: TruckCategory; label: string; trucks: number; km: number; fuel: number; maintenance: number; jobs: number; total: number;
+  perTruck: number | null; costPerKm: number | null;
+};
 export type RepairTypeRow = { type: string; label: string; jobs: number; cost: number; share: number; avg: number; avgShopDays: number | null };
 export type VendorRow = { key: string; vendorId: string | null; label: string; jobs: number; jobShare: number; cost: number; share: number; avg: number };
 export type SystemRow = { system: string; label: string; lines: number; orders: number; units: number; amount: number; share: number };
@@ -239,6 +244,18 @@ export async function reportData(period: ReportPeriod, locale: CompanyLocale, op
   const worseBurn = economy.value == null ? 0
     : truckRows.filter((r) => r.economy != null && r.km >= MIN_DISTANCE_TO_COMPARE && burnsHigh(r.economy, economy.value!, f.labels.economyHigherIsBetter)).length;
   const truckCapacity = paperwork.trucksInService * downtime.windowDays;
+
+  /* Cost by kind of truck ------------------------------------------- */
+  const categories: CategoryRow[] = TRUCK_CATEGORIES.map((category) => {
+    const rows = trucks.rows.filter((r) => r.category === category);
+    const total = sum(rows, (r) => r.total);
+    const km = sum(rows, (r) => r.km);
+    return {
+      category, label: TRUCK_CATEGORY_LABELS[category], trucks: rows.length, km,
+      fuel: sum(rows, (r) => r.fuel), maintenance: sum(rows, (r) => r.maintenance), jobs: sum(rows, (r) => r.jobs), total,
+      perTruck: rows.length ? total / rows.length : null, costPerKm: km > 0 ? total / km : null,
+    };
+  });
 
   /* Defects (counts in the period, and now) ------------------------ */
   const closedInPeriod = defects.filter((d) => d.closedAt && inWindow(d.closedAt, from, to));
@@ -466,7 +483,7 @@ export async function reportData(period: ReportPeriod, locale: CompanyLocale, op
 
   return {
     period, range, kpis, monthly,
-    trucks: truckRows, truckTotals: { ...trucks.totals, economy: economy.value }, trailerWork: trucks.trailers,
+    trucks: truckRows, truckTotals: { ...trucks.totals, economy: economy.value }, trailerWork: trucks.trailers, categories,
     running: { maintenance: spend, fuel, total: running },
     repairTypes, vendors, systems, lineTotal, repeats,
     downtime: downtime.rows,

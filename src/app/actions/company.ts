@@ -36,7 +36,7 @@ export async function saveCompanyProfile(_: ActionState, fd: FormData): Promise<
       taxId: opt("taxId"),
       licenseNumber: opt("licenseNumber"),
       director: opt("director"),
-      phone: opt("phone"),
+      phone: f.phone("phone") ?? "",
       email: email.toLowerCase(),
       address: opt("address"),
       bank: { name: opt("bankName"), account: opt("bankAccount"), mfo: opt("bankMfo"), swift: opt("bankSwift") },

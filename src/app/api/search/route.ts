@@ -44,7 +44,7 @@ export async function GET(req: Request) {
       ? db.trailer.findMany({ where: { OR: [{ unitNumber: like }, { plate: like }, { locationName: like }] }, take: 5, orderBy: { unitNumber: "asc" } })
       : [],
     can(user.role, "drivers.view") && !explicitRo && !explicitDefect
-      ? db.driver.findMany({ where: { OR: [{ name: like }, { phone: like }, { licenseNumber: like }, { email: like }, { dispatcher: like }] }, take: 5, include: { truck: { select: { unitNumber: true } } }, orderBy: { name: "asc" } })
+      ? db.driver.findMany({ where: { OR: [{ name: like }, { phone: like }, { licenseNumber: like }, { email: like }, { dispatcher: like }] }, take: 5, include: { truck: { select: { unitNumber: true } }, teamTruck: { select: { unitNumber: true } } }, orderBy: { name: "asc" } })
       : [],
     fleet && !explicitDefect
       ? db.workOrder.findMany({
@@ -82,7 +82,7 @@ export async function GET(req: Request) {
     hits: trucks.map((t) => ({ id: t.id, title: t.unitNumber, mono: true, subtitle: [`${t.make} ${t.model}`, t.plate, t.driver?.name].filter(Boolean).join(" · "), badge: humanize(t.status), href: `/fleet/${t.id}` })),
   });
   if (trailers.length) groups.push({ label: "Trailers", hits: trailers.map((t) => ({ id: t.id, title: t.unitNumber, mono: true, subtitle: [humanize(t.type), t.locationName].filter(Boolean).join(" · "), badge: TRAILER_STATUS_LABELS[t.status] ?? t.status, href: `/fleet/trailers/${t.id}` })) });
-  if (drivers.length) groups.push({ label: "Drivers", hits: drivers.map((d) => ({ id: d.id, title: d.name, subtitle: [d.truck?.unitNumber, d.phone, d.dispatcher && `dispatch: ${d.dispatcher}`].filter(Boolean).join(" · "), badge: humanize(d.status), href: `/drivers/${d.id}` })) });
+  if (drivers.length) groups.push({ label: "Drivers", hits: drivers.map((d) => ({ id: d.id, title: d.name, subtitle: [d.truck?.unitNumber ?? (d.teamTruck && `${d.teamTruck.unitNumber} (team)`), d.phone, d.dispatcher && `dispatch: ${d.dispatcher}`].filter(Boolean).join(" · "), badge: humanize(d.status), href: `/drivers/${d.id}` })) });
   if (workOrders.length) groups.push({
     label: "Repairs",
     hits: workOrders.map((w) => ({

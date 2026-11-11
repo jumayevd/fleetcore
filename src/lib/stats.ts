@@ -117,12 +117,25 @@ export async function monthlyFleetSpend(months = 6, now = new Date()): Promise<M
 /* Cost per truck                                                      */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Who a truck belongs to, for costs: a vendor's truck (whatever its ownership says, since vendor trucks are usually
+ * also marked Company), else its ownership.
+ */
+export const TRUCK_CATEGORIES = ["COMPANY", "VENDOR", "OWNER_OPERATOR", "LEASED"] as const;
+export type TruckCategory = (typeof TRUCK_CATEGORIES)[number];
+export const TRUCK_CATEGORY_LABELS: Record<TruckCategory, string> = {
+  COMPANY: "Company trucks", VENDOR: "Vendor trucks", OWNER_OPERATOR: "Owner-operator trucks", LEASED: "Lease trucks",
+};
+export const truckCategory = (t: { isVendor: boolean; ownership: string }): TruckCategory =>
+  t.isVendor ? "VENDOR" : t.ownership === "OWNER_OPERATOR" ? "OWNER_OPERATOR" : t.ownership === "LEASED" ? "LEASED" : "COMPANY";
+
 export type TruckCostRow = {
   id: string;
   unitNumber: string;
   model: string;
   status: string;
   group: string | null;
+  category: TruckCategory;
   km: number;
   fuel: number;
   liters: number;
@@ -144,7 +157,7 @@ export type TruckCostRow = {
  */
 export async function truckCosts(from: Date, to: Date, driven?: Driven) {
   const [trucks, work, trailerWork, fuel, km] = await Promise.all([
-    db.truck.findMany({ select: { id: true, unitNumber: true, make: true, model: true, status: true, group: true }, orderBy: { unitNumber: "asc" } }),
+    db.truck.findMany({ select: { id: true, unitNumber: true, make: true, model: true, status: true, group: true, isVendor: true, ownership: true }, orderBy: { unitNumber: "asc" } }),
     db.workOrder.groupBy({ by: ["truckId"], where: { status: "DONE", voidedAt: null, completedAt: { gte: from, lt: to }, truckId: { not: null } }, _sum: { cost: true }, _count: { _all: true } }),
     db.workOrder.aggregate({ where: { status: "DONE", voidedAt: null, completedAt: { gte: from, lt: to }, truckId: null, trailerId: { not: null } }, _sum: { cost: true }, _count: { _all: true } }),
     db.fuelLog.groupBy({ by: ["truckId"], where: { date: { gte: from, lt: to } }, _sum: { cost: true, liters: true }, _count: { _all: true } }),
@@ -162,7 +175,7 @@ export async function truckCosts(from: Date, to: Date, driven?: Driven) {
       const liters = f?._sum.liters ?? 0;
       const total = maintenance + fuelCost;
       return {
-        id: t.id, unitNumber: t.unitNumber, model: `${t.make} ${t.model}`, status: t.status, group: t.group,
+        id: t.id, unitNumber: t.unitNumber, model: `${t.make} ${t.model}`, status: t.status, group: t.group, category: truckCategory(t),
         km: run, fuel: fuelCost, liters, fills: f?._count._all ?? 0, maintenance, jobs: w?._count._all ?? 0, total,
         costPerKm: run > 0 ? total / run : null,
         l100: run > 0 && liters > 0 ? (liters / run) * 100 : null,

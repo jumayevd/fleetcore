@@ -94,8 +94,13 @@ invites and companies. Raw SQL is not scoped — don't use it for company data.
 | **Fleet assistant** | Ask about the active company's fleet in plain language (Vercel AI Gateway) |
 
 Who drives a truck goes through `setTruckDriver()` (`src/lib/assignments.ts`) from every screen that changes it (the
-Driver tab, the truck form, the driver page): it closes the truck's open `DriverAssignment`, moves a driver off another
-truck the same day, and opens the next stint, so `Truck.driverId` and the history never disagree. Pickup photos are
+Driver tab, the truck form, the driver page): it closes the seat's open `DriverAssignment`, moves a driver off another
+truck the same day, and opens the next stint, so the truck's seats and the history never disagree. **Team trucks**
+have two seats: the driver (`Truck.driverId`) and the team driver (`Truck.coDriverId`), each with their own stint. A
+driver sits in one seat of one truck; when the driver comes off, the team driver takes their seat, so a team driver is
+never alone. Picking a truck that already has a driver on the driver form or page makes the new one its team driver;
+a truck with two drivers is not offered. Code that asks "which truck does this driver drive" uses `truckOf()` /
+`NO_TRUCK` (`src/lib/assignments-shared.ts`), which look at both seats. Pickup photos are
 documents of the stint (`assignmentId`). Trucks that had a driver before history existed start with a stint marked
 "about <date>" (migration `7_driver_history`).
 
@@ -132,6 +137,34 @@ shown. The live map polls `/api/fleet` every 5 s too. However many pages are ope
 page load, from "Sync now", and from `/api/cron/eld` (Vercel Cron once a day on the Hobby plan; it needs
 `Authorization: Bearer $CRON_SECRET`, so an outside scheduler can call it more often). `TRACKPRO_API_BASE` (default
 `https://api.trackproeld.com/logger`) points the client at a stand-in server for local testing.
+
+### Vendor contact: call, map and email
+
+A vendor's page has **Call** (a `tel:` link: the phone's dialer, or the computer's calling app), **Map** (Google Maps
+in a new tab) and **Email**. Email offers the device's mail app (`mailto:`), Gmail or Outlook on the web, and, for
+fleet editors, **Write in FleetCore**: subject, message and attachments, sent from the person's **own Gmail or Outlook**
+so it lands in their Sent folder (`src/lib/mail/`, `src/app/api/mail/`, `src/app/(app)/vendors/_components/`).
+
+- Each person connects their mailbox once (OAuth). FleetCore asks only to **send** as them (Gmail `gmail.send`,
+  Microsoft `Mail.Send`), never to read mail. Tokens are encrypted with `AUTH_SECRET` (`MailAccount`), per account, so
+  the mailbox works in every company; Disconnect is in the same window.
+- Attachments upload one at a time to the private store (`mail-outbox/<userId>/`, 4 MB each, a function's request
+  limit) and are deleted once sent; photos over 4 MB are shrunk in the browser first. Up to 10 files, 18 MB in all.
+  Unsent ones are cleared after a day.
+- Every email sent is in the company's audit log (to, subject, attachments count, from which mailbox), not its text.
+- **Setting it up** (until then the window says the mailbox "is not set up yet"):
+  - **Gmail**: Google Cloud console → new project → enable the *Gmail API* → OAuth consent screen (External; add the
+    scopes `openid`, `email`, `…/auth/gmail.send`) → Credentials → OAuth client ID (*Web application*) with the
+    redirect URI `https://fleetcore-uz.vercel.app/api/mail/callback/google` (and `http://localhost:3100/…` for local
+    testing). Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. While the app is in *Testing*, only the test users
+    listed on the consent screen can connect (100 at most). For everyone, publish it: `gmail.send` is a sensitive
+    scope, so Google reviews the app (privacy policy, a demo video) before unverified-app warnings go away.
+  - **Outlook**: Microsoft Entra admin center → App registrations → New (accounts in any organizational directory and
+    personal Microsoft accounts) → redirect URI (Web) `https://fleetcore-uz.vercel.app/api/mail/callback/microsoft` →
+    API permissions: Microsoft Graph delegated `Mail.Send`, `User.Read`, `offline_access`, `openid`, `email` →
+    Certificates & secrets → new client secret. Set `MICROSOFT_CLIENT_ID` and `MICROSOFT_CLIENT_SECRET`. Secrets
+    expire (24 months at most): put the new one in before that.
+  - The redirect URIs use `APP_URL` when it is set, else the address the page was opened on.
 
 ### Units, time zone and currency
 
@@ -230,4 +263,6 @@ layout). An App Store app needs a Mac with Xcode and an Apple Developer account.
 | `APP_URL` | Optional, base URL for invitation links |
 | `MEMBER_EMAIL_DOMAINS` | Optional, comma-separated: invitations only to these domains (`fleetcore.com` in production); unset = any address |
 | `AI_GATEWAY_API_KEY`, `ASSISTANT_MODEL` | Optional locally; OIDC on Vercel |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Optional: sending email from FleetCore through people's own Gmail (see Vendor contact) |
+| `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET` | Optional: the same through Outlook / Microsoft 365 |
 | `NEXT_PUBLIC_MAP_TILE_URL`, `NEXT_PUBLIC_MAP_SATELLITE_URL` | Optional (street map; satellite imagery, Esri by default) |

@@ -6,8 +6,9 @@ import { ROLE_LABELS } from "@/lib/constants";
 import { birthDateValue, isProfileComplete, nameParts } from "@/lib/profile";
 import { completeProfile } from "@/app/actions/auth";
 import { ActionForm, SubmitButton } from "@/components/forms";
-import { Field, Input } from "@/components/ui";
+import { Field } from "@/components/ui";
 import { ProfileFields } from "@/components/profile-fields";
+import { PhoneInput } from "@/components/phone-input";
 import { AuthCard, AuthFrame } from "../login/frame";
 
 export const metadata = { title: "Your details" };
@@ -33,7 +34,7 @@ export default async function ProfilePage() {
         subtitle={<>{ctx.active.company.name} asks everyone on the team for these once, as {ROLE_LABELS[ctx.active.role].toLowerCase()}. Only the company&apos;s owners and admins see them.</>}>
         <ActionForm action={completeProfile} className="mt-6 space-y-4">
           <ProfileFields defaults={{ first, last, idNumber: user.idNumber, birthDate: birthDateValue(user.birthDate) }} autoFocus />
-          <Field label="Phone"><Input name="phone" type="tel" defaultValue={user.phone ?? ""} placeholder="+1 555 000 0000" className="num" autoComplete="tel" /></Field>
+          <Field label="Phone"><PhoneInput name="phone" defaultValue={user.phone ?? ""} /></Field>
           <SubmitButton className="w-full" pendingText="Saving…">Save and continue</SubmitButton>
         </ActionForm>
         <p className="mt-5 border-t border-line pt-4 text-[12px] text-fg-muted">

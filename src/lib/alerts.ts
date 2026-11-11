@@ -117,7 +117,7 @@ const loadToday = cache(async () => {
     db.trailer.findMany({ where: { status: { not: "INACTIVE" } }, orderBy: { unitNumber: "asc" }, select: trailerSelect }),
     db.driver.findMany({
       where: { status: "ACTIVE" }, orderBy: { name: "asc" },
-      select: { id: true, name: true, licenseExpiry: true, medicalExpiry: true, hold: true, holdReason: true, createdAt: true, truck: { select: { id: true, unitNumber: true } } },
+      select: { id: true, name: true, licenseExpiry: true, medicalExpiry: true, hold: true, holdReason: true, createdAt: true, truck: { select: { id: true, unitNumber: true } }, teamTruck: { select: { id: true, unitNumber: true } } },
     }),
     // Newest first: only the newest document of each kind counts per owner.
     db.document.findMany({
@@ -596,7 +596,8 @@ export const getToday = cache(async (): Promise<Today> => {
     const soonKey = papers.filter((p) => p.record && p.expiresAt && p.expiresAt >= now && p.expiresAt <= soonCut);
     const expiredOther = papers.filter((p) => !p.record && p.expiresAt && p.expiresAt < now);
     const unit = { kind: "driver" as const, label: d.name, href: `/drivers/${d.id}` };
-    const truck = d.truck ? truckUnit(d.truck) : null;
+    const drives = d.truck ?? d.teamTruck;
+    const truck = drives ? truckUnit(drives) : null;
     if (expiredKey.length || soonKey.length || expiredOther.length) {
       const list = [...expiredKey, ...expiredOther];
       const first = earliest(...list.map((p) => p.expiresAt), ...soonKey.map((p) => p.expiresAt));
