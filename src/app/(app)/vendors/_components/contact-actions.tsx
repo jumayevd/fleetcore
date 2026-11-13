@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, Mail, MapPin, Phone } from "lucide-react";
 import { buttonClass, cn } from "@/components/ui";
@@ -59,13 +60,39 @@ export function EmailButton({ email, vendorId, vendorName, mailboxes, canSend }:
   useEffect(() => {
     if (back || result) router.replace(pathname, { scroll: false });
   }, [back, result, pathname, router]);
+  // The menu is drawn over the page (a portal in <body>, placed under the button): the contact value it sits in cuts
+  // off whatever overflows it, so a menu inside it would open invisibly. It follows the button when the page scrolls.
+  const menu = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const [at, setAt] = useState<{ top: number; right: number } | null>(null);
+  const place = () => {
+    const r = button.current?.getBoundingClientRect();
+    if (r) setAt({ top: r.bottom + 4, right: Math.max(8, window.innerWidth - r.right) });
+  };
+  const toggle = () => {
+    if (open) { setOpen(false); return; }
+    place();
+    setOpen(true);
+  };
   useEffect(() => {
     if (!open) return;
-    const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const inside = (t: EventTarget | null) => Boolean(t && (ref.current?.contains(t as Node) || menu.current?.contains(t as Node)));
+    const onDown = (e: PointerEvent) => { if (!inside(e.target)) setOpen(false); };
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("mousedown", onDown);
+    const follow = () => {
+      const r = button.current?.getBoundingClientRect();
+      if (r) setAt({ top: r.bottom + 4, right: Math.max(8, window.innerWidth - r.right) });
+    };
+    document.addEventListener("pointerdown", onDown);
     document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+    window.addEventListener("resize", follow);
+    window.addEventListener("scroll", follow, true);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", follow);
+      window.removeEventListener("scroll", follow, true);
+    };
   }, [open]);
   const to = encodeURIComponent(email);
   const options = [
@@ -75,11 +102,12 @@ export function EmailButton({ email, vendorId, vendorName, mailboxes, canSend }:
   ];
   return (
     <div ref={ref} className="relative inline-block">
-      <button type="button" className={small} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+      <button ref={button} type="button" className={small} aria-haspopup="menu" aria-expanded={open} onClick={toggle}>
         <Mail />Email<ChevronDown />
       </button>
-      {open && (
-        <div role="menu" className="absolute right-0 z-30 mt-1 w-60 rounded-[10px] border border-line bg-overlay p-1 shadow-float">
+      {open && at && createPortal(
+        <div ref={menu} role="menu" style={{ top: at.top, right: at.right }}
+          className="pop-in fixed z-[80] w-60 max-w-[calc(100vw-16px)] rounded-[10px] border border-line bg-overlay p-1 shadow-float">
           {options.map((o) => (
             <a key={o.label} role="menuitem" href={o.href} onClick={() => setOpen(false)}
               {...(o.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
@@ -95,7 +123,8 @@ export function EmailButton({ email, vendorId, vendorName, mailboxes, canSend }:
               <span className="block text-[11px] text-fg-subtle">With photos and files, sent from your Gmail or Outlook</span>
             </button>
           )}
-        </div>
+        </div>,
+        document.body,
       )}
       {canSend && (
         <MailCompose open={compose} onClose={() => setCompose(false)} to={email} vendorId={vendorId} vendorName={vendorName} mailboxes={mailboxes}
