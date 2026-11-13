@@ -799,6 +799,8 @@ model EldConnection {
   lastChangeAt  DateTime?
   lastError     String?
   vehicles      Int       @default(0)
+  /// The data fields TrackPro sent at the last sync (names only, never values), shown on the Integrations page.
+  sentFields    String[]  @default([])
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   units         EldUnit[]

@@ -8,11 +8,13 @@ import { EldError, emptyReason, fetchTrackProVehicles, type EldVehicle } from ".
 
 /*
  * Pull the company's trucks from its ELD and write what it knows onto the FleetCore trucks: position, place, heading,
- * fuel level, the time of the fix. TrackPro sends no speed or odometer, so:
+ * fuel level, the time of the fix, and the odometer and engine hours when the account's TrackPro sends them (its
+ * docs don't list them; trackpro.ts reads them under any usual name). TrackPro sends no speed, so:
  *  - speed is worked out from the last two fixes (distance / time), when they are close enough together to mean it;
  *  - EldUnit.gpsDistance adds up the straight-line distance between fixes since the truck's last odometer reading,
  *    a lower bound of what it has driven ("≈ +312 mi by GPS"), however long apart the fixes are, so nothing is lost
- *    while nobody has the app open. It never overwrites the odometer: an oil change is only as good as a real reading.
+ *    while nobody has the app open. A GPS estimate never becomes the odometer; only an engine odometer from the ELD
+ *    (a real reading) does, and that restarts the GPS count from its time.
  * A sync runs at most every 5 s per company (lastSyncAt is the lock): while someone has the app open (the heartbeat
  * in every page, /api/eld/tick, and the live map ask for one), from "Sync now", and from /api/cron/eld. When the last
  * attempt failed or is still running, the next waits 30 s, so a slow or refusing TrackPro isn't hammered.
@@ -29,6 +31,10 @@ const MAX_SPEED = { imperial: 90, metric: 145 };
 const SPEED_WINDOW_MS = 30 * 60_000;
 /** A truck whose last fix is older than this is taken as stopped. */
 const STOPPED_AFTER_MS = 10 * 60_000;
+/** An unchanged ELD odometer re-dates the truck's reading at most this often (so "as of" stays fresh, without a write every 5 s). */
+const ODOMETER_REDATE_MS = 60 * 60_000;
+/** Beyond this (mi / km) an "odometer" is not one (meters, a VIN digit run…), and it is ignored. */
+const ODOMETER_MAX = { imperial: 3_000_000, metric: 5_000_000 };
 
 export type SyncResult =
   | { status: "none" }
@@ -114,10 +120,12 @@ export async function syncCompanyEld(companyId: string, opts: { force?: boolean 
 
     let vehicles: EldVehicle[];
     let empty: string | null;
+    let sentFields: string[] = [];
     try {
       const fetched = await fetchTrackProVehicles(token);
       vehicles = fetched.vehicles;
       empty = emptyReason(fetched);
+      sentFields = fetched.fields;
     } catch (e) {
       return fail(e instanceof EldError ? e.message : "The sync failed. Try again in a minute.");
     }
@@ -132,7 +140,7 @@ export async function syncCompanyEld(companyId: string, opts: { force?: boolean 
     }
 
     const [trucks, known] = await Promise.all([
-      db.truck.findMany({ select: { id: true, unitNumber: true, vin: true, odometerAt: true, lastPingAt: true, pingSource: true, speedKmh: true } }),
+      db.truck.findMany({ select: { id: true, unitNumber: true, vin: true, odometerKm: true, odometerAt: true, engineHours: true, fuelPct: true, lastPingAt: true, pingSource: true, speedKmh: true } }),
       db.eldUnit.findMany({ where: { connectionId: conn.id } }),
     ]);
     const byVin = new Map(trucks.filter((t) => vinKey(t.vin)).map((t) => [vinKey(t.vin), t]));
@@ -215,6 +223,24 @@ export async function syncCompanyEld(companyId: string, opts: { force?: boolean 
         await db.truck.update({ where: { id: truck.id }, data: { speedKmh: 0 } });
         changed = true;
       }
+
+      // Readings the ELD takes from the engine, whether or not the truck moved: odometer, engine hours, fuel.
+      if (truck) {
+        const readings: { odometerKm?: number; odometerAt?: Date; engineHours?: number; fuelPct?: number } = {};
+        const odo = v.odometerMi != null ? Math.round(imperial ? v.odometerMi : v.odometerMi * KM_PER_MI) : null;
+        if (odo != null && odo > 0 && odo < ODOMETER_MAX[locale.units]) {
+          const at = fixAt ?? now;
+          const stale = !truck.odometerAt || at.getTime() - truck.odometerAt.getTime() > ODOMETER_REDATE_MS;
+          if (odo !== truck.odometerKm || stale) { readings.odometerKm = odo; readings.odometerAt = at; }
+        }
+        if (v.engineHours != null && v.engineHours > 0 && Math.round(v.engineHours) !== truck.engineHours) readings.engineHours = Math.round(v.engineHours);
+        // With a new fix the fuel level went on with the position above.
+        if (!(hasFix && newFix) && v.fuelPct != null && v.fuelPct !== truck.fuelPct) readings.fuelPct = Math.max(0, Math.min(100, v.fuelPct));
+        if (Object.keys(readings).length) {
+          await db.truck.update({ where: { id: truck.id }, data: readings });
+          changed = true;
+        }
+      }
     }
     if (unchanged.length) await db.eldUnit.updateMany({ where: { id: { in: unchanged } }, data: { seenAt: now } });
 
@@ -232,7 +258,7 @@ export async function syncCompanyEld(companyId: string, opts: { force?: boolean 
     // TrackPro answered; an empty list still needs someone to act, so it shows as the connection's problem.
     await db.eldConnection.update({
       where: { id: conn.id },
-      data: { lastSuccessAt: now, lastError: empty, vehicles: vehicles.length, ...(changed ? { lastChangeAt: now } : {}) },
+      data: { lastSuccessAt: now, lastError: empty, vehicles: vehicles.length, sentFields, ...(changed ? { lastChangeAt: now } : {}) },
     });
     return { status: "ok", vehicles: vehicles.length, matched, updated, changed, note: empty } as const;
   });

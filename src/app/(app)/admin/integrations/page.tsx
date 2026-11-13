@@ -25,6 +25,49 @@ function TokenForm({ replace }: { replace: boolean }) {
   );
 }
 
+/** Readings FleetCore takes from TrackPro, and the field names that carry them (the same names trackpro.ts reads). */
+const READINGS = [
+  { label: "Position", re: /coordinates|latitude|^lat$/i },
+  { label: "Driver", re: /driver_name|driver\.name|driver_info/i },
+  { label: "Fuel level", re: /fuel/i, not: /type|economy|consum|used|cost|price|card|tank_?size|capacity/i },
+  { label: "DEF level", re: /^def|\.def/i },
+  { label: "Odometer", re: /odometer|odo_?meter|(^|\.)odo$|mileage|total_?(miles|distance|km)|vehicle_?(miles|distance)/i },
+  { label: "Engine hours", re: /engine_?hours|eng_?hours|(^|\.)hours$/i },
+] as const;
+
+/**
+ * What this account's TrackPro sends, from the last sync's field names (never values): which readings FleetCore can
+ * use, and the full list. TrackPro's docs list no odometer or fuel, so whether they arrive depends on the account.
+ */
+function SentReadings({ fields }: { fields: string[] }) {
+  const has = (r: (typeof READINGS)[number]) => fields.some((f) => r.re.test(f) && !("not" in r && r.not.test(f.split(".").pop()!)));
+  const missing = READINGS.filter((r) => !has(r)).map((r) => r.label);
+  return (
+    <div className="space-y-2 rounded-md border border-line px-3 py-2.5">
+      <p className="flex items-center gap-1.5 text-[12px] font-medium text-fg-muted">
+        What TrackPro sends for your trucks
+        <InfoTip>From the last sync: the readings FleetCore takes from TrackPro. Odometer and engine hours update the truck (the oil-change countdown counts from an ELD odometer); fuel shows on the trucks list and the truck page.</InfoTip>
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {READINGS.map((r) => <Chip key={r.label} tone={has(r) ? "ok" : "neutral"}>{has(r) ? "✓" : "✕"} {r.label}</Chip>)}
+      </div>
+      {(missing.includes("Odometer") || missing.includes("Fuel level")) && (
+        <p className="text-[12px] text-fg-muted">
+          TrackPro doesn&apos;t send {[missing.includes("Odometer") && "an odometer", missing.includes("Fuel level") && "a fuel level"].filter(Boolean).join(" or ")} for this
+          account. Ask TrackPro support to include {missing.includes("Odometer") && missing.includes("Fuel level") ? "them" : "it"} in the API for this token; FleetCore picks {missing.includes("Odometer") && missing.includes("Fuel level") ? "them" : "it"} up
+          on the next sync. Until then odometer readings come from fuel fills, repair orders and Update readings on the truck page.
+        </p>
+      )}
+      {fields.length > 0 && (
+        <details className="text-[12px]">
+          <summary className="cursor-pointer text-fg-subtle hover:text-fg">All {fields.length} fields TrackPro sent</summary>
+          <p className="num mt-1 break-words text-fg-muted">{fields.join(", ")}</p>
+        </details>
+      )}
+    </div>
+  );
+}
+
 export default async function IntegrationsPage() {
   const me = await requireUser("company.manage");
   const f = await getFormat();
@@ -95,6 +138,7 @@ export default async function IntegrationsPage() {
                   </span>,
                 ],
               ]} />
+              {conn.lastSuccessAt && <SentReadings fields={conn.sentFields} />}
               <div className="flex flex-wrap items-center gap-2">
                 <ActionButton action={syncEldNow} variant="primary" size="md" pendingText="Syncing…" showOk><RefreshCw />Sync now</ActionButton>
                 <ActionButton action={disconnectEld} variant="ghost" size="md" pendingText="Disconnecting…"

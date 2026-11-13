@@ -10,8 +10,10 @@ import "server-only";
  *       { result, content: [{ vehicle: { id, make, model, vin, unit_number }, driver: { id, name }, location: {
  *         vehicle_coordinates: { latitude, longitude }, distance, state, location, time, direction }, dot }],
  *         pageable: { total, prev, next, current } }
- * Both: Authorization: Bearer <token the carrier issues in TrackPro>; times have no zone; no speed, odometer or
- * engine data. v2 is asked first; v1 when v2 refuses the token or lists no trucks.
+ * Both: Authorization: Bearer <token the carrier issues in TrackPro>; times have no zone; the docs list no speed,
+ * odometer or engine data (checked 2026-11). v2 is asked first; v1 when v2 refuses the token or lists no trucks.
+ * Odometer, engine hours and fuel are still read when an account's TrackPro sends them, under any usual field name
+ * (toVehicle), and the field names it sends are kept for the Integrations page (sentFields).
  * A live carrier token (2026-10) answers in a third layout, read here too: { truck: { id, make, model, vin,
  * unit_number }, driver: { id, name }, location: { vehicle_coordinates, nearby_location_coordinates, distance, state,
  * location, time, direction }, dot, fuel_level, def_level }.
@@ -52,6 +54,9 @@ export type EldVehicle = {
   nearbyDistance: number | null;
   fuelPct: number | null;
   defPct: number | null;
+  /** The truck's odometer as the ELD reads it from the engine, in miles (converted when TrackPro says km). */
+  odometerMi: number | null;
+  engineHours: number | null;
 };
 
 /** What TrackPro answered, so an empty list can be explained on the Integrations page. */
@@ -66,6 +71,8 @@ export type EldFetch = {
   unreadableFields: string[];
   /** Field names under location of the first truck FleetCore found no position in. */
   locationFields: string[];
+  /** Every data field TrackPro sent for its trucks (names only), see sentFields(). */
+  fields: string[];
 };
 
 const HEADINGS: Record<string, number> = { n: 0, nne: 22.5, ne: 45, ene: 67.5, e: 90, ese: 112.5, se: 135, sse: 157.5, s: 180, ssw: 202.5, sw: 225, wsw: 247.5, w: 270, wnw: 292.5, nw: 315, nnw: 337.5 };
@@ -102,6 +109,30 @@ function pct(v: unknown): number | null {
   return n > 0 && n < 1 ? Math.round(n * 1000) / 10 : n;
 }
 
+/**
+ * Every field of an item with its path ("unit.odometer"), two levels deep, for the readers below. TrackPro's docs list
+ * no odometer, engine hours or fuel, but live tokens send fields the docs don't, so they are looked for by name
+ * anywhere in the item.
+ */
+function flat(raw: unknown, prefix = "", depth = 0): [string, unknown][] {
+  const r = obj(raw);
+  return Object.entries(r).flatMap(([k, v]): [string, unknown][] =>
+    v && typeof v === "object" && !Array.isArray(v) && depth < 2 ? [[`${prefix}${k}`, v], ...flat(v, `${prefix}${k}.`, depth + 1)] : [[`${prefix}${k}`, v]]);
+}
+/** The first field whose own name (not its path) matches. */
+const byName = (fields: [string, unknown][], re: RegExp, not?: RegExp) =>
+  fields.find(([path, v]) => { const name = path.split(".").pop()!; return re.test(name) && !(not?.test(name)) && v != null && v !== ""; });
+
+/** A distance-like value: a number, "412,880 mi", or { value, unit }. Returns miles. */
+function miles(path: string, v: unknown): number | null {
+  const o = obj(v);
+  const value = v && typeof v === "object" ? first(o.value, o.miles, o.mi, o.km, o.amount) : v;
+  const unitText = `${path} ${str(o.unit) ?? ""} ${typeof v === "string" ? v : ""} ${o.km != null ? "km" : ""}`.toLowerCase();
+  const n = num(typeof value === "string" ? value.replace(/[^\d.]/g, "") : value);
+  if (n == null || n <= 0) return null;
+  return /km|kilomet/.test(unitText) ? n / 1.609344 : n;
+}
+
 /** One truck in any of the layouts. */
 function toVehicle(raw: unknown): EldVehicle | null {
   const r = obj(raw);
@@ -116,6 +147,11 @@ function toVehicle(raw: unknown): EldVehicle | null {
   const coords = first(loc.unit_coordinates, loc.vehicle_coordinates, loc.truck_coordinates, loc.coordinates);
   const [lat, lng] = latLng(coords ?? loc);
   const valid = lat != null && lng != null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && !(lat === 0 && lng === 0);
+  const fields = flat(r);
+  // "distance" alone is how far the truck is from the nearby place, never the odometer.
+  const odo = byName(fields, /odometer|odo_?meter|^odo$|mileage|total_?(miles|distance|km)|vehicle_?(miles|distance)/i);
+  const hours = byName(fields, /engine_?hours|eng_?hours|^hours$/i);
+  const fuel = first(r.fuel_percentage, r.fuel_level, r.fuel) ?? byName(fields, /fuel/i, /type|economy|consum|used|cost|price|card|tank_?size|capacity/i)?.[1];
   return {
     externalId,
     unitNumber,
@@ -130,9 +166,21 @@ function toVehicle(raw: unknown): EldVehicle | null {
     city: str(first(loc.city, typeof loc.location === "string" ? loc.location : null)),
     state: str(loc.state),
     nearbyDistance: num(loc.distance),
-    fuelPct: pct(first(r.fuel_percentage, r.fuel_level, r.fuel)),
+    fuelPct: pct(fuel),
     defPct: pct(first(r.def_percentage, r.def_level, r.def)),
+    odometerMi: odo ? miles(odo[0], odo[1]) : null,
+    engineHours: hours ? num(typeof hours[1] === "object" ? first(obj(hours[1]).value, obj(hours[1]).hours) : hours[1]) : null,
   };
+}
+
+/**
+ * The data fields of the trucks TrackPro sent (names only, never values), as one list: what the Integrations page
+ * shows so it is clear which readings this account's TrackPro provides.
+ */
+export function sentFields(items: unknown[]): string[] {
+  const names = new Set<string>();
+  for (const item of items.slice(0, 20)) for (const [path, v] of flat(item)) if (!(v && typeof v === "object" && !Array.isArray(v))) names.add(path);
+  return [...names].sort().slice(0, 60);
 }
 
 /** "unit.unit_id, location.city, …": the shape of an item, for the page to show when it can't be read. */
@@ -174,7 +222,7 @@ async function page(api: Api, token: string, n: number, size: number) {
   const bad = list.find((item) => toVehicle(item) == null);
   const noFix = list.find((item) => { const v = toVehicle(item); return v != null && v.lat == null; });
   return {
-    vehicles, received: list.length, total: num(meta.total), next: num(meta.next),
+    vehicles, received: list.length, total: num(meta.total), next: num(meta.next), fields: sentFields(list),
     unreadableFields: bad === undefined ? [] : fieldNames(bad),
     locationFields: noFix === undefined ? [] : fieldNames(obj(noFix).location, "location."),
   };
@@ -186,7 +234,7 @@ async function listAll(api: Api, token: string): Promise<EldFetch> {
   let p = await page(api, token, 0, size);
   // An empty first page: ask again exactly the way TrackPro's docs do, in case the bigger page isn't allowed.
   if (p.received === 0) { size = DOC_PAGE_SIZE; p = await page(api, token, 0, size); }
-  const out: EldFetch = { vehicles: [...p.vehicles], api, total: p.total, received: p.received, unreadableFields: p.unreadableFields, locationFields: p.locationFields };
+  const out: EldFetch = { vehicles: [...p.vehicles], api, total: p.total, received: p.received, unreadableFields: p.unreadableFields, locationFields: p.locationFields, fields: p.fields };
   let n = 0;
   for (let i = 1; i < MAX_PAGES && p.next != null && p.next > n && p.received > 0; i++) {
     n = p.next;
