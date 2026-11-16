@@ -87,16 +87,16 @@ export const WORK_ORDER_STATUSES = ["DRAFT", "OPEN", "IN_PROGRESS", "DONE", "CAN
  * Steering, Injectors, Computer).
  */
 export const TRUCK_REPAIR_TYPES = [
-  "OIL_CHANGE", "DOT_INSPECTION", "ENGINE", "COOLING", "FUEL_SYSTEM", "DPF", "ELECTRICAL", "LIGHTS", "TIRES", "BRAKES", "SUSPENSION", "MUD_FLAP",
+  "OIL_CHANGE", "DOT_INSPECTION", "ENGINE", "COOLING", "FUEL_SYSTEM", "DPF", "ELECTRICAL", "LIGHTS", "TIRES", "BRAKES", "AIR_LEAK", "SUSPENSION", "MUD_FLAP",
   "ACCIDENT", "TOWING", "FRAME", "BODY", "OTHER",
 ] as const;
 export const TRAILER_REPAIR_TYPES = [
-  "DOT_INSPECTION", "ELECTRICAL", "LIGHTS", "TIRES", "BRAKES", "SUSPENSION", "TANDEM", "MUD_FLAP", "ACCIDENT", "FRAME", "BODY", "OTHER",
+  "DOT_INSPECTION", "ELECTRICAL", "LIGHTS", "TIRES", "BRAKES", "AIR_LEAK", "SUSPENSION", "TANDEM", "MUD_FLAP", "ACCIDENT", "FRAME", "BODY", "OTHER",
 ] as const;
 export const REPAIR_TYPES = [...new Set([...TRUCK_REPAIR_TYPES, ...TRAILER_REPAIR_TYPES, "PM_INSPECTION", "REPAIR", "STEER", "INJECTOR", "COMPUTER"] as const)];
 export const REPAIR_TYPE_LABELS: Record<string, string> = {
   OIL_CHANGE: "Oil change", DOT_INSPECTION: "DOT inspection", ENGINE: "Engine", COOLING: "Cooling system", FUEL_SYSTEM: "Emissions / fuel system", DPF: "Aftertreatment",
-  ELECTRICAL: "Electrical", LIGHTS: "Lights", TIRES: "Tires", BRAKES: "Brakes", SUSPENSION: "Suspension", TANDEM: "Tandem", MUD_FLAP: "Mud flap",
+  ELECTRICAL: "Electrical", LIGHTS: "Lights", TIRES: "Tires", BRAKES: "Brakes", AIR_LEAK: "Air leak", SUSPENSION: "Suspension", TANDEM: "Tandem", MUD_FLAP: "Mud flap",
   ACCIDENT: "Accident repair", TOWING: "Towing", FRAME: "Frame", BODY: "Body", OTHER: "Other",
   // Not on either list: PM visits from the oil board, and older orders.
   PM_INSPECTION: "PM / mid-trip inspection", REPAIR: "Repair", STEER: "Steering components", INJECTOR: "Injectors", COMPUTER: "Computer / module",

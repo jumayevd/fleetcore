@@ -16,11 +16,20 @@ import { Badge, Card, Chip, Disclosure, EmptyState, IconButton, InfoTip, LinkBut
 import { ChaseButton, ConfirmClearButton } from "@/components/inspections/board-actions";
 import { UrlDrawer } from "@/components/inspections/overlay";
 import { ReviewForm, type ReviewFormProps } from "@/components/inspections/review-form";
+import { ListFilters } from "@/components/inspections/list-filters";
 
 export const metadata = { title: "Pre-trip board" };
 
 const WO_STATUS: Record<string, string> = { DRAFT: "draft", OPEN: "booked", IN_PROGRESS: "in the shop", DONE: "done", CANCELLED: "cancelled" };
 const MAX_ISSUES = 3;
+
+/** Unit, driver, dispatcher or phone (digits only, so "934 414" finds "+1 (934) 414 8802"). */
+function matches(r: BoardRow, q: string) {
+  const text = q.toLowerCase();
+  if ([r.truck.unitNumber, r.driver?.name, r.driver?.dispatcher].some((v) => v?.toLowerCase().includes(text))) return true;
+  const digits = q.replace(/\D/g, "");
+  return digits.length >= 3 && Boolean(r.driver?.phone?.replace(/\D/g, "").includes(digits));
+}
 
 function stateLabel(r: BoardRow) {
   const unseen = r.marks.unseen ? ` · ${r.marks.unseen} not seen` : "";
@@ -49,8 +58,8 @@ function videoLine(r: BoardRow, f: Formatter) {
   return "No video expected";
 }
 
-function RowAction({ r, week, show, f, sender, noteOptional }: { r: BoardRow; week: Week; show: BoardFilter; f: Formatter; sender: string; noteOptional: boolean }) {
-  const reviewHref = boardHref({ week: week.isCurrent ? undefined : week.key, show, review: r.truck.id });
+function RowAction({ r, week, show, q, f, sender, noteOptional }: { r: BoardRow; week: Week; show: BoardFilter; q?: string; f: Formatter; sender: string; noteOptional: boolean }) {
+  const reviewHref = boardHref({ week: week.isCurrent ? undefined : week.key, show, q, review: r.truck.id });
   if (r.action === "review") return <LinkButton href={reviewHref} size="sm" scroll={false}><ClipboardCheck />Review</LinkButton>;
   if (r.action === "confirm") {
     const repaired = r.defects.filter((d) => d.status === "REPAIRED");
@@ -96,8 +105,8 @@ function Issues({ r }: { r: BoardRow }) {
   );
 }
 
-function BoardTable({ rows, week, show, f, editable, sender, noteOptional }: {
-  rows: BoardRow[]; week: Week; show: BoardFilter; f: Formatter; editable: boolean; sender: string; noteOptional: boolean;
+function BoardTable({ rows, week, show, q, f, editable, sender, noteOptional }: {
+  rows: BoardRow[]; week: Week; show: BoardFilter; q?: string; f: Formatter; editable: boolean; sender: string; noteOptional: boolean;
 }) {
   return (
     <Table stickyHead={false} head={["Unit", "Status", "Last inspection", "Open issues", ""]}>
@@ -124,7 +133,7 @@ function BoardTable({ rows, week, show, f, editable, sender, noteOptional }: {
               ) : <span className="text-fg-faint">Never reviewed</span>}
             </td>
             <td><Issues r={r} /></td>
-            <td className="whitespace-nowrap text-right">{editable && <RowAction r={r} week={week} show={show} f={f} sender={sender} noteOptional={noteOptional} />}</td>
+            <td className="whitespace-nowrap text-right">{editable && <RowAction r={r} week={week} show={show} q={q} f={f} sender={sender} noteOptional={noteOptional} />}</td>
           </tr>
         );
       })}
@@ -176,7 +185,10 @@ export default async function PreTripBoard({ searchParams }: PageProps<"/inspect
   const showParam = one(sp.show);
   const show: BoardFilter = (BOARD_FILTERS as readonly string[]).includes(showParam ?? "") ? (showParam as BoardFilter) : "needs";
   const weekParam = week.isCurrent ? undefined : week.key;
-  const { rows, counts } = await loadBoard(week, now);
+  const q = one(sp.q)?.trim() || undefined;
+  const { rows: all, counts } = await loadBoard(week, now);
+  // The counters stay whole; the search only narrows the lists below them.
+  const rows = q ? all.filter((r) => matches(r, q)) : all;
 
   // Each counter lists exactly the trucks it counts (a truck can be in two: not seen + soon/now).
   const filtered: Record<BoardFilter, BoardRow[]> = {
@@ -189,8 +201,8 @@ export default async function PreTripBoard({ searchParams }: PageProps<"/inspect
   };
   const main = filtered[show];
   const rest = show === "needs" ? rows.filter((r) => !needsSomething(r)) : [];
-  const href = (s: BoardFilter) => boardHref({ week: weekParam, show: show === s ? undefined : s });
-  const closeHref = boardHref({ week: weekParam, show });
+  const href = (s: BoardFilter) => boardHref({ week: weekParam, q, show: show === s ? undefined : s });
+  const closeHref = boardHref({ week: weekParam, show, q });
 
   // The review drawer (?review=<truckId>), for people who can record reviews.
   const reviewId = one(sp.review);
@@ -258,17 +270,17 @@ export default async function PreTripBoard({ searchParams }: PageProps<"/inspect
         actions={
           <>
             <nav aria-label="Week" className="inline-flex items-center gap-1 rounded-[10px] bg-sunken p-[3px]">
-              <Link href={boardHref({ week: week.prev, show })} scroll={false} aria-label="Previous week" title="Previous week"
+              <Link href={boardHref({ week: week.prev, show, q })} scroll={false} aria-label="Previous week" title="Previous week"
                 className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] text-fg-muted hover:bg-surface hover:text-fg"><ChevronLeft className="h-4 w-4" /></Link>
               <span className="num px-1.5 text-[12px] font-medium text-fg">{week.isCurrent ? "This week" : `Week of ${f.day(week.at)}`}</span>
               {week.next ? (
-                <Link href={boardHref({ week: week.next === f.weekStart(now).key ? undefined : week.next, show })} scroll={false} aria-label="Next week" title="Next week"
+                <Link href={boardHref({ week: week.next === f.weekStart(now).key ? undefined : week.next, show, q })} scroll={false} aria-label="Next week" title="Next week"
                   className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] text-fg-muted hover:bg-surface hover:text-fg"><ChevronRight className="h-4 w-4" /></Link>
               ) : (
                 <IconButton label="This is the current week" disabled className="h-7 w-7"><ChevronRight /></IconButton>
               )}
             </nav>
-            {!week.isCurrent && <LinkButton href={boardHref({ show })} variant="ghost" scroll={false}>This week</LinkButton>}
+            {!week.isCurrent && <LinkButton href={boardHref({ show, q })} variant="ghost" scroll={false}>This week</LinkButton>}
             <LinkButton href="/inspections/defects" variant="secondary"><TriangleAlert />Defects</LinkButton>
           </>
         }
@@ -299,20 +311,26 @@ export default async function PreTripBoard({ searchParams }: PageProps<"/inspect
           {show === "needs" ? "Needs a look" : show === "missing" ? "Nothing sent" : show === "review" ? "To review" : show === "issues" ? "Open issues" : show === "clean" ? "Clean this week" : "Drivers sent"}
           <InfoTip>One row per truck. Received videos count as sent whatever the marks. All good is clean; any soon or now is an open issue; any not seen is to review (both, when a video has both); all not seen, missing or never marked is nothing sent. A Now defect holds the truck until someone confirms the repair.</InfoTip>
         </span>
-      } actions={show !== "needs" && <Link href={boardHref({ week: weekParam })} scroll={false} className="text-[12px] text-fg-muted hover:text-fg">Show what needs a look</Link>}>
+      } actions={
+        <span className="flex items-center gap-3">
+          {show !== "needs" && <Link href={boardHref({ week: weekParam, q })} scroll={false} className="text-[12px] text-fg-muted hover:text-fg">Show what needs a look</Link>}
+          <ListFilters keep={["week", "show"]} search={{ placeholder: "Search unit, driver, phone…", title: "Unit number, driver, dispatcher or phone" }} />
+        </span>
+      }>
         {main.length === 0 ? (
           <EmptyState icon={<ClipboardCheck />}
-            title={rows.length === 0 ? "No trucks yet" : show === "needs" ? "Nothing needs a look this week" : "No trucks here"}
-            description={rows.length === 0 ? "Add trucks under Fleet; each one with a driver is expected to send a walk-around video every week."
+            title={q ? `No trucks match “${q}”` : rows.length === 0 ? "No trucks yet" : show === "needs" ? "Nothing needs a look this week" : "No trucks here"}
+            description={q ? (rows.length ? "They're under another counter above, or in Clean and not expected below." : "Try a unit number, a driver's name or part of a phone number.")
+              : rows.length === 0 ? "Add trucks under Fleet; each one with a driver is expected to send a walk-around video every week."
               : show === "needs" ? "Every expected video is in and reviewed, and no defect is open." : "Pick another counter above."} />
         ) : (
-          <BoardTable rows={main} week={week} show={show} f={f} editable={editable} sender={me.name} noteOptional={noteOptional} />
+          <BoardTable rows={main} week={week} show={show} q={q} f={f} editable={editable} sender={me.name} noteOptional={noteOptional} />
         )}
         {rest.length > 0 && (
-          <Disclosure className="border-t border-line" title="Clean and not expected" count={rest.length}
+          <Disclosure key={q ?? ""} open={Boolean(q)} className="border-t border-line" title="Clean and not expected" count={rest.length}
             meta={<span className="hidden text-[11px] text-fg-subtle sm:inline">{plural(rest.filter((r) => r.state === "clean").length, "clean")} · {plural(rest.filter((r) => r.state === "not_expected").length, "not expected", "not expected")}</span>}>
             <div className="border-t border-line">
-              <BoardTable rows={rest} week={week} show={show} f={f} editable={editable} sender={me.name} noteOptional={noteOptional} />
+              <BoardTable rows={rest} week={week} show={show} q={q} f={f} editable={editable} sender={me.name} noteOptional={noteOptional} />
             </div>
           </Disclosure>
         )}

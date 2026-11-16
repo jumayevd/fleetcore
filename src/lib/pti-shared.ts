@@ -136,9 +136,10 @@ export function categorize(video: string | null | undefined, reviewed: boolean, 
 export const BOARD_FILTERS = ["needs", "missing", "review", "issues", "clean", "all"] as const;
 export type BoardFilter = (typeof BOARD_FILTERS)[number];
 
-export function boardHref(p: { week?: string; show?: string; review?: string; saved?: string } = {}) {
+export function boardHref(p: { week?: string; show?: string; review?: string; saved?: string; q?: string } = {}) {
   const q = new URLSearchParams();
   if (p.week) q.set("week", p.week);
+  if (p.q) q.set("q", p.q);
   if (p.show && p.show !== "needs") q.set("show", p.show);
   if (p.review) q.set("review", p.review);
   if (p.saved) q.set("saved", p.saved);
