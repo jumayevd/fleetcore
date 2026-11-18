@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { APICallError, createAgentUIStreamResponse, NoSuchModelError } from "ai";
 import { getCurrentUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import { isDemoEmail } from "@/lib/demo/shared";
 import { normalizeLocale } from "@/lib/locale";
 import { assistantModelId, createFleetAgent, isAssistantConfigured } from "@/lib/assistant/agent";
 import { prepareHistory } from "@/lib/assistant/history";
@@ -62,6 +63,7 @@ export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return fail(401, "Sign in required", "UNAUTHENTICATED");
   if (!can(user.role, "assistant.use")) return fail(403, "Your role can't use the fleet assistant", "FORBIDDEN");
+  if (isDemoEmail(user.email)) return fail(403, "The assistant is off in the live demo. Book a walkthrough to see it.", "FORBIDDEN");
   if (!isAssistantConfigured()) return fail(503, NOT_CONFIGURED_MESSAGE, NOT_CONFIGURED_CODE);
 
   let body: { messages?: unknown; companyId?: unknown; userId?: unknown };

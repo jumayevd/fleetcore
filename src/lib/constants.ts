@@ -156,12 +156,13 @@ export const VENDOR_TYPE_LABELS: Record<string, string> = {
 /** What a reviewer checks on the weekly walk-around video, in walk-around order. */
 export const PTI_COMPONENTS = [
   "STEER_TIRES", "DRIVE_TIRES", "TRAILER_TIRES", "BRAKES", "LIGHTS", "LEAKS", "SUSPENSION", "BELTS_HOSES", "BATTERY",
-  "GLASS_MIRRORS", "BODY", "COUPLING", "TRAILER",
+  "GLASS_MIRRORS", "BODY", "COUPLING", "TRAILER", "SAFETY_EQUIPMENT",
 ] as const;
 export const PTI_COMPONENT_LABELS: Record<string, string> = {
   STEER_TIRES: "Steer tires", DRIVE_TIRES: "Drive tires", TRAILER_TIRES: "Trailer tires", BRAKES: "Brakes", LIGHTS: "Lights & reflectors",
   LEAKS: "Leaks & fluids", SUSPENSION: "Suspension / airbags", BELTS_HOSES: "Belts & hoses", BATTERY: "Battery & electrical",
   GLASS_MIRRORS: "Windshield & mirrors", BODY: "Body & mud flaps", COUPLING: "5th wheel / coupling", TRAILER: "Trailer condition",
+  SAFETY_EQUIPMENT: "Safety equipment",
 };
 /** GOOD · SOON (within 2 weeks) · NOW (before the next load) · UNSEEN (could not see it — never counts as healthy). */
 export const PTI_RATINGS = ["GOOD", "SOON", "NOW", "UNSEEN"] as const;

@@ -53,3 +53,12 @@ export async function makePasswordLink(userId: string): Promise<{ url?: string; 
   await rootDb.auditLog.create({ data: { companyId: null, userId: me.id, action: "password_link", entity: "user", entityId: user.id, details: user.email } });
   return { url: `${await origin()}/reset/${token}` };
 }
+
+/** Contact requests from the public site: mark one handled, or open again. */
+export async function setContactHandled(fd: FormData) {
+  await requirePlatformOwner();
+  const id = String(fd.get("id") ?? "");
+  const handled = fd.get("handled") === "1";
+  await rootDb.contactRequest.updateMany({ where: { id }, data: { handledAt: handled ? new Date() : null } });
+  revalidatePath("/platform");
+}

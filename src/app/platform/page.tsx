@@ -4,7 +4,7 @@ import { rootDb } from "@/lib/db-root";
 import { requirePlatformOwner } from "@/lib/platform";
 import { ROLE_LABELS, isRole } from "@/lib/constants";
 import { ago } from "@/lib/format";
-import { openCompanyAsPlatform } from "@/app/actions/platform";
+import { openCompanyAsPlatform, setContactHandled } from "@/app/actions/platform";
 import { signOut } from "@/app/actions/auth";
 import { Badge, Card, Chip, Stat, Table, buttonClass, cn } from "@/components/ui";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -26,7 +26,7 @@ const day = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: 
 export default async function PlatformPage() {
   const me = await requirePlatformOwner();
   const now = new Date();
-  const [companies, openWork, activity, users, invites] = await Promise.all([
+  const [companies, openWork, activity, users, invites, contacts] = await Promise.all([
     rootDb.company.findMany({
       orderBy: { name: "asc" },
       select: {
@@ -45,7 +45,9 @@ export default async function PlatformPage() {
       },
     }),
     rootDb.invite.findMany({ where: { acceptedAt: null, expiresAt: { gt: now } }, orderBy: { createdAt: "desc" }, include: { company: { select: { name: true } }, invitedBy: { select: { name: true } } } }),
+    rootDb.contactRequest.findMany({ orderBy: [{ handledAt: { sort: "asc", nulls: "first" } }, { createdAt: "desc" }], take: 50 }),
   ]);
+  const newContacts = contacts.filter((c) => !c.handledAt).length;
   const open = new Map(openWork.map((r) => [r.companyId, r._count]));
   const lastSeen = new Map(activity.map((r) => [r.companyId!, r._max.createdAt]));
   const people = users.filter((u) => u.active);
@@ -81,6 +83,34 @@ export default async function PlatformPage() {
           <Stat label="Signed in this week" value={people.filter((u) => u.lastLoginAt && now.getTime() - u.lastLoginAt.getTime() < 7 * 86_400_000).length} icon={<ShieldCheck />} />
           <Stat label="Open invitations" value={invites.length} icon={<MailPlus />} tone={invites.length ? "info" : "neutral"} />
         </div>
+
+        <Card flush title={`Contact requests${newContacts ? ` · ${newContacts} new` : ""}`}>
+          <Table head={["From", "Fleet", "Message", "Sent", ""]} empty={contacts.length === 0}
+            emptyTitle="No messages yet" emptyDescription="What people send from the contact page on the public site lands here.">
+            {contacts.map((c) => (
+              <tr key={c.id} className={cn(c.handledAt && "opacity-60")}>
+                <td className="min-w-52">
+                  <div className="flex items-center gap-1.5"><span className="font-medium text-fg">{c.name}</span>{!c.handledAt && <Chip tone="accent">New</Chip>}</div>
+                  <a href={`mailto:${c.email}`} className="block truncate text-[12px] text-accent-text hover:underline">{c.email}</a>
+                  {c.phone && <a href={`tel:${c.phone}`} className="block text-[12px] text-fg-subtle">{c.phone}</a>}
+                </td>
+                <td className="whitespace-nowrap text-[12px]">
+                  {c.company && <p className="font-medium text-fg">{c.company}</p>}
+                  <p className="text-fg-muted">{[c.fleetSize && `${c.fleetSize} trucks`, c.plan && `plan: ${c.plan}`].filter(Boolean).join(" · ") || "—"}</p>
+                </td>
+                <td className="max-w-md whitespace-pre-line text-[12px] text-fg-muted">{c.message || <span className="text-fg-faint">—</span>}</td>
+                <td className="whitespace-nowrap text-[12px] text-fg-muted">{ago(c.createdAt)}</td>
+                <td className="w-28 text-right">
+                  <form action={setContactHandled}>
+                    <input type="hidden" name="id" value={c.id} />
+                    <input type="hidden" name="handled" value={c.handledAt ? "0" : "1"} />
+                    <button className={buttonClass(c.handledAt ? "ghost" : "secondary", "sm")}>{c.handledAt ? "Reopen" : "Mark handled"}</button>
+                  </form>
+                </td>
+              </tr>
+            ))}
+          </Table>
+        </Card>
 
         <Card flush title="Companies">
           <Table head={["Company", "Members", "Trucks", "Drivers", "Open repairs", "Documents", "TrackPro", "Last activity", ""]} empty={companies.length === 0}

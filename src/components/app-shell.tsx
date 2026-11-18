@@ -212,10 +212,15 @@ function SideNav({ user, active, path, data, expanded, pinned, onTogglePin, onNa
           );
         })}
       </div>
-      {/* Desktop only (the phone drawer closes itself). */}
-      <div className={cn("hidden p-2 lg:flex", expanded ? "justify-end" : "justify-center")}>
+      <div className={cn("flex items-center gap-2 p-2", expanded ? "justify-between" : "justify-center")}>
+        {expanded && (
+          <p className="min-w-0 truncate pl-2.5 text-[11px] text-fg-faint" title={`© ${new Date().getFullYear()} FleetCore by Kaizen. All rights reserved.`}>
+            © {new Date().getFullYear()} · by <span className="font-medium text-fg-subtle">Kaizen</span>
+          </p>
+        )}
+        {/* Desktop only (the phone drawer closes itself). */}
         <button type="button" onClick={onTogglePin} aria-expanded={pinned} aria-label={pinned ? "Collapse sidebar" : "Expand sidebar"} title={pinned ? "Collapse sidebar" : "Expand sidebar"}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] text-fg-subtle transition-colors hover:bg-surface/60 hover:text-fg">
+          className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-[9px] text-fg-subtle transition-colors hover:bg-surface/60 hover:text-fg lg:flex">
           {pinned ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
         </button>
       </div>

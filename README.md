@@ -14,6 +14,24 @@ companies** added so one specialist can work for several fleets — each in its 
   the seed against it**. Demo logins are hidden on the sign-in page (`DEMO_MODE=false`); the demo data lives in the
   local database.
 
+## Public site and live demo
+
+Signed-out visitors get the product site: `/` (product), `/pricing`, `/demo`, `/contact` (`src/app/(site)`). Prices,
+plans, FAQ and an optional contact mailbox (`SITE.email`, hidden while null) are in `src/lib/site.ts`; screens in `public/site/*.webp`. Anyone signed in to a
+company who opens `/` goes straight to the app.
+
+- **Contact form** messages are saved in the database (`ContactRequest`) and listed at the top of the Platform console,
+  where they are marked handled. Bots are slowed by a hidden field and a per-address limit.
+- **Live demo** (`DEMO_ENABLED=true`): "Open the live demo" signs the browser in to one shared account
+  (`demo@fleetcore.invalid`, Specialist) in the made-up company **Demo Freight Co.**, built from the same generator as the
+  local seed (`src/lib/demo/fleet-data.ts`). `/api/cron/demo` throws it away and builds it again every night at 04:30
+  UTC, so visitors' changes don't last. The demo account can't change its password or profile, connect a mailbox,
+  send email or use the assistant, and nobody can sign in to it with a password. The demo company only ever touches
+  its own rows; real companies are not affected.
+- **Address**: the site and the app share the Vercel address (`https://fleetcore-uz.vercel.app`). To move to a
+  domain later, add it under Vercel → Project → Settings → Domains, set the DNS records Vercel shows, set `APP_URL` to
+  it and add its `/api/mail/callback/google` (and `/microsoft`) to the OAuth apps.
+
 ## Accounts and companies
 
 - An **account** is a sign-in (email + password). A **company** is one fleet's workspace; it owns every truck, trailer,
@@ -258,8 +276,9 @@ layout). An App Store app needs a Mac with Xcode and an Apple Developer account.
 | `DATABASE_URL`, `DATABASE_URL_UNPOOLED` | Neon integration of this project; local cluster (`.env.local`) |
 | `BLOB_READ_WRITE_TOKEN` | Blob store of this project |
 | `AUTH_SECRET` | Random 32-byte hex (also keys the encrypted ELD tokens: changing it means pasting them again) |
-| `CRON_SECRET` | Random; Vercel Cron sends it to `/api/cron/eld` and `/api/cron/backup` |
+| `CRON_SECRET` | Random; Vercel Cron sends it to `/api/cron/eld`, `/api/cron/backup` and `/api/cron/demo` |
 | `DEMO_MODE` | `true` locally, `false` in production |
+| `DEMO_ENABLED` | `true` turns on the live demo on the public site (`/demo`) and its nightly rebuild |
 | `APP_URL` | Optional, base URL for invitation links |
 | `MEMBER_EMAIL_DOMAINS` | Optional, comma-separated: invitations only to these domains (`fleetcore.com` in production); unset = any address |
 | `AI_GATEWAY_API_KEY`, `ASSISTANT_MODEL` | Optional locally; OIDC on Vercel |

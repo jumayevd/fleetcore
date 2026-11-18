@@ -14,6 +14,7 @@ import { HOME } from "@/lib/permissions";
 import { guessLocale, isUnitSystem } from "@/lib/locale";
 import { isPlatformOwner, mayCreateCompanies, usablePasswordLink } from "@/lib/platform";
 import { readProfile } from "@/lib/profile";
+import { DEMO_BLOCKED, isDemoEmail } from "@/lib/demo/shared";
 
 // bcrypt hash of a random string; only used to equalise timing for unknown emails.
 const DUMMY_HASH = "$2b$10$Dfob35lSw0BVw8zEqfQSY.8DFhc6CSl6DeU4B3W3T1BW03c0vUecO";
@@ -219,6 +220,7 @@ export async function acceptInvite(_: ActionState, fd: FormData): Promise<Action
 export async function leaveCompany(): Promise<ActionState> {
   const me = await requireUser();
   const res = await attempt(async () => {
+    if (isDemoEmail(me.email)) throw new FormError(DEMO_BLOCKED);
     if (me.platform) throw new FormError("You're here as platform owner, not as a member, so there is nothing to leave.");
     if (me.role === "OWNER") {
       const owners = await rootDb.membership.count({ where: { companyId: me.company.id, role: "OWNER", active: true } });
@@ -274,6 +276,7 @@ export async function signOutAll() {
 export async function updateProfile(_: ActionState, fd: FormData): Promise<ActionState> {
   const me = await requireUser();
   return attempt(async () => {
+    if (isDemoEmail(me.email)) throw new FormError(DEMO_BLOCKED);
     const f = fields(fd);
     const profile = readProfile(f, me.role !== "OWNER");
     await rootDb.user.update({ where: { id: me.id }, data: { ...profile, phone: f.phone("phone") } });
@@ -327,6 +330,7 @@ export async function setPasswordWithLink(token: string, _: ActionState, fd: For
 export async function changePassword(_: ActionState, fd: FormData): Promise<ActionState> {
   const me = await requireUser();
   return attempt(async () => {
+    if (isDemoEmail(me.email)) throw new FormError(DEMO_BLOCKED);
     const f = fields(fd);
     const current = f.req("current", "Current password");
     const next = f.req("next", "New password");

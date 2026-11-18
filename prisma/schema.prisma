@@ -846,3 +846,23 @@ model EldUnit {
   @@index([companyId])
   @@index([truckId])
 }
+
+/// A message sent from the public site's contact form (/contact): someone asking for pricing, a demo or a call.
+/// Not tied to any company; platform owners read them in the Platform console.
+model ContactRequest {
+  id        String    @id @default(cuid())
+  name      String
+  email     String
+  phone     String?
+  company   String?
+  /// Trucks they run, as they wrote it.
+  fleetSize String?
+  /// The plan they asked about on the pricing page, if any.
+  plan      String?
+  message   String?
+  /// When a platform owner marked it handled.
+  handledAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([createdAt])
+}

@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { isDemoEmail } from "@/lib/demo/shared";
 import { authorizeUrl, isConfigured, providerFromSlug } from "@/lib/mail/providers";
 import { MAIL_STATE_COOKIE, MAIL_STATE_TTL_S, safeReturn, sealState, siteOrigin, withMailResult } from "@/lib/mail/oauth-state";
 
@@ -13,7 +14,7 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/mail/connect
   if (!user) return NextResponse.redirect(new URL("/login", origin));
   const returnTo = safeReturn(req.nextUrl.searchParams.get("returnTo"));
   const provider = providerFromSlug((await ctx.params).provider);
-  if (!provider || !isConfigured(provider)) return NextResponse.redirect(new URL(withMailResult(returnTo, "unavailable"), origin));
+  if (!provider || !isConfigured(provider) || isDemoEmail(user.email)) return NextResponse.redirect(new URL(withMailResult(returnTo, "unavailable"), origin));
 
   const state = randomBytes(24).toString("base64url");
   const res = NextResponse.redirect(authorizeUrl(provider, origin, state, user.email));

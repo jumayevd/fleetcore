@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import { isDemoEmail } from "@/lib/demo/shared";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { deleteFile, readFileStream } from "@/lib/storage";
@@ -30,6 +31,7 @@ export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Sign in required" }, { status: 401 });
   if (!can(user.role, "fleet.edit")) return NextResponse.json({ error: "Your role can't send email from FleetCore" }, { status: 403 });
+  if (isDemoEmail(user.email)) return NextResponse.json({ error: "Email is off in the live demo" }, { status: 403 });
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
