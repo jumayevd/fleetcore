@@ -11,7 +11,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { CompanyBadge } from "@/components/workspace-switcher";
 import { Wordmark } from "@/components/brand";
 import { ROLE_TONE } from "../(app)/admin/shared";
-import { CompanyCreatorToggle, PasswordLinkButton } from "./controls";
+import { ArchiveCompanyButton, CompanyCreatorToggle, PasswordLinkButton } from "./controls";
 import { NewCompanyForm } from "../select/forms";
 
 export const metadata = { title: "Platform console" };
@@ -28,9 +28,9 @@ export default async function PlatformPage() {
   const now = new Date();
   const [companies, openWork, activity, users, invites, contacts] = await Promise.all([
     rootDb.company.findMany({
-      orderBy: { name: "asc" },
+      orderBy: [{ archivedAt: { sort: "asc", nulls: "first" } }, { name: "asc" }],
       select: {
-        id: true, name: true, color: true, createdAt: true, units: true, timezone: true,
+        id: true, name: true, color: true, createdAt: true, units: true, timezone: true, archivedAt: true,
         _count: { select: { memberships: { where: { active: true } }, trucks: true, drivers: true, documents: true } },
         eldLinks: { select: { active: true, vehicles: true, lastSuccessAt: true, lastError: true } },
       },
@@ -51,6 +51,7 @@ export default async function PlatformPage() {
   const open = new Map(openWork.map((r) => [r.companyId, r._count]));
   const lastSeen = new Map(activity.map((r) => [r.companyId!, r._max.createdAt]));
   const people = users.filter((u) => u.active);
+  const archivedCount = companies.filter((c) => c.archivedAt).length;
 
   return (
     <div className="min-h-dvh bg-canvas">
@@ -78,7 +79,7 @@ export default async function PlatformPage() {
         </div>
 
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Stat label="Companies" value={companies.length} icon={<Building2 />} />
+          <Stat label="Companies" value={companies.length - archivedCount} icon={<Building2 />} hint={archivedCount ? `${archivedCount} archived` : undefined} />
           <Stat label="Accounts" value={people.length} icon={<Users />} hint="that can sign in" />
           <Stat label="Signed in this week" value={people.filter((u) => u.lastLoginAt && now.getTime() - u.lastLoginAt.getTime() < 7 * 86_400_000).length} icon={<ShieldCheck />} />
           <Stat label="Open invitations" value={invites.length} icon={<MailPlus />} tone={invites.length ? "info" : "neutral"} />
@@ -119,13 +120,15 @@ export default async function PlatformPage() {
               const eld = c.eldLinks[0];
               const seen = lastSeen.get(c.id);
               return (
-                <tr key={c.id}>
+                <tr key={c.id} className={cn(c.archivedAt && "opacity-70")}>
                   <td className="min-w-56">
                     <div className="flex items-center gap-2.5">
-                      <CompanyBadge name={c.name} color={c.color} size={28} />
+                      <CompanyBadge name={c.name} color={c.archivedAt ? "#64748B" : c.color} size={28} />
                       <div className="min-w-0">
-                        <p className="truncate font-medium text-fg">{c.name}</p>
-                        <p className="text-[11px] text-fg-subtle">Since {day(c.createdAt)} · {c.units === "metric" ? "km" : "mi"} · {c.timezone}</p>
+                        <p className="flex items-center gap-1.5 truncate font-medium text-fg">{c.name}{c.archivedAt && <Chip>Archived</Chip>}</p>
+                        <p className="text-[11px] text-fg-subtle">
+                          {c.archivedAt ? <>Archived {day(c.archivedAt)} · since {day(c.createdAt)}</> : <>Since {day(c.createdAt)} · {c.units === "metric" ? "km" : "mi"} · {c.timezone}</>}
+                        </p>
                       </div>
                     </div>
                   </td>
@@ -140,11 +143,14 @@ export default async function PlatformPage() {
                         : <span className="num">{eld.vehicles} trucks{eld.lastSuccessAt ? <span className="text-fg-subtle"> · {ago(eld.lastSuccessAt)}</span> : null}</span>}
                   </td>
                   <td className="whitespace-nowrap text-[12px] text-fg-muted">{seen ? ago(seen) : "—"}</td>
-                  <td className="w-24 text-right">
-                    <form action={openCompanyAsPlatform}>
-                      <input type="hidden" name="companyId" value={c.id} />
-                      <button className={buttonClass("secondary", "sm")}>Open<ArrowRight /></button>
-                    </form>
+                  <td className="text-right">
+                    <span className="inline-flex items-start justify-end gap-1">
+                      <ArchiveCompanyButton companyId={c.id} name={c.name} archived={Boolean(c.archivedAt)} />
+                      <form action={openCompanyAsPlatform}>
+                        <input type="hidden" name="companyId" value={c.id} />
+                        <button className={buttonClass("secondary", "sm")} title={c.archivedAt ? "Look through it, read-only" : undefined}>{c.archivedAt ? "View" : "Open"}<ArrowRight /></button>
+                      </form>
+                    </span>
                   </td>
                 </tr>
               );

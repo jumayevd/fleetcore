@@ -1,6 +1,6 @@
 import type { Role } from "./constants";
 
-const EVERYONE = ["OWNER", "ADMIN", "SPECIALIST", "VIEWER"] as const;
+const EVERYONE = ["OWNER", "ADMIN", "SPECIALIST", "VIEWER", "ARCHIVE"] as const;
 const EDITORS = ["OWNER", "ADMIN", "SPECIALIST"] as const;
 const ADMINS = ["OWNER", "ADMIN"] as const;
 
@@ -16,11 +16,12 @@ export const PERMISSIONS = {
   "drivers.edit": EDITORS,
   "reports.view": EVERYONE,
   /** Costs, invoices, spend. View-only members see the work, not the money. */
-  "money.view": EDITORS,
-  "assistant.use": EVERYONE,
+  "money.view": [...EDITORS, "ARCHIVE"],
+  /** Not in an archived company: the assistant can make changes. */
+  "assistant.use": ["OWNER", "ADMIN", "SPECIALIST", "VIEWER"],
   "company.manage": ADMINS,
   "members.manage": ADMINS,
-  "audit.view": ADMINS,
+  "audit.view": [...ADMINS, "ARCHIVE"],
   /** Confirm and close a defect without saying how the repair was checked. Everyone else writes a note. */
   "defects.closeWithoutNote": ADMINS,
   /** Delete a defect for good (reported by mistake or twice). The audit log keeps what it was. */

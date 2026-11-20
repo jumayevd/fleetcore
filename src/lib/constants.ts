@@ -4,13 +4,18 @@
 
 /** A person's role inside one company (Membership.role). The same person can hold a different role elsewhere. */
 export const ROLES = ["OWNER", "ADMIN", "SPECIALIST", "VIEWER"] as const;
-export type Role = (typeof ROLES)[number];
+/**
+ * ARCHIVE is never stored on a membership: it is how a platform owner works in an archived company (src/lib/session.ts):
+ * sees everything, money and audit log included, and changes nothing.
+ */
+export type Role = (typeof ROLES)[number] | "ARCHIVE";
 
 export const ROLE_LABELS: Record<Role, string> = {
   OWNER: "Owner",
   ADMIN: "Admin",
   SPECIALIST: "Fleet specialist",
   VIEWER: "View only",
+  ARCHIVE: "Archive · read only",
 };
 
 export const ROLE_HINTS: Record<Role, string> = {
@@ -18,9 +23,10 @@ export const ROLE_HINTS: Record<Role, string> = {
   ADMIN: "Everything except owner accounts and deleting the company",
   SPECIALIST: "Trucks, trailers, maintenance, drivers and documents",
   VIEWER: "Sees everything, changes nothing",
+  ARCHIVE: "An archived company, opened from the Platform console: sees everything, changes nothing",
 };
 
-export const isRole = (v: unknown): v is Role => typeof v === "string" && (ROLES as readonly string[]).includes(v);
+export const isRole = (v: unknown): v is (typeof ROLES)[number] => typeof v === "string" && (ROLES as readonly string[]).includes(v);
 
 /** Workspace badge colours (stored as data on Company.color). */
 export const COMPANY_COLORS = ["#2563EB", "#059669", "#D97706", "#DC2626", "#7C3AED", "#DB2777", "#0D9488", "#475569"] as const;

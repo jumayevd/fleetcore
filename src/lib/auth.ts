@@ -23,7 +23,7 @@ export type CurrentUser = {
   /** A platform owner (src/lib/platform.ts) working in a company they are not a member of, as an owner. */
   platform: boolean;
   /** units / timezone / currency: see src/lib/locale.ts (use getFormat() rather than reading them directly). */
-  company: { id: string; name: string; color: string | null; units: string; timezone: string; currency: string };
+  company: { id: string; name: string; color: string | null; units: string; timezone: string; currency: string; archivedAt: Date | null };
 };
 
 const toUser = (a: ActiveContext): CurrentUser => ({ ...a.user, role: a.role, membershipId: a.membershipId, platform: a.platform, company: a.company });

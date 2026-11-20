@@ -12,6 +12,7 @@ import { normalizeLocale } from "@/lib/locale";
 import { AppShell } from "@/components/app-shell";
 import { AssistantLauncher } from "@/components/assistant/launcher";
 import { EldHeartbeat } from "@/components/eld-heartbeat";
+import { cn } from "@/components/ui";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
@@ -31,8 +32,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <AppShell key={active.companyId + active.userId} user={{ name: user.name, email: user.email, role: user.role }} active={active} accounts={workspaces} locale={normalizeLocale(user.company)}
       navOpen={navOpen}>
       {user.platform && (
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-accent-soft px-3 py-2 text-[12.5px] text-accent-text">
-          <span>You&apos;re in {user.company.name} as platform owner, with an owner&apos;s rights. You aren&apos;t a member, and what you change is in its audit log.</span>
+        <div className={cn("mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 text-[12.5px]", user.company.archivedAt ? "bg-warn-soft text-warn" : "bg-accent-soft text-accent-text")}>
+          {user.company.archivedAt
+            ? <span><b className="font-semibold">{user.company.name} is archived.</b> Everything is kept and you can look through it, but nothing can be changed. Restore it from the Platform console to work in it again.</span>
+            : <span>You&apos;re in {user.company.name} as platform owner, with an owner&apos;s rights. You aren&apos;t a member, and what you change is in its audit log.</span>}
           <Link href="/platform" className="inline-flex items-center gap-1 font-medium hover:underline"><ArrowLeft className="h-3.5 w-3.5" />Platform console</Link>
         </div>
       )}

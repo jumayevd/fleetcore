@@ -1,6 +1,6 @@
 import "server-only";
 import { rootDb } from "./db-root";
-import { currentCompanyId } from "./tenant";
+import { assertWritable, currentCompanyId } from "./tenant";
 
 /**
  * The Prisma client the app uses: every query on a company model is scoped to the active company.
@@ -11,6 +11,7 @@ import { currentCompanyId } from "./tenant";
  *  - foreign keys written by a create or update (truckId, driverId, …) must point at a row of the same company.
  *
  * Accounts (User, Membership, Invite, Company) are not scoped here: they go through rootDb on purpose.
+ * Writes are refused while the active company is archived (Company.archivedAt).
  * Raw SQL ($queryRaw / $executeRaw) is NOT scoped: always filter by companyId yourself.
  * Write relations as scalar ids (`truckId: x`), not `truck: { connect }`, so the scope can add `companyId`.
  */
@@ -19,6 +20,10 @@ const SCOPED = new Set([
   "Driver", "Truck", "Trailer", "WorkOrder", "FuelLog", "Document", "AuditLog", "AppSetting",
   "TruckType", "Vendor", "WorkOrderLine", "WorkOrderEvent", "WalkAround", "WalkAroundRating", "Defect",
   "RoadsideInspection", "RoadsideViolation", "EldConnection", "EldUnit", "DriverAssignment",
+]);
+
+const WRITE_OPS = new Set([
+  "create", "createMany", "createManyAndReturn", "update", "updateMany", "updateManyAndReturn", "upsert", "delete", "deleteMany",
 ]);
 
 const WHERE_OPS = new Set([
@@ -89,6 +94,7 @@ export const db = rootDb.$extends({
       async $allOperations({ model, operation, args, query }) {
         if (!SCOPED.has(model)) return query(args);
         const companyId = await currentCompanyId();
+        if (WRITE_OPS.has(operation)) await assertWritable();
         const a = (args ?? {}) as Record<string, unknown>;
         if (WHERE_OPS.has(operation)) a.where = { ...((a.where as object | undefined) ?? {}), companyId };
         switch (operation) {

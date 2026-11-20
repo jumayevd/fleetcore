@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { rootDb } from "@/lib/db-root";
-import { writeActive } from "@/lib/session";
+import { forgetSessions, writeActive } from "@/lib/session";
 import { createPasswordLink, requirePlatformOwner } from "@/lib/platform";
 
 /*
@@ -52,6 +52,32 @@ export async function makePasswordLink(userId: string): Promise<{ url?: string; 
   const token = await createPasswordLink(user.id, me.id);
   await rootDb.auditLog.create({ data: { companyId: null, userId: me.id, action: "password_link", entity: "user", entityId: user.id, details: user.email } });
   return { url: `${await origin()}/reset/${token}` };
+}
+
+/**
+ * Archive a company (its contract ended) or bring it back. Archiving keeps every row: its members can't open it any
+ * more, its open invitations are withdrawn and its TrackPro sync stops. Platform owners can still open it, read-only.
+ * Restoring lets its members back in as they were.
+ */
+export async function setCompanyArchived(companyId: string, archived: boolean): Promise<{ ok?: string; error?: string }> {
+  const me = await requirePlatformOwner();
+  const company = await rootDb.company.findUnique({ where: { id: companyId }, select: { id: true, name: true, archivedAt: true } });
+  if (!company) return { error: "This company no longer exists. Refresh the page." };
+  if (Boolean(company.archivedAt) === archived) return { ok: archived ? `${company.name} is already archived` : `${company.name} is already active` };
+  if (archived) {
+    const [, withdrawn] = await rootDb.$transaction([
+      rootDb.company.update({ where: { id: company.id }, data: { archivedAt: new Date() } }),
+      rootDb.invite.deleteMany({ where: { companyId: company.id, acceptedAt: null } }),
+    ]);
+    await rootDb.auditLog.create({ data: { companyId: company.id, userId: me.id, action: "archive", entity: "company", entityId: company.id, details: `${company.name} archived${withdrawn.count ? `; ${withdrawn.count} open invitation${withdrawn.count === 1 ? "" : "s"} withdrawn` : ""}` } });
+  } else {
+    await rootDb.company.update({ where: { id: company.id }, data: { archivedAt: null } });
+    await rootDb.auditLog.create({ data: { companyId: company.id, userId: me.id, action: "restore", entity: "company", entityId: company.id, details: `${company.name} restored` } });
+  }
+  forgetSessions();
+  revalidatePath("/platform");
+  revalidatePath("/select");
+  return { ok: archived ? `${company.name} is archived` : `${company.name} is active again` };
 }
 
 /** Contact requests from the public site: mark one handled, or open again. */

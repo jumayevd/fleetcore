@@ -100,6 +100,9 @@ model Company {
   timezone    String               @default("America/New_York")
   currency    String               @default("USD")
   createdAt   DateTime             @default(now())
+  /// Set when the platform owner archives the company (contract ended). Every row is kept; members can't open it, its
+  /// TrackPro sync stops, and platform owners can still open it read-only from the Platform console.
+  archivedAt  DateTime?
   truckTypes  TruckType[]
   vendors     Vendor[]
   woLines     WorkOrderLine[]

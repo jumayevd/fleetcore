@@ -1,9 +1,35 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Building2, Check, Copy, KeyRound } from "lucide-react";
-import { makePasswordLink, setCompanyCreator } from "@/app/actions/platform";
+import { Archive, ArchiveRestore, Building2, Check, Copy, KeyRound } from "lucide-react";
+import { makePasswordLink, setCompanyArchived, setCompanyCreator } from "@/app/actions/platform";
 import { buttonClass, cn, inputClass } from "@/components/ui";
+
+/** Archive a company (contract ended; every row is kept) or restore it. */
+export function ArchiveCompanyButton({ companyId, name, archived }: { companyId: string; name: string; archived: boolean }) {
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  return (
+    <span className="inline-flex flex-col items-end gap-1">
+      <button type="button" disabled={pending} className={buttonClass("ghost", "sm")}
+        title={archived ? `Restore ${name}` : `Archive ${name}`}
+        onClick={() => {
+          const question = archived
+            ? `Restore ${name}? Its members can open it and change things again, and its TrackPro sync starts again.`
+            : `Archive ${name}?\n\nEverything in it is kept. Its members can't open it any more, its open invitations are withdrawn and its TrackPro sync stops. You can still open it here, read-only, and restore it at any time.`;
+          if (!window.confirm(question)) return;
+          setError(null);
+          start(async () => {
+            const res = await setCompanyArchived(companyId, !archived);
+            if (res.error) setError(res.error);
+          });
+        }}>
+        {archived ? <ArchiveRestore /> : <Archive />}{pending ? "Saving…" : archived ? "Restore" : "Archive"}
+      </button>
+      {error && <span role="alert" className="max-w-56 text-[11px] text-danger">{error}</span>}
+    </span>
+  );
+}
 
 /** Allow (or stop) an account creating companies. */
 export function CompanyCreatorToggle({ userId, email, allowed }: { userId: string; email: string; allowed: boolean }) {

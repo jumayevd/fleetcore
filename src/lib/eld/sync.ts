@@ -98,6 +98,8 @@ function placeOf(v: EldVehicle, imperial: boolean) {
 /** Sync one company (pinned, so it also works outside a request). Never throws: problems are saved on the connection. */
 export async function syncCompanyEld(companyId: string, opts: { force?: boolean } = {}): Promise<SyncResult> {
   return withCompany(companyId, async () => {
+    // An archived company keeps its last readings: no more syncing.
+    if (await rootDb.company.count({ where: { id: companyId, archivedAt: { not: null } } })) return { status: "none" } as const;
     const conn = await db.eldConnection.findFirst({ where: { provider: PROVIDER, active: true } });
     if (!conn) return { status: "none" } as const;
     const now = new Date();
@@ -275,7 +277,7 @@ export async function eldPulse(companyId: string) {
 
 /** Every company with an active connection, one after the other (the cron route). */
 export async function syncAllEld() {
-  const conns = await rootDb.eldConnection.findMany({ where: { active: true }, select: { companyId: true } });
+  const conns = await rootDb.eldConnection.findMany({ where: { active: true, company: { archivedAt: null } }, select: { companyId: true } });
   const results: { companyId: string; result: SyncResult }[] = [];
   for (const c of conns) results.push({ companyId: c.companyId, result: await syncCompanyEld(c.companyId) });
   return results;

@@ -49,6 +49,10 @@ company who opens `/` goes straight to the app.
   and every open invitation. They can **open** any company and work in it with an owner's rights without being a
   member, so they don't show in its member list; what they do is in its audit log under their name
   (`src/lib/platform.ts`, `resolve()` in `src/lib/session.ts`).
+- **Archiving a company** (Platform console → Archive, for a contract that ended) keeps every row. Its members no
+  longer see or open it, its open invitations are withdrawn and its TrackPro sync stops. Platform owners can still
+  **View** it read-only (role `ARCHIVE`: everything visible, money and audit log included; every write is refused in
+  `src/lib/db.ts`). **Restore** lets its members back in as they were. Both are in its audit log.
 - **Password links** stand in for email resets: the console's "Password link" (or
   `npm run user:password-link -- <email>`) makes a one-time link, valid 3 days, to `/reset/<token>`, where the person
   sets their own password. Only a hash of the token is stored. Making a platform owner:

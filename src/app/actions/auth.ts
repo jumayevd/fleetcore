@@ -45,8 +45,9 @@ function regionOf(f: ReturnType<typeof fields>) {
 
 /** A usable invite for `email`, or a FormError saying why not. */
 async function usableInvite(token: string, email?: string) {
-  const invite = await rootDb.invite.findUnique({ where: { token }, include: { company: { select: { id: true, name: true } } } });
+  const invite = await rootDb.invite.findUnique({ where: { token }, include: { company: { select: { id: true, name: true, archivedAt: true } } } });
   if (!invite || invite.acceptedAt) throw new FormError("This invitation has already been used or was withdrawn.");
+  if (invite.company.archivedAt) throw new FormError(`${invite.company.name} is no longer on FleetCore, so this invitation can't be used.`);
   if (invite.expiresAt < new Date()) throw new FormError("This invitation has expired. Ask for a new link.");
   if (email && invite.email.toLowerCase() !== email.toLowerCase()) {
     throw new FormError(`This invitation is for ${invite.email}. Sign in or create an account with that email to accept it.`);

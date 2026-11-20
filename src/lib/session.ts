@@ -114,7 +114,8 @@ export async function writeActive(userId: string, companyId: string | null) {
 export type ActiveContext = {
   /** profileComplete: first and last name, ID number and date of birth are on file (src/lib/profile.ts). */
   user: { id: string; name: string; email: string; phone: string | null; lastLoginAt: Date | null; profileComplete: boolean };
-  company: { id: string; name: string; color: string | null; units: string; timezone: string; currency: string };
+  /** archivedAt: an archived company is open only to platform owners, read-only (role ARCHIVE). */
+  company: { id: string; name: string; color: string | null; units: string; timezone: string; currency: string; archivedAt: Date | null };
   role: Role;
   /** "" when a platform owner works here without being a member (platform: true). */
   membershipId: string;
@@ -135,18 +136,18 @@ async function resolve(token: string | undefined, activeRaw: string | undefined)
     select: {
       id: true, role: true, active: true,
       user: { select: { id: true, name: true, email: true, phone: true, lastLoginAt: true, active: true, firstName: true, lastName: true, idNumber: true, birthDate: true } },
-      company: { select: { id: true, name: true, color: true, units: true, timezone: true, currency: true } },
+      company: { select: { id: true, name: true, color: true, units: true, timezone: true, currency: true, archivedAt: true } },
     },
   });
   const asUser = (u: NonNullable<typeof m>["user"]) => ({ id: u.id, name: u.name, email: u.email, phone: u.phone, lastLoginAt: u.lastLoginAt, profileComplete: isProfileComplete(u) });
-  if (m && m.active && m.user.active && isRole(m.role)) return { accounts, active: { user: asUser(m.user), company: m.company, role: m.role, membershipId: m.id, platform: false } };
-  // Not a member: only a platform owner may work here, as an owner.
+  if (m && m.active && m.user.active && isRole(m.role) && !m.company.archivedAt) return { accounts, active: { user: asUser(m.user), company: m.company, role: m.role, membershipId: m.id, platform: false } };
+  // Not a member (or the company is archived): only a platform owner may work here, as an owner (read-only if archived).
   const [u, company] = await Promise.all([
     rootDb.user.findUnique({ where: { id: ref.userId }, select: { id: true, name: true, email: true, phone: true, lastLoginAt: true, active: true, firstName: true, lastName: true, idNumber: true, birthDate: true, platformRole: true } }),
-    rootDb.company.findUnique({ where: { id: ref.companyId }, select: { id: true, name: true, color: true, units: true, timezone: true, currency: true } }),
+    rootDb.company.findUnique({ where: { id: ref.companyId }, select: { id: true, name: true, color: true, units: true, timezone: true, currency: true, archivedAt: true } }),
   ]);
   if (!u?.active || u.platformRole !== PLATFORM_OWNER || !company) return { accounts, active: null };
-  return { accounts, active: { user: asUser(u), company, role: "OWNER", membershipId: "", platform: true } };
+  return { accounts, active: { user: asUser(u), company, role: company.archivedAt ? "ARCHIVE" : "OWNER", membershipId: "", platform: true } };
 }
 
 // Server actions and route handlers do not share React's per-request cache, and the company scope resolves the session
@@ -187,7 +188,7 @@ export async function listWorkspaces(accounts: SessionAccount[]): Promise<Worksp
     select: {
       id: true, name: true, email: true, platformRole: true, canCreateCompanies: true,
       memberships: {
-        where: { active: true },
+        where: { active: true, company: { archivedAt: null } },
         orderBy: { company: { name: "asc" } },
         select: { role: true, company: { select: { id: true, name: true, color: true } } },
       },
@@ -195,7 +196,7 @@ export async function listWorkspaces(accounts: SessionAccount[]): Promise<Worksp
   });
   // A platform owner can open every company (as an owner), member or not.
   const everyCompany = users.some((u) => u.platformRole === PLATFORM_OWNER)
-    ? await rootDb.company.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, color: true } })
+    ? await rootDb.company.findMany({ where: { archivedAt: null }, orderBy: { name: "asc" }, select: { id: true, name: true, color: true } })
     : [];
   return accounts.flatMap((a) => {
     const u = users.find((x) => x.id === a.userId);

@@ -70,7 +70,7 @@ export async function canUploadDoc(user: CurrentUser, t: DocTarget, kind: string
 }
 
 export async function canDeleteDoc(user: CurrentUser, doc: Document) {
-  if (doc.uploadedById === user.id && user.role !== "VIEWER") return true;
+  if (doc.uploadedById === user.id && user.role !== "VIEWER" && user.role !== "ARCHIVE") return true;
   if (can(user.role, "company.manage")) return true;
   const t = targetOf(doc);
   if (!t) return false;

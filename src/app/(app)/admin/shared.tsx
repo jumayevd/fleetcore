@@ -8,5 +8,5 @@ import type { Role } from "@/lib/constants";
 
 /** Role → badge tone. Only privileged roles get colour; everyone else is graphite. */
 export const ROLE_TONE: Record<Role, Tone> = {
-  OWNER: "accent", ADMIN: "info", SPECIALIST: "neutral", VIEWER: "neutral",
+  OWNER: "accent", ADMIN: "info", SPECIALIST: "neutral", VIEWER: "neutral", ARCHIVE: "neutral",
 };

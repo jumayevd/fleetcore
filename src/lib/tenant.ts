@@ -18,6 +18,19 @@ export class NoCompanyError extends Error {
   }
 }
 
+export class ArchivedCompanyError extends Error {
+  constructor() {
+    super("This company is archived, so nothing in it can be changed. Restore it from the Platform console first.");
+  }
+}
+
+/** Writes in an archived company are refused (pinned jobs check archivedAt themselves before they start). */
+export async function assertWritable(): Promise<void> {
+  if (pinned.getStore()) return;
+  const { active } = await getSessionContext();
+  if (active?.company.archivedAt) throw new ArchivedCompanyError();
+}
+
 export async function currentCompanyId(): Promise<string> {
   const id = pinned.getStore();
   if (id) return id;
