@@ -12,7 +12,7 @@ import { DocumentsPanel } from "@/components/documents/panel";
 import { Badge, Card, Field, InfoTip, Input, LinkButton, PageHeader, Stat, Textarea, type Tone } from "@/components/ui";
 import { getCompanyCompliance, getCompanyProfileRecord } from "./profile";
 import { REQUIRED_COMPANY_DOCS, complianceCounts, type DocCompliance, type DocComplianceStatus } from "./shared";
-import { ColorPicker, DeleteCompany, RegionSettings } from "./controls";
+import { ArchiveCompany, ColorPicker, DeleteCompany, RegionSettings } from "./controls";
 import { PhoneInput } from "@/components/phone-input";
 
 export const metadata = { title: "Company profile" };
@@ -131,6 +131,7 @@ export default async function CompanyPage() {
             </div>
           </ActionForm>
 
+          {!user.platform && can(user.role, "company.archive") && <ArchiveCompany name={user.company.name} />}
           {can(user.role, "company.delete") && <DeleteCompany name={user.company.name} />}
         </div>
 

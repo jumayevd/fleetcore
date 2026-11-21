@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { deleteCompany, saveCompanyRegion } from "@/app/actions/company";
+import { archiveCompany, deleteCompany, saveCompanyRegion } from "@/app/actions/company";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { CompanyBadge } from "@/components/workspace-switcher";
 import { Field, Input, buttonClass, cn, inputClass } from "@/components/ui";
@@ -116,6 +116,28 @@ export function RegionSettings({ locale, zones, counts }: {
 }
 
 /** Owners only: delete the company and everything in it, after typing its name. */
+export function ArchiveCompany({ name }: { name: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="rounded-lg border border-warn/40 bg-surface p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-[14px] font-semibold text-fg">Archive this company</h2>
+          <p className="text-[12px] text-fg-muted">For when the contract ends. Everything in {name} is kept, but nobody (you included) can open it any more, open invitations are withdrawn and the TrackPro sync stops. The FleetCore platform owner can restore it.</p>
+        </div>
+        {!open && <button type="button" onClick={() => setOpen(true)} className="h-8 rounded-md border border-warn/50 px-3 text-[12px] font-medium text-warn hover:bg-warn-soft">Archive company…</button>}
+      </div>
+      {open && (
+        <ActionForm action={archiveCompany} className="mt-3 flex flex-wrap items-end gap-2">
+          <Field label={`Type ${name} to confirm`} className="min-w-64 flex-1"><Input name="confirm" required autoComplete="off" /></Field>
+          <SubmitButton pendingText="Archiving…">Archive</SubmitButton>
+          <button type="button" onClick={() => setOpen(false)} className="h-9 rounded-md px-3 text-[12px] font-medium text-fg-muted hover:bg-raised">Cancel</button>
+        </ActionForm>
+      )}
+    </section>
+  );
+}
+
 export function DeleteCompany({ name }: { name: string }) {
   const [open, setOpen] = useState(false);
   return (

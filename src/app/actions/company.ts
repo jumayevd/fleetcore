@@ -81,6 +81,27 @@ export async function saveCompanyRegion(_: ActionState, fd: FormData): Promise<A
   });
 }
 
+/**
+ * Archive the active company (its contract ended). Every row is kept; its members, the one archiving included, can't
+ * open it any more, its open invitations are withdrawn and its TrackPro sync stops. A platform owner can look through it
+ * and restore it from the Platform console. Owners and admins, and they must type the name.
+ */
+export async function archiveCompany(_: ActionState, fd: FormData): Promise<ActionState> {
+  const me = await requireUser("company.archive");
+  const res = await attempt(async () => {
+    if (fields(fd).str("confirm") !== me.company.name) throw new FormError(`Type ${me.company.name} exactly to confirm.`);
+    const [, withdrawn] = await rootDb.$transaction([
+      rootDb.company.update({ where: { id: me.company.id }, data: { archivedAt: new Date() } }),
+      rootDb.invite.deleteMany({ where: { companyId: me.company.id, acceptedAt: null } }),
+    ]);
+    await rootDb.auditLog.create({ data: { companyId: me.company.id, userId: me.id, action: "archive", entity: "company", entityId: me.company.id, details: `${me.company.name} archived${withdrawn.count ? `; ${withdrawn.count} open invitation${withdrawn.count === 1 ? "" : "s"} withdrawn` : ""}` } });
+    await writeActive(me.id, null);
+    forgetSessions();
+  });
+  if (res?.error) return res;
+  redirect("/select");
+}
+
 /** Delete the active company and everything in it. Owners only, and they must type the name. */
 export async function deleteCompany(_: ActionState, fd: FormData): Promise<ActionState> {
   const me = await requireUser("company.delete");

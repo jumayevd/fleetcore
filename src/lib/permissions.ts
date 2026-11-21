@@ -28,6 +28,8 @@ export const PERMISSIONS = {
   "defects.delete": ADMINS,
   /** Undo a week's walk-around (its video mark, review, Soon / Now marks and the defects it raised): back to Nothing sent. */
   "walkarounds.reset": ADMINS,
+  /** Archive the company when its contract ends: everything is kept, members lose access, a platform owner restores it. */
+  "company.archive": ADMINS,
   "company.delete": ["OWNER"],
 } as const satisfies Record<string, readonly Role[]>;
 
