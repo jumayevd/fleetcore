@@ -5,7 +5,8 @@ import { rootDb } from "@/lib/db-root";
 import { getSessionContext } from "@/lib/session";
 
 /*
- * Platform owners run FleetCore itself (User.platformRole = "OWNER", set by an operator only). They belong to no
+ * Platform owners run FleetCore itself (User.platformRole = "OWNER", set by another platform owner in the console, or
+ * by an operator with scripts/password-link.mjs). They belong to no
  * company: the Platform console (/platform) lists every company and account, and they can open any company with an
  * owner's rights without being a member of it (src/lib/session.ts), so they never show in a company's member list.
  * What they do inside a company is in that company's audit log, under their name.

@@ -44,7 +44,7 @@ company who opens `/` goes straight to the app.
   a time: if another tab switches, the stale tab stops and asks before anything can be saved to the wrong company.
 - Roles are per company: **Owner** (everything, incl. owners and deleting the company), **Admin** (everything except
   owners), **Fleet specialist** (all fleet work), **View only**.
-- **Platform owners** run FleetCore itself (`User.platformRole = "OWNER"`, set by an operator only). They belong to no
+- **Platform owners** run FleetCore itself (`User.platformRole = "OWNER"`, set by another platform owner with "Make platform owner" in the console, or by an operator). They belong to no
   company: the **Platform console** (`/platform`) lists every company (size, TrackPro, last activity), every account
   and every open invitation. They can **open** any company and work in it with an owner's rights without being a
   member, so they don't show in its member list; what they do is in its audit log under their name

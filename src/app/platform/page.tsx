@@ -11,7 +11,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { CompanyBadge } from "@/components/workspace-switcher";
 import { Wordmark } from "@/components/brand";
 import { ROLE_TONE } from "../(app)/admin/shared";
-import { ArchiveCompanyButton, CompanyCreatorToggle, PasswordLinkButton } from "./controls";
+import { ArchiveCompanyButton, CompanyCreatorToggle, PasswordLinkButton, PlatformOwnerToggle } from "./controls";
 import { NewCompanyForm } from "../select/forms";
 
 export const metadata = { title: "Platform console" };
@@ -189,6 +189,7 @@ export default async function PlatformPage() {
                 <td className="text-right">
                   {u.active && (
                     <span className="inline-flex items-start justify-end gap-1">
+                      {u.id !== me.id && <PlatformOwnerToggle userId={u.id} email={u.email} owner={Boolean(u.platformRole)} />}
                       {!u.platformRole && <CompanyCreatorToggle userId={u.id} email={u.email} allowed={u.canCreateCompanies} />}
                       <PasswordLinkButton userId={u.id} email={u.email} />
                     </span>

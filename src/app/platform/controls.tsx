@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Archive, ArchiveRestore, Building2, Check, Copy, KeyRound } from "lucide-react";
-import { makePasswordLink, setCompanyArchived, setCompanyCreator } from "@/app/actions/platform";
+import { Archive, ArchiveRestore, Building2, Check, Copy, KeyRound, ShieldCheck, ShieldOff } from "lucide-react";
+import { makePasswordLink, setCompanyArchived, setCompanyCreator, setPlatformOwner } from "@/app/actions/platform";
 import { buttonClass, cn, inputClass } from "@/components/ui";
 
 /** Archive a company (contract ended; every row is kept) or restore it. */
@@ -25,6 +25,32 @@ export function ArchiveCompanyButton({ companyId, name, archived }: { companyId:
           });
         }}>
         {archived ? <ArchiveRestore /> : <Archive />}{pending ? "Saving…" : archived ? "Restore" : "Archive"}
+      </button>
+      {error && <span role="alert" className="max-w-56 text-[11px] text-danger">{error}</span>}
+    </span>
+  );
+}
+
+/** Make an account a platform owner, or take that away. */
+export function PlatformOwnerToggle({ userId, email, owner }: { userId: string; email: string; owner: boolean }) {
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  return (
+    <span className="inline-flex flex-col items-end gap-1">
+      <button type="button" disabled={pending} aria-pressed={owner} className={buttonClass("ghost", "sm")}
+        title={owner ? `Take platform owner from ${email}` : `Make ${email} a platform owner`}
+        onClick={() => {
+          const question = owner
+            ? `Take platform owner from ${email}? They lose this console and keep only their own company memberships.`
+            : `Make ${email} a platform owner?\n\nThey will see every company and account here, can open any company with an owner's rights, archive and restore companies, and make other platform owners.`;
+          if (!window.confirm(question)) return;
+          setError(null);
+          start(async () => {
+            const res = await setPlatformOwner(userId, !owner);
+            if (res.error) setError(res.error);
+          });
+        }}>
+        {owner ? <ShieldOff /> : <ShieldCheck />}{pending ? "Saving…" : owner ? "Remove platform owner" : "Make platform owner"}
       </button>
       {error && <span role="alert" className="max-w-56 text-[11px] text-danger">{error}</span>}
     </span>

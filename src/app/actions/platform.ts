@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { rootDb } from "@/lib/db-root";
 import { forgetSessions, writeActive } from "@/lib/session";
-import { createPasswordLink, requirePlatformOwner } from "@/lib/platform";
+import { createPasswordLink, PLATFORM_OWNER, requirePlatformOwner } from "@/lib/platform";
 
 /*
  * The Platform console (/platform): platform owners only. Opening a company, making password links and allowing an
@@ -42,6 +42,26 @@ export async function setCompanyCreator(userId: string, allowed: boolean): Promi
   revalidatePath("/platform");
   revalidatePath("/select");
   return { ok: allowed ? `${user.email} can create companies` : `${user.email} can no longer create companies` };
+}
+
+/**
+ * Make an account a platform owner (it can then see every company and account, open any company, and archive or
+ * restore companies), or take that away. You can't take it from yourself, so there is always at least one.
+ */
+export async function setPlatformOwner(userId: string, owner: boolean): Promise<{ ok?: string; error?: string }> {
+  const me = await requirePlatformOwner();
+  const user = await rootDb.user.findUnique({ where: { id: userId }, select: { id: true, email: true, active: true, platformRole: true } });
+  if (!user) return { error: "This account no longer exists. Refresh the page." };
+  if (!owner && user.id === me.id) return { error: "You can't take platform owner from yourself. Another platform owner can." };
+  if (owner && !user.active) return { error: "This account is switched off." };
+  if ((user.platformRole === PLATFORM_OWNER) !== owner) {
+    await rootDb.user.update({ where: { id: user.id }, data: { platformRole: owner ? PLATFORM_OWNER : null } });
+    await rootDb.auditLog.create({ data: { companyId: null, userId: me.id, action: owner ? "platform_owner" : "platform_owner_removed", entity: "user", entityId: user.id, details: `${user.email}: ${owner ? "made platform owner" : "no longer platform owner"}` } });
+  }
+  forgetSessions();
+  revalidatePath("/platform");
+  revalidatePath("/select");
+  return { ok: owner ? `${user.email} is a platform owner` : `${user.email} is no longer a platform owner` };
 }
 
 /** A one-time link for an account to set its password (valid 3 days). Shown once; send it to the person yourself. */
