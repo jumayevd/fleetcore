@@ -8,7 +8,10 @@ import {
 import { cn } from "@/components/ui";
 import { getSessionContext } from "@/lib/session";
 import { HOME } from "@/lib/permissions";
-import { CtaBand, Eyebrow, SectionHead, Shot, bigButton } from "./parts";
+import { CtaBand, Eyebrow, SectionHead, bigButton } from "./parts";
+import { Tour } from "./tour";
+import { MockStage } from "./mock/stage";
+import { AssistantScene, InspectionsScene, MapScene, OilScene, RepairsScene, ReportsScene, TodayScene } from "./mock/scenes";
 
 export const metadata: Metadata = {
   title: { absolute: "FleetCore: fleet maintenance and compliance for trucking companies" },
@@ -27,37 +30,43 @@ const FEATURES = [
     eyebrow: "Today", title: "One list of what needs a decision today",
     text: "Every morning FleetCore puts overdue oil changes, expired papers, open defects, late shops and missing walk-arounds in one list, with the next action on each row. Clear the list and your fleet is in order.",
     points: ["Overdue first, then due today, then this week", "One click to book, renew, chase or assign", "Filters by oil, shop, documents, PTI, drivers"],
-    shot: "/site/alerts.webp", alt: "Needs attention: oil changes overdue, out-of-service defects, expired registrations and DOT corrections, each with its next action",
+    scene: TodayScene,
   },
   {
     eyebrow: "Preventive maintenance", title: "Oil changes by odometer, not by memory",
     text: "Set the interval per truck type. FleetCore reads the odometer from your ELD and shows how many miles each truck has used, which are over, and which shop did the last service.",
     points: ["Intervals by truck type or per truck", "Odometer, engine hours and fuel from TrackPro", "Book the service straight from the overdue row"],
-    shot: "/site/oil.webp", alt: "Oil changes: each truck with its interval, miles used, due odometer and status",
+    scene: OilScene,
   },
   {
     eyebrow: "Repairs", title: "Every repair, from booked to back on the road",
     text: "Open a repair in seconds: truck, shop, what's wrong. Track it through booked, in the shop, waiting for parts and done, with the promised date, downtime and the invoice lines.",
     points: ["Downtime and promised dates, late shops flagged", "Invoice lines by system: brakes, engine, tires, labor", "Cost per truck, per mile and per kind of truck"],
-    shot: "/site/workorders.webp", alt: "Repairs list with stages, shops, promised dates and costs",
+    scene: RepairsScene,
   },
   {
     eyebrow: "Inspections", title: "Weekly walk-arounds and defects with an owner",
     text: "Drivers send a walk-around every week. Your team reviews it, rates it, and turns anything wrong into a defect with an owner and a due date, out of service if it has to be.",
     points: ["Pre-trip board: who sent, who's missing", "Defects with owner, due date and repair link", "Roadside inspections and DOT corrections tracked"],
-    shot: "/site/inspections.webp", alt: "Pre-trip board showing each truck's weekly walk-around status",
+    scene: InspectionsScene,
   },
   {
     eyebrow: "Live fleet", title: "Where every truck is, and how much fuel it has",
     text: "Connect your ELD and FleetCore keeps each truck's position, odometer and fuel level current. The map shows the fleet; the truck page shows the history.",
     points: ["Live map with last position and speed", "Odometer and engine hours update on their own", "Works with TrackPro today"],
-    shot: "/site/tracking.webp", alt: "Live map of the fleet with truck positions",
+    scene: MapScene,
   },
   {
     eyebrow: "Reports", title: "Know what each truck costs you",
     text: "Maintenance spend by month, by truck, by shop and by kind of repair. See which trucks eat the budget and which shops you use the most, and export it for the accountant.",
     points: ["Spend this month against last month", "Cost per mile and per truck type", "Export to CSV for Excel"],
-    shot: "/site/reports.webp", alt: "Reports with maintenance spend by month and by truck",
+    scene: ReportsScene,
+  },
+  {
+    eyebrow: "AI assistant", title: "Ask your fleet a question, get the answer",
+    text: "“Which trucks are due for oil this week?” “What did 2207 cost us this year?” The assistant answers from your own fleet data in seconds, and can book, remind or assign straight from the answer.",
+    points: ["Plain-language questions about trucks, repairs, papers and costs", "Answers from your data, not the internet", "Included in the Standard + AI plan"],
+    scene: AssistantScene,
   },
 ];
 
@@ -97,12 +106,12 @@ export default async function HomePage() {
             </p>
             <div className="mt-9 flex flex-wrap gap-3">
               <Link href="/demo" className={bigButton()}>Open the live demo<ArrowRight /></Link>
-              <Link href="/contact" className={bigButton("secondary")}>Book a walkthrough</Link>
+              <Link href="/pricing" className={bigButton("secondary")}>See pricing</Link>
             </div>
-            <p className="mt-4 text-[13px] text-fg-subtle">No sign-up. A real fleet with trucks, drivers, repairs and defects to click through.</p>
+            <p className="mt-4 text-[13px] text-fg-subtle">No sign-up. The tour below plays by itself, or open the demo fleet and click around.</p>
           </div>
           <div className="mt-14 sm:mt-16">
-            <Shot src="/site/dashboard.webp" alt="FleetCore Today screen: oil due, defects, walk-arounds missing, papers holding dispatch, trucks in the shop" priority />
+            <Tour />
           </div>
         </div>
       </section>
@@ -158,7 +167,7 @@ export default async function HomePage() {
                     ))}
                   </ul>
                 </div>
-                <Shot src={f.shot} alt={f.alt} className={i % 2 ? "lg:order-1" : undefined} />
+                <MockStage className={i % 2 ? "lg:order-1" : undefined}><f.scene /></MockStage>
               </div>
             ))}
           </div>

@@ -1,23 +1,10 @@
 import type { ReactNode } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { buttonClass, cn } from "@/components/ui";
 
 /** A big call-to-action button (the app's buttons are sized for dense screens). */
 export const bigButton = (variant: "accent" | "secondary" = "accent") => cn(buttonClass(variant), "h-11 rounded-[10px] px-5 text-[15px]");
-
-/** A product screen in a quiet window frame. Screens are 1600×1000 night-theme captures (public/site). */
-export function Shot({ src, alt, priority, className }: { src: string; alt: string; priority?: boolean; className?: string }) {
-  return (
-    <div className={cn("overflow-hidden rounded-xl border border-line bg-[#0b0d12] shadow-float", className)}>
-      <div aria-hidden className="flex h-7 items-center gap-1.5 border-b border-white/8 px-3">
-        <span className="h-2.5 w-2.5 rounded-full bg-white/15" /><span className="h-2.5 w-2.5 rounded-full bg-white/15" /><span className="h-2.5 w-2.5 rounded-full bg-white/15" />
-      </div>
-      <Image src={src} alt={alt} width={1600} height={1000} priority={priority} sizes="(min-width: 1024px) 720px, 100vw" className="block h-auto w-full" />
-    </div>
-  );
-}
 
 export function Eyebrow({ children, className }: { children: ReactNode; className?: string }) {
   return <p className={cn("text-[12px] font-semibold uppercase tracking-[0.12em] text-accent-text", className)}>{children}</p>;
@@ -44,11 +31,11 @@ export function CtaBand() {
             See your next missed oil change before it happens.
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-[16px] leading-7 text-fg-muted">
-            Open a real fleet in FleetCore right now. No sign-up, no card: click around, add a repair, close a defect.
+            Watch the one-minute tour, then open a real fleet and click around. No sign-up, no card.
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             <Link href="/demo" className={bigButton()}>Open the live demo<ArrowRight /></Link>
-            <Link href="/contact" className={bigButton("secondary")}>Talk to us</Link>
+            <Link href="/pricing" className={bigButton("secondary")}>See pricing</Link>
           </div>
         </div>
       </div>

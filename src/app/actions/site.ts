@@ -10,7 +10,7 @@ import { PLANS } from "@/lib/site";
 
 /** /demo → "Open the live demo": sign this browser in to the shared demo account and go to its fleet. */
 export async function openDemo() {
-  if (!isDemoEnabled()) redirect("/contact?topic=demo");
+  if (!isDemoEnabled()) redirect("/demo");
   const { companyId, visitorId } = await demoWorkspace();
   await addAccount(visitorId);
   await writeActive(visitorId, companyId);

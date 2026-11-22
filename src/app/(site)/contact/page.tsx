@@ -16,7 +16,7 @@ export default async function ContactPage({ searchParams }: PageProps<"/contact"
   const plan = PLANS.find((p) => p.id === planId);
   const demo = sp.topic === "demo";
   const intro = plan
-    ? `You picked ${plan.name} (${plan.trucks.toLowerCase()}). Tell us a little about your fleet and we'll get you set up.`
+    ? `You picked ${plan.name}. Tell us a little about your fleet and we'll get you set up.`
     : demo
       ? "Tell us when suits you and we'll show you FleetCore on your own kind of fleet."
       : "Pricing, a walkthrough, moving your data in, or just a question: write to us.";

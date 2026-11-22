@@ -12,12 +12,12 @@ import { DEMO_EMAIL, DEMO_OWNER_EMAIL } from "./shared";
  *  - Visitors all sign in as the same account (DEMO_EMAIL) with the Specialist role: they can add and edit trucks,
  *    repairs, defects and papers, but can't invite people, change company settings or delete the company.
  *  - That account can't change its password or profile, connect a mailbox or use the AI assistant (see isDemoEmail).
- *  - Off unless DEMO_ENABLED=true, so a fresh install never writes demo data into its database by surprise.
+ *  - On unless DEMO_ENABLED=false (set that on an install that must never hold demo data).
  *
  * Neither demo account has a known password: nobody can sign in to them on the login page.
  */
 
-export const isDemoEnabled = () => process.env.DEMO_ENABLED === "true";
+export const isDemoEnabled = () => process.env.DEMO_ENABLED !== "false";
 
 const DEMO_COMPANY = "Demo Freight Co.";
 
