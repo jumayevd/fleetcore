@@ -25,6 +25,13 @@ export default async function SignupPage({ searchParams }: PageProps<"/signup">)
           <p className="mt-4 rounded-md bg-warn-soft px-3 py-2 text-[12px] text-warn">This invitation link has expired or was already used. Ask for a new one.</p>
         )}
         {usable && <SignupForm invite={{ token: usable.token, email: usable.email }} />}
+        {!usable && (
+          <div className="mt-5 rounded-lg border border-line bg-raised px-4 py-3 text-[13px] text-fg-muted">
+            <p className="font-medium text-fg">Setting up FleetCore for your own company?</p>
+            <p className="mt-1">Tell us about your fleet and we&apos;ll set up your workspace.</p>
+            <Link href="/contact" className="mt-2 inline-block font-medium text-accent-text hover:underline">Get started</Link>
+          </div>
+        )}
         <p className="mt-5 border-t border-line pt-4 text-[12px] text-fg-muted">
           Already have an account?{" "}
           <Link href={usable ? `/login?invite=${encodeURIComponent(usable.token)}` : "/login"} className="font-medium text-accent-text hover:underline">Sign in</Link>

@@ -8,9 +8,11 @@ import {
 import { cn } from "@/components/ui";
 import { getSessionContext } from "@/lib/session";
 import { HOME } from "@/lib/permissions";
+import { isDemoEmail } from "@/lib/demo/shared";
 import { CtaBand, Eyebrow, SectionHead, bigButton } from "./parts";
 import { ProductVideo } from "./video";
 import { MockStage } from "./mock/stage";
+import { Reveal } from "./reveal";
 import { AssistantScene, InspectionsScene, MapScene, OilScene, RepairsScene, ReportsScene, TodayScene } from "./mock/scenes";
 
 export const metadata: Metadata = {
@@ -83,9 +85,10 @@ const MORE = [
 ];
 
 export default async function HomePage() {
-  // Signed in and working in a company: the home page opens the app.
+  // Signed in and working in a company: the home page opens the app. Not for the shared demo account, so someone who
+  // tried the demo can still read the site and log in to their own fleet.
   const { active } = await getSessionContext();
-  if (active) redirect(HOME);
+  if (active && !isDemoEmail(active.user.email)) redirect(HOME);
 
   return (
     <>
@@ -155,19 +158,19 @@ export default async function HomePage() {
           <div className="mt-20 space-y-24">
             {FEATURES.map((f, i) => (
               <div key={f.title} className={cn("grid items-center gap-10 lg:gap-14", i % 2 ? "lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]" : "lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]")}>
-                <div className={i % 2 ? "lg:order-2" : undefined}>
+                <Reveal className={i % 2 ? "lg:order-2" : undefined}>
                   <Eyebrow>{f.eyebrow}</Eyebrow>
-                  <h3 className="mt-3 text-balance text-[26px] font-semibold leading-tight tracking-[-0.02em]">{f.title}</h3>
-                  <p className="mt-4 text-[15px] leading-7 text-fg-muted">{f.text}</p>
-                  <ul className="mt-5 space-y-2.5">
-                    {f.points.map((p) => (
-                      <li key={p} className="flex gap-2.5 text-[14px]">
-                        <ClipboardCheck className="mt-0.5 h-4 w-4 shrink-0 text-accent" />{p}
+                  <h3 className="mt-3 text-balance text-[26px] font-semibold leading-tight tracking-[-0.02em]" style={{ transitionDelay: "80ms" }}>{f.title}</h3>
+                  <p className="mt-4 text-[15px] leading-7 text-fg-muted" style={{ transitionDelay: "160ms" }}>{f.text}</p>
+                  <ul className="mt-5 space-y-2.5" style={{ transitionDelay: "240ms" }}>
+                    {f.points.map((p, j) => (
+                      <li key={p} className="flex gap-2.5 text-[14px]" style={{ transitionDelay: `${380 + j * 120}ms` }}>
+                        <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent"><ClipboardCheck className="h-3 w-3" /></span>{p}
                       </li>
                     ))}
                   </ul>
-                </div>
-                <MockStage className={i % 2 ? "lg:order-1" : undefined}><f.scene /></MockStage>
+                </Reveal>
+                <MockStage side={i % 2 ? "left" : "right"} className={i % 2 ? "lg:order-1" : undefined}><f.scene /></MockStage>
               </div>
             ))}
           </div>

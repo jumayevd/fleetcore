@@ -467,9 +467,36 @@ input[type="time"] {
 .m-draw { stroke-dasharray: var(--len, 600); animation: m-draw 2.2s ease-out backwards; }
 .m-blink { animation: m-blink 1.2s ease-in-out infinite; }
 
+/* Stage motion (MockStage): scroll fly-in and pointer tilt come in as custom properties. */
+@property --spin { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+@keyframes m-spin { to { --spin: 360deg; } }
+@keyframes m-replay { from { opacity: 0.35; filter: blur(2px); } to { opacity: 1; filter: none; } }
+.mock-card {
+  transform: translateY(var(--ty, 0)) rotateX(var(--rx, 0)) rotateY(var(--ry, 0)) scale(var(--sc, 1));
+  opacity: var(--op, 1);
+  transform-style: preserve-3d;
+  will-change: transform;
+  transition: transform 0.12s linear, opacity 0.2s linear;
+}
+.mock-tilt[data-hover] .mock-card { transition: transform 0.35s cubic-bezier(0.2, 0.7, 0.2, 1); }
+.mock-glare {
+  background: radial-gradient(40% 50% at var(--gx, 50%) var(--gy, 30%), rgba(255, 255, 255, 0.35), transparent 70%);
+  opacity: 0; transition: opacity 0.4s ease; mix-blend-mode: soft-light;
+}
+.mock-tilt[data-hover] .mock-glare { opacity: 1; }
+.mock-glow { background: conic-gradient(from var(--spin), #6366f1, #22d3ee, #a855f7, #f472b6, #6366f1); animation: m-spin 14s linear infinite; }
+.mock-replay { animation: m-replay 0.5s ease-out; }
+
+/* Feature copy beside a stage slides in line by line (Reveal sets data-inview). */
+.reveal > * { opacity: 0; transform: translateY(18px); transition: opacity 0.7s cubic-bezier(0.2, 0.7, 0.2, 1), transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1); }
+.reveal[data-inview] > * { opacity: 1; transform: none; }
+.reveal li { opacity: 0; transform: translateX(-14px); transition: opacity 0.5s ease, transform 0.5s cubic-bezier(0.2, 0.7, 0.2, 1); }
+.reveal[data-inview] li { opacity: 1; transform: none; }
+
 /* Mock-ups below the fold wait until they scroll into view (MockStage sets data-inview). */
 .mock-stage:not([data-inview]) :is(.m-rise, .m-pop, .m-grow, .m-grow-y, .m-type, .m-draw) { animation-play-state: paused; }
 
 @media (prefers-reduced-motion: reduce) {
-  .m-rise, .m-pop, .m-grow, .m-grow-y, .m-float, .m-ping, .m-type, .m-drive, .m-draw, .m-blink { animation: none; }
+  .m-rise, .m-pop, .m-grow, .m-grow-y, .m-float, .m-ping, .m-type, .m-drive, .m-draw, .m-blink, .mock-glow, .mock-replay { animation: none; }
+  .reveal > *, .reveal li { opacity: 1; transform: none; transition: none; }
 }

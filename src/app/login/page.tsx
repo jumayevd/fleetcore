@@ -5,6 +5,7 @@ import { rootDb } from "@/lib/db-root";
 import { getSessionContext, listWorkspaces } from "@/lib/session";
 import { HOME } from "@/lib/permissions";
 import { ROLE_LABELS, isRole } from "@/lib/constants";
+import { isDemoEmail } from "@/lib/demo/shared";
 import { AuthCard, AuthFrame } from "./frame";
 import { LoginForm } from "./login-form";
 
@@ -24,7 +25,10 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const adding = str(sp.add) === "1";
   const token = str(sp.invite);
   const ctx = await getSessionContext();
-  if (!adding && !token) {
+  // Already signed in: straight to work. Not when the only session is the shared live-demo account: then show the form,
+  // so someone who tried the demo can log in to their own fleet.
+  const onlyDemo = ctx.active ? isDemoEmail(ctx.active.user.email) && ctx.accounts.length === 1 : false;
+  if (!adding && !token && !onlyDemo) {
     if (ctx.active) redirect(HOME);
     if (ctx.accounts.length) redirect("/select");
   }
@@ -63,7 +67,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
         <p className="mt-5 border-t border-line pt-4 text-[12px] text-fg-muted">
           {usable
             ? <>No FleetCore account for this email yet? <Link href={signupHref!} className="font-medium text-accent-text hover:underline">Create one and join</Link></>
-            : "New to FleetCore? Accounts are by invitation: ask the company you work for to send you a link."}
+            : <>New to FleetCore? <Link href="/signup" className="font-medium text-accent-text hover:underline">Sign up</Link></>}
         </p>
       </AuthCard>
     </AuthFrame>

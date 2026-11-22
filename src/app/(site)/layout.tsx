@@ -2,22 +2,18 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { Wordmark } from "@/components/brand";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { getSessionContext } from "@/lib/session";
-import { HOME } from "@/lib/permissions";
 import { SITE } from "@/lib/site";
 import { SiteNav } from "./nav";
 
 /** The public site: product, pricing, live demo and contact. Inter throughout, whatever font the app is set to. */
-export default async function SiteLayout({ children }: { children: ReactNode }) {
-  const { accounts, active } = await getSessionContext();
-  const signedIn = accounts.length > 0;
+export default function SiteLayout({ children }: { children: ReactNode }) {
   const year = new Date().getFullYear();
   return (
     <div className="flex min-h-dvh flex-col bg-canvas text-fg" style={{ fontFamily: "var(--font-inter), ui-sans-serif, system-ui, sans-serif" }}>
       <header className="sticky top-0 z-40 border-b border-line/70 bg-canvas/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center gap-6 px-5">
           <Link href="/" aria-label="FleetCore home" className="shrink-0"><Wordmark className="h-[26px]" /></Link>
-          <SiteNav signedIn={signedIn} appHref={active ? HOME : "/select"} />
+          <SiteNav />
         </div>
       </header>
 
@@ -33,7 +29,7 @@ export default async function SiteLayout({ children }: { children: ReactNode }) 
           </div>
           <FooterCol title="Product" links={[["/#features", "Features"], ["/pricing", "Pricing"], ["/demo", "Live demo"]]} />
           <FooterCol title="Company" links={[["/contact", "Contact"], ...(SITE.email ? [[`mailto:${SITE.email}`, SITE.email] as [string, string]] : [])]} />
-          <FooterCol title="Account" links={signedIn ? [[active ? HOME : "/select", "Open FleetCore"]] : [["/login", "Sign in"]]} />
+          <FooterCol title="Account" links={[["/login", "Log in"], ["/signup", "Sign up"]]} />
         </div>
         <div className="border-t border-line">
           <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-5 py-5 text-[12px] text-fg-subtle">

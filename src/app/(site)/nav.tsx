@@ -8,14 +8,17 @@ import { buttonClass, cn } from "@/components/ui";
 
 const LINKS = [["/#features", "Product"], ["/pricing", "Pricing"], ["/demo", "Live demo"], ["/contact", "Contact"]] as const;
 
-/** Site header links and buttons; a menu on phones. */
-export function SiteNav({ signedIn, appHref }: { signedIn: boolean; appHref: string }) {
+/** Site header links and buttons; a menu on phones. Log in takes people already signed in straight to their fleet. */
+export function SiteNav() {
   const path = usePathname();
   const [open, setOpen] = useState(false);
   const on = (href: string) => !href.includes("#") && path === href;
-  const account = signedIn
-    ? <Link href={appHref} className={buttonClass("secondary")}>Open FleetCore</Link>
-    : <Link href="/login" className={buttonClass("ghost")}>Sign in</Link>;
+  const account = (
+    <>
+      <Link href="/login" onClick={() => setOpen(false)} className={buttonClass("ghost")}>Log in</Link>
+      <Link href="/signup" onClick={() => setOpen(false)} className={buttonClass("secondary")}>Sign up</Link>
+    </>
+  );
   return (
     <>
       <nav aria-label="Site" className="hidden flex-1 items-center gap-1 md:flex">
@@ -41,7 +44,7 @@ export function SiteNav({ signedIn, appHref }: { signedIn: boolean; appHref: str
               <Link key={href} href={href} onClick={() => setOpen(false)} className="border-b border-line py-3 text-[15px] text-fg">{label}</Link>
             ))}
           </nav>
-          <div className="mt-4 flex gap-2">
+          <div className="mt-4 flex flex-wrap gap-2">
             {account}
             <Link href="/demo" onClick={() => setOpen(false)} className={buttonClass("accent")}>Try the live demo</Link>
           </div>
