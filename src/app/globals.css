@@ -455,7 +455,6 @@ input[type="time"] {
 @keyframes m-drive { from { offset-distance: 0%; } to { offset-distance: 100%; } }
 @keyframes m-draw { from { stroke-dashoffset: var(--len, 600); } to { stroke-dashoffset: 0; } }
 @keyframes m-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
-@keyframes tour-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
 .m-rise { animation: m-rise 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) backwards; }
 .m-pop { animation: m-pop 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) backwards; }
@@ -467,11 +466,9 @@ input[type="time"] {
 .m-drive { animation: m-drive 9s linear infinite; offset-rotate: 0deg; }
 .m-draw { stroke-dasharray: var(--len, 600); animation: m-draw 2.2s ease-out backwards; }
 .m-blink { animation: m-blink 1.2s ease-in-out infinite; }
-.tour-fill { transform-origin: left; animation: tour-fill linear forwards; }
 
 /* Mock-ups below the fold wait until they scroll into view (MockStage sets data-inview). */
 .mock-stage:not([data-inview]) :is(.m-rise, .m-pop, .m-grow, .m-grow-y, .m-type, .m-draw) { animation-play-state: paused; }
-.tour-paused .tour-fill { animation-play-state: paused; }
 
 @media (prefers-reduced-motion: reduce) {
   .m-rise, .m-pop, .m-grow, .m-grow-y, .m-float, .m-ping, .m-type, .m-drive, .m-draw, .m-blink { animation: none; }

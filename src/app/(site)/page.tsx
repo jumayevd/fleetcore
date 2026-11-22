@@ -9,7 +9,7 @@ import { cn } from "@/components/ui";
 import { getSessionContext } from "@/lib/session";
 import { HOME } from "@/lib/permissions";
 import { CtaBand, Eyebrow, SectionHead, bigButton } from "./parts";
-import { Tour } from "./tour";
+import { ProductVideo } from "./video";
 import { MockStage } from "./mock/stage";
 import { AssistantScene, InspectionsScene, MapScene, OilScene, RepairsScene, ReportsScene, TodayScene } from "./mock/scenes";
 
@@ -108,10 +108,10 @@ export default async function HomePage() {
               <Link href="/demo" className={bigButton()}>Open the live demo<ArrowRight /></Link>
               <Link href="/pricing" className={bigButton("secondary")}>See pricing</Link>
             </div>
-            <p className="mt-4 text-[13px] text-fg-subtle">No sign-up. The tour below plays by itself, or open the demo fleet and click around.</p>
+            <p className="mt-4 text-[13px] text-fg-subtle">No sign-up. Watch the one-minute video below, or open the demo fleet and click around.</p>
           </div>
           <div className="mt-14 sm:mt-16">
-            <Tour />
+            <ProductVideo />
           </div>
         </div>
       </section>

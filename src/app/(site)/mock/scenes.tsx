@@ -1,7 +1,6 @@
-import type { ReactNode } from "react";
 import {
   AlertTriangle, BarChart3, Calendar, Camera, CheckCircle2, ClipboardCheck, Clock, Download, Droplet, FileWarning, Fuel,
-  Gauge, LayoutDashboard, MapPin, Navigation, Receipt, Send, ShieldAlert, Sparkles, Star, Store, Truck, Wrench, type LucideIcon,
+  Gauge, MapPin, Navigation, Receipt, Send, ShieldAlert, Sparkles, Star, Store, Truck, Wrench, type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/components/ui";
 import { Btn, Float, MockWindow, PageTitle, Pill, at, toneBg, toneDot, type Tone } from "./frame";
@@ -460,17 +459,3 @@ export function AssistantScene() {
     </>
   );
 }
-
-/* ------------------------------------------------------------------ */
-
-export type SceneId = "today" | "oil" | "repairs" | "inspections" | "map" | "reports" | "assistant";
-
-export const SCENES: { id: SceneId; label: string; icon: LucideIcon; title: string; text: string; seconds: number; view: () => ReactNode }[] = [
-  { id: "today", label: "Today", icon: LayoutDashboard, title: "One list of what needs a decision", text: "Overdue oil, expiring papers, late shops, open defects and missing walk-arounds, with the next action on every row.", seconds: 7, view: TodayScene },
-  { id: "oil", label: "Oil changes", icon: Droplet, title: "Oil changes by odometer, not by memory", text: "Mileage comes from your ELD. FleetCore shows how much of the interval each truck has used and which are over.", seconds: 7, view: OilScene },
-  { id: "repairs", label: "Repairs", icon: Wrench, title: "Every repair, from booked to back on the road", text: "Shops, promised dates, downtime and the invoice lines, with late shops flagged so nobody has to chase from memory.", seconds: 7, view: RepairsScene },
-  { id: "inspections", label: "Walk-arounds", icon: ClipboardCheck, title: "Weekly walk-arounds and defects with an owner", text: "See who sent their pre-trip and who didn't. Anything wrong becomes a defect with an owner and a due date.", seconds: 7, view: InspectionsScene },
-  { id: "map", label: "Live map", icon: MapPin, title: "Where every truck is, and how much fuel it has", text: "Position, speed, odometer and fuel from your ELD, for the whole fleet on one map.", seconds: 7, view: MapScene },
-  { id: "reports", label: "Reports", icon: BarChart3, title: "Know what each truck costs you", text: "Spend by month, by kind of repair and by truck, cost per mile, and a CSV for the accountant.", seconds: 7, view: ReportsScene },
-  { id: "assistant", label: "AI assistant", icon: Sparkles, title: "Ask your fleet a question", text: "“Which trucks are due this week?” The assistant answers from your own data and can book the work for you.", seconds: 8, view: AssistantScene },
-];

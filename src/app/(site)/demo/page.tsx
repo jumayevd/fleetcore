@@ -3,12 +3,12 @@ import { Check, MousePointerClick, RotateCcw } from "lucide-react";
 import { isDemoEnabled } from "@/lib/demo";
 import { openDemo } from "@/app/actions/site";
 import { Eyebrow } from "../parts";
-import { Tour } from "../tour";
+import { ProductVideo } from "../video";
 import { DemoButton } from "./demo-button";
 
 export const metadata: Metadata = {
   title: "Live demo",
-  description: "Watch FleetCore run a real-looking fleet: today's list, oil changes, repairs, walk-arounds, the live map, reports and the AI assistant. No sign-up.",
+  description: "Watch FleetCore run a fleet in one minute: today's list, oil changes, repairs, walk-arounds, the live map and costs. Then open the demo fleet yourself. No sign-up.",
 };
 
 const TRY = [
@@ -30,10 +30,10 @@ export default function DemoPage() {
             <Eyebrow>Live demo</Eyebrow>
             <h1 className="mt-4 text-balance text-[36px] font-semibold leading-[1.08] tracking-[-0.03em] sm:text-[50px]">FleetCore in one minute.</h1>
             <p className="mt-4 text-[17px] leading-8 text-fg-muted">
-              The tour plays by itself. Pick a chapter to jump to it, or hover to hold it.
+              A walk through the demo fleet: today&apos;s list, oil changes, repairs, walk-arounds, the live map and costs.
             </p>
           </div>
-          <Tour className="mt-10" />
+          <ProductVideo className="mt-10" />
         </div>
       </section>
 
