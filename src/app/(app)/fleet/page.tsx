@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
-import { Archive, ChevronRight, CircleCheck, Container, Info, Plus, Store, TriangleAlert, Truck as TruckIcon, Users, Wrench, X } from "lucide-react";
+import { Archive, ChevronRight, CircleCheck, Container, Info, Plus, Store, TriangleAlert, Truck as TruckIcon, UserRound, Users, Wrench, X } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { db } from "@/lib/db";
@@ -20,6 +20,7 @@ import { TruckStatusPill } from "./status-pill";
 import { openDefects, openRepairs, statusRecorders, truckTypeOptions, unitDocRows } from "./data";
 import { inactiveInfo } from "./status-info";
 import { FINDINGS, FINDING_BY_KEY, isFinding, needsAction, truckFindings, type FindingKey } from "./findings";
+import { vendorSummary } from "@/lib/vendor-truck";
 import {
   docExpiryByUnit, docsByUnit, earliest, EXPIRY_SOON_DAYS, fuelTone, LIST_LIMIT, missingDocs, OWNERSHIP_SHORT, OWNERSHIP_TONE, pingStale,
   serviceSummary, sinceShort, TRUCK_STATUS_LABELS, TRUCK_VIEW_LABELS, TRUCK_VIEW_STATUSES, TRUCK_VIEWS, type TruckView,
@@ -89,7 +90,7 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
   const [all, docRows, defects, trailerCount, types, openWork, eldConnections] = await Promise.all([
     db.truck.findMany({
       select: {
-        id: true, status: true, isVendor: true, group: true, homeTerminal: true, driverId: true, ownership: true, truckTypeId: true,
+        id: true, status: true, isVendor: true, vendorName: true, vendorKeepPct: true, group: true, homeTerminal: true, driverId: true, ownership: true, truckTypeId: true,
         odometerKm: true, odometerAt: true, pmIntervalKm: true, lastPmKm: true, lastPmAt: true, nextServiceKm: true,
         insuranceExpiry: true, inspectionExpiry: true, registrationExpiry: true, lastPingAt: true,
         truckType: { select: { name: true, oilIntervalKm: true } },
@@ -156,6 +157,8 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
   const assigned = all.filter((t) => t.status === "ACTIVE" && t.driverId).length;
   // A vendor's truck also counts in its own status's tile (Available, Assigned, In shop, Inactive).
   const vendors = all.filter((t) => t.isVendor).length;
+  // Owner-operators in the fleet (Inactive ones sit under Inactive): the tile lists them with the Ownership filter.
+  const ownerOps = all.filter((t) => t.ownership === "OWNER_OPERATOR" && TRUCK_VIEW_STATUSES.fleet.includes(t.status)).length;
   const attentionCount = working.filter((t) => fact(t.id).flagged).length;
   // How many trucks have each finding (the cards of the Needs attention panel).
   const findingCounts = FINDINGS.map((d) => ({ ...d, count: working.filter((t) => fact(t.id).findings.includes(d.key)).length })).filter((d) => d.count > 0);
@@ -219,13 +222,13 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
   const filtered = Object.entries(params).some(([k, v]) => k !== "view" && v);
   // A counter filters the list to what it counts; a second click clears it.
   const counter = (on: boolean, href: string, node: React.ReactNode) => (
-    <Link href={on ? qs({ status: undefined, attention: undefined, view: undefined, driver: undefined, vendor: undefined }) : href} aria-current={on || undefined}
+    <Link href={on ? qs({ status: undefined, attention: undefined, view: undefined, driver: undefined, vendor: undefined, ownership: undefined }) : href} aria-current={on || undefined}
       className={cn("group block rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40", on && "ring-2 ring-accent/40")}>
       {node}
     </Link>
   );
   const tileClass = "h-full transition-[border-color,box-shadow] group-hover:border-line-strong group-hover:shadow-lift";
-  const only = (patch: Partial<typeof params>) => qs({ status: undefined, attention: undefined, view: undefined, driver: undefined, vendor: undefined, ...patch });
+  const only = (patch: Partial<typeof params>) => qs({ status: undefined, attention: undefined, view: undefined, driver: undefined, vendor: undefined, ownership: undefined, ...patch });
   const statusChip = status === "ACTIVE" ? (driver === "none" ? "Available" : driver === "assigned" ? "Assigned" : "In service") : status ? TRUCK_STATUS_LABELS[status] : null;
   const chipClass = "inline-flex h-7 items-center gap-1 rounded-full bg-accent-soft px-2.5 text-[12px] font-medium text-accent-text hover:opacity-80";
   const col = (key: string, label: React.ReactNode) => <span key={key} data-col={key} className="inline-flex items-center gap-1">{label}</span>;
@@ -243,7 +246,7 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
         }
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 2xl:grid-cols-6">
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4 2xl:grid-cols-7">
         {counter(status === "ACTIVE" && driver === "none", only({ status: "ACTIVE", driver: "none" }),
           <Stat className={tileClass} label="Available" value={available} icon={<CircleCheck />} tone="ok" />)}
         {counter(status === "ACTIVE" && driver === "assigned", only({ status: "ACTIVE", driver: "assigned" }),
@@ -256,6 +259,8 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
           <Stat className={tileClass} label="Needs attention" value={attentionCount} icon={<TriangleAlert />} tone={attentionCount ? "danger" : "ok"} />)}
         {counter(Boolean(vendor) && !status, only({ vendor: "1" }),
           <Stat className={tileClass} label="Vendor" value={vendors} icon={<Store />} tone={vendors ? "progress" : "neutral"} />)}
+        {counter(ownership === "OWNER_OPERATOR" && !status && !vendor && view === "fleet", only({ ownership: "OWNER_OPERATOR" }),
+          <Stat className={tileClass} label="Owner-operators" value={ownerOps} icon={<UserRound />} tone={ownerOps ? "info" : "neutral"} />)}
       </div>
 
       {attention && (
@@ -268,8 +273,7 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
             key: v, label: TRUCK_VIEW_LABELS[v], count: viewCount(v), href: qs({ view: v === "fleet" ? undefined : v, status: undefined, vendor: undefined }),
           }))} />
           {status && status !== "INACTIVE" && <Link href={qs({ status: undefined, ...(status === "ACTIVE" ? { driver: undefined } : {}) })} className={chipClass}>{statusChip}<X className="h-3 w-3" /></Link>}
-          {vendor && <Link href={qs({ vendor: undefined })} className={chipClass}>Vendor<X className="h-3 w-3" /></Link>}
-          {attention && (
+          {vendor && <Link href={qs({ vendor: undefined })} className={chipClass}>Vendor<X className="h-3 w-3" /></Link>}          {attention && (
             <Link href={qs({ attention: undefined })} className={chipClass}>
               {attention === "1" ? "Needs attention" : FINDING_BY_KEY[attention].short}<X className="h-3 w-3" />
             </Link>
@@ -344,11 +348,21 @@ export default async function FleetPage({ searchParams }: PageProps<"/fleet">) {
                           })()}
                         </span>
                       }
-                      secondary={<span title={`${t.year} ${t.make} ${t.model}`}><span className="num">{t.year}</span> {t.make} {t.model}</span>} />
+                      secondary={
+                        <>
+                          {/* A vendor truck: whose it is, between the unit and the vehicle. */}
+                          {t.isVendor && (
+                            <span className="block truncate font-medium text-progress" title={`Vendor truck: ${vendorSummary(t)}`}>
+                              Vendor · {t.vendorName ?? "owner not recorded"}
+                            </span>
+                          )}
+                          <span className="block truncate" title={`${t.year} ${t.make} ${t.model}`}><span className="num">{t.year}</span> {t.make} {t.model}</span>
+                        </>
+                      } />
                   </td>
                   <td data-col="type" className="whitespace-nowrap text-fg-muted">{t.truckType?.name ?? <span className="text-fg-faint">No type</span>}</td>
                   <td data-col="status">
-                    <TruckStatusPill id={t.id} unitNumber={t.unitNumber} status={t.status} hasDriver={Boolean(t.driverId)} isVendor={t.isVendor} editable={editable} today={today}
+                    <TruckStatusPill id={t.id} unitNumber={t.unitNumber} status={t.status} hasDriver={Boolean(t.driverId)} isVendor={t.isVendor} vendorName={t.vendorName} vendorKeepPct={t.vendorKeepPct} editable={editable} today={today}
                       scheduled={r && r.status !== "IN_PROGRESS" ? [{ id: r.id, number: r.number, title: r.title, when: f.day(r.scheduledAt) }] : []}
                       inactive={t.status === "INACTIVE" ? inactiveInfo(t, f, recorders.get(t.id)) : null} />
                     {t.status === "INACTIVE" && (t.statusReason || t.statusSince) && (

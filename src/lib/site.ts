@@ -44,6 +44,28 @@ export const PLANS: Plan[] = [
   },
 ];
 
+/** The outsourced fleet service (/fleet-service): our team runs the maintenance side of the fleet for the customer. */
+export const SERVICE = {
+  id: "service",
+  name: "Fleet service",
+  provides: [
+    "Oil changes", "Valve adjustments", "DOT inspections", "Weekly PTI coordination and control",
+    "Daily breakdowns: shops, roadside, dealers, towing", "Warranty claims", "Repairs and disputes for leased trucks",
+    "Daily, weekly and monthly cost tracking, analysis and reports", "Service history reports",
+  ],
+  /** Monthly price per truck by fleet size; null: agreed case by case. */
+  tiers: [
+    { trucks: "1–20 trucks", bobtail: 70, withTrailer: 80 },
+    { trucks: "21–50 trucks", bobtail: 60, withTrailer: 70 },
+    { trucks: "50+ trucks", bobtail: null, withTrailer: null },
+  ] as { trucks: string; bobtail: number | null; withTrailer: number | null }[],
+  /** Paying per case instead: the range per issue, depending on the case. */
+  perCase: { from: 50, to: 100 },
+};
+
+/** What the contact form's "Plan" offers: the software plans and the fleet service. */
+export const CONTACT_PLANS: { id: string; name: string }[] = [...PLANS.map((p) => ({ id: p.id, name: p.name })), { id: SERVICE.id, name: SERVICE.name }];
+
 /** What a plan costs a month for a fleet of this many trucks. */
 export const monthlyPrice = (plan: Plan, trucks: number) => (trucks <= FLAT_TRUCKS ? plan.flat : Math.round(trucks * plan.perTruck * 100) / 100);
 

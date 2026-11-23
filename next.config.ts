@@ -16,6 +16,12 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   // Dev only: the badge's default corner (bottom-left) covers the sidebar's collapse button.
   devIndicators: { position: "top-right" },
+  experimental: {
+    // Pages stay in the browser for a short while, so going back to one just opened shows it at once instead of
+    // waiting on the server (a round trip from Central Asia to fra1 is ~0.4 s). Saving anything refreshes them.
+    // static: also how long a sidebar page loaded on hover (prefetch={true}) is kept.
+    staleTimes: { dynamic: 30, static: 60 },
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

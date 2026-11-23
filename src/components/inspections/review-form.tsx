@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useRef, useState, useTransition } from "react";
-import { CheckCheck, Lock, RotateCcw, Video, VideoOff } from "lucide-react";
+import { CheckCheck, Lock, RotateCcw, Truck, Video, VideoOff } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Chip, Field, Input, Textarea, TONE_SOFT, buttonClass, cn, inputClass, type Tone } from "@/components/ui";
-import { PTI_COMPONENTS, PTI_RATINGS, PTI_RATING_LABELS } from "@/lib/constants";
+import { PTI_COMPONENTS, PTI_RATINGS, PTI_RATING_LABELS, PTI_TRAILER_COMPONENTS, PTI_TRAILER_SHORT_LABELS } from "@/lib/constants";
 import { defectLabel } from "@/lib/service";
 import {
   RATING_HINTS, RATING_SEVERITY, RATING_TONE, SEVERITY_SHORT, SEVERITY_TONE, VERDICTS, VERDICT_HINTS, VERDICT_LABELS, VERDICT_TONE,
@@ -32,6 +32,11 @@ export type ReviewFormProps = {
   receivedLabel: string | null;
   reviewed: { by: string | null; on: string; stamp: string } | null;
   notes: string;
+  /** The trailer this week's review recorded: one on file (id), or only its number. */
+  trailer: { id: string | null; number: string } | null;
+  /** Trailers on file to pick from, and the one paired with this truck (offered first). */
+  trailers: { id: string; unitNumber: string }[];
+  pairedTrailerId: string | null;
   ratings: Record<string, string>;
   /** Defects this walk-around already raised (a second save updates them instead of adding new ones); `resolved`: confirmed fixed. */
   thisWeek: Record<string, { number: number; description: string; severity: string; resolved: boolean }>;
@@ -89,24 +94,68 @@ function Section({ title, aside, children }: { title: string; aside?: React.Reac
   );
 }
 
+const ALL_COMPONENTS = [...PTI_COMPONENTS, ...PTI_TRAILER_COMPONENTS];
+
 export function ReviewForm(p: ReviewFormProps) {
   const [video, setVideo] = useState(p.video === "MISSING" ? "MISSING" : "RECEIVED");
   const [ratings, setRatings] = useState<Record<string, string>>(() =>
-    Object.fromEntries(PTI_COMPONENTS.map((c) => [c, p.ratings[c] ?? "GOOD"])));
+    Object.fromEntries(ALL_COMPONENTS.map((c) => [c, p.ratings[c] ?? "GOOD"])));
   const [descs, setDescs] = useState<Record<string, string>>(() =>
-    Object.fromEntries(PTI_COMPONENTS.map((c) => [c, p.thisWeek[c]?.description ?? ""])));
+    Object.fromEntries(ALL_COMPONENTS.map((c) => [c, p.thisWeek[c]?.description ?? ""])));
+  const [hasTrailer, setHasTrailer] = useState(Boolean(p.trailer));
+  const [trailerPick, setTrailerPick] = useState(p.trailer ? (p.trailer.id ?? "TYPED") : (p.pairedTrailerId ?? ""));
+  const [trailerNumber, setTrailerNumber] = useState(p.trailer && !p.trailer.id ? p.trailer.number : "");
+  /** What this review rates: the truck, and the trailer when it has one. */
+  const comps: readonly string[] = hasTrailer ? ALL_COMPONENTS : PTI_COMPONENTS;
   const [verdicts, setVerdicts] = useState<Record<string, Verdict>>(() => Object.fromEntries(p.earlier.map((d) => [d.id, "UNSEEN" as Verdict])));
   const after = useRef<HTMLInputElement>(null);
 
-  const counts = PTI_RATINGS.map((r) => [r, PTI_COMPONENTS.filter((c) => ratings[c] === r).length] as const).filter(([, n]) => n > 0);
+  const counts = PTI_RATINGS.map((r) => [r, comps.filter((c) => ratings[c] === r).length] as const).filter(([, n]) => n > 0);
   /** Earlier defects still open for a component once the verdicts are applied: rating it again keeps that one open. */
   const trackedFor = (c: string) => p.earlier.find((d) => d.component === c && verdicts[d.id] !== "FIXED");
   /** Soon / Now marks already saved this week stay on the record (only Soon → Now is still possible). */
   const allowedFor = (c: string) => allowedRatings(p.ratings[c], p.settled.includes(c));
   const lockedFor = (c: string) => allowedFor(c).length < PTI_RATINGS.length;
-  const allGood = PTI_COMPONENTS.every((c) => ratings[c] === "GOOD" || !allowedFor(c).includes("GOOD"));
-  const newNow = PTI_COMPONENTS.some((c) => ratings[c] === "NOW" && p.ratings[c] !== "NOW");
-  const recorded = Boolean(p.reviewed) && PTI_COMPONENTS.some(lockedFor);
+  const allGood = comps.every((c) => ratings[c] === "GOOD" || !allowedFor(c).includes("GOOD"));
+  const newNow = comps.some((c) => ratings[c] === "NOW" && p.ratings[c] !== "NOW");
+  const recorded = Boolean(p.reviewed) && ALL_COMPONENTS.some(lockedFor);
+  /** The trailer's Soon / Now marks stay on the record, so the trailer stays in the review. */
+  const trailerKept = Boolean(p.reviewed) && PTI_TRAILER_COMPONENTS.some(lockedFor);
+  const trailerName = trailerPick === "TYPED" ? trailerNumber.trim() : p.trailers.find((t) => t.id === trailerPick)?.unitNumber ?? "";
+
+  /** One component's row: its name, the rating pills, and what was seen when it is Soon / Now. */
+  const row = (c: string, label: string) => {
+    const r = ratings[c];
+    const bad = Boolean(RATING_SEVERITY[r]);
+    const own = p.thisWeek[c];
+    const tracked = trackedFor(c);
+    const allowed = allowedFor(c);
+    const locked = allowed.length < PTI_RATINGS.length;
+    const lockHint = own?.resolved
+      ? `Marked ${PTI_RATING_LABELS[p.ratings[c]]} this week and ${defectLabel(own.number)} is confirmed fixed: the mark stays on the record`
+      : !own && p.settled.includes(c) ? `Marked ${PTI_RATING_LABELS[p.ratings[c]]} this week; its defect was deleted: the mark stays on the record`
+        : `Marked ${PTI_RATING_LABELS[p.ratings[c]]} this week: it stays on the record${allowed.length > 1 ? " and can only be raised to Now" : ""}`;
+    return (
+      <li key={c} className={cn("px-3 py-2", r === "NOW" ? "bg-danger-soft/60" : r === "SOON" ? "bg-warn-soft/60" : undefined)}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="flex min-w-0 items-center gap-2 text-[13px] text-fg">
+            {label}
+            {locked && <span title={lockHint} className="inline-flex shrink-0 text-fg-subtle"><Lock className="h-3 w-3" aria-hidden /><span className="sr-only">{lockHint}</span></span>}
+            {tracked && <Chip tone={SEVERITY_TONE[tracked.severity] ?? "neutral"} title={tracked.description}>{defectLabel(tracked.number)} open</Chip>}
+            {own && !tracked && <Chip tone={own.resolved ? "ok" : "neutral"} title={own.description}>{defectLabel(own.number)}{own.resolved ? " fixed" : ""}</Chip>}
+          </span>
+          <RadioPills name={`rating_${c}`} label={componentLabel(c)} size="sm" value={r} onChange={(v) => setRatings((s) => ({ ...s, [c]: v }))}
+            options={RATING_OPTIONS.map((o) => (allowed.includes(o.value) ? o : { ...o, disabled: true, hint: lockHint }))} />
+        </div>
+        {bad && !p.settled.includes(c) && (
+          <Input name={`desc_${c}`} value={descs[c]} onChange={(e) => setDescs((s) => ({ ...s, [c]: e.target.value }))}
+            required={!own && !tracked} aria-label={`What is wrong with the ${componentLabel(c).toLowerCase()}`}
+            placeholder={tracked ? `Already tracked as ${defectLabel(tracked.number)}; add a note only if it changed` : "What you saw, e.g. cut on the sidewall, cords showing"}
+            className="mt-2" />
+        )}
+      </li>
+    );
+  };
   const [fixOwners, setFixOwners] = useState<Record<string, string>>({});
 
   return (
@@ -189,51 +238,60 @@ export function ReviewForm(p: ReviewFormProps) {
       )}
 
       {video === "RECEIVED" && (
-        <Section title="What the video shows" aside={
+        <Section title="Truck · what the video shows" aside={
           <span className="flex items-center gap-2">
             <span className="hidden text-[11px] text-fg-subtle sm:inline">{counts.map(([r, n]) => `${n} ${(PTI_RATING_LABELS[r] ?? r).toLowerCase()}`).join(" · ")}</span>
-            <button type="button" disabled={allGood} onClick={() => setRatings((s) => Object.fromEntries(PTI_COMPONENTS.map((c) => [c, allowedFor(c).includes("GOOD") ? "GOOD" : s[c]])))}
+            <button type="button" disabled={allGood} onClick={() => setRatings((s) => ({ ...s, ...Object.fromEntries(comps.map((c) => [c, allowedFor(c).includes("GOOD") ? "GOOD" : s[c]])) }))}
               className={buttonClass("secondary", "sm")}><CheckCheck />Mark all good</button>
           </span>
         }>
           <ul className="divide-y divide-line rounded-md border border-line">
-            {PTI_COMPONENTS.map((c) => {
-              const r = ratings[c];
-              const bad = Boolean(RATING_SEVERITY[r]);
-              const own = p.thisWeek[c];
-              const tracked = trackedFor(c);
-              const allowed = allowedFor(c);
-              const locked = allowed.length < PTI_RATINGS.length;
-              const lockHint = own?.resolved
-                ? `Marked ${PTI_RATING_LABELS[p.ratings[c]]} this week and ${defectLabel(own.number)} is confirmed fixed: the mark stays on the record`
-                : !own && p.settled.includes(c) ? `Marked ${PTI_RATING_LABELS[p.ratings[c]]} this week; its defect was deleted: the mark stays on the record`
-                  : `Marked ${PTI_RATING_LABELS[p.ratings[c]]} this week: it stays on the record${allowed.length > 1 ? " and can only be raised to Now" : ""}`;
-              return (
-                <li key={c} className={cn("px-3 py-2", r === "NOW" ? "bg-danger-soft/60" : r === "SOON" ? "bg-warn-soft/60" : undefined)}>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="flex min-w-0 items-center gap-2 text-[13px] text-fg">
-                      {componentLabel(c)}
-                      {locked && <span title={lockHint} className="inline-flex shrink-0 text-fg-subtle"><Lock className="h-3 w-3" aria-hidden /><span className="sr-only">{lockHint}</span></span>}
-                      {tracked && <Chip tone={SEVERITY_TONE[tracked.severity] ?? "neutral"} title={tracked.description}>{defectLabel(tracked.number)} open</Chip>}
-                      {own && !tracked && <Chip tone={own.resolved ? "ok" : "neutral"} title={own.description}>{defectLabel(own.number)}{own.resolved ? " fixed" : ""}</Chip>}
-                    </span>
-                    <RadioPills name={`rating_${c}`} label={componentLabel(c)} size="sm" value={r} onChange={(v) => setRatings((s) => ({ ...s, [c]: v }))}
-                      options={RATING_OPTIONS.map((o) => (allowed.includes(o.value) ? o : { ...o, disabled: true, hint: lockHint }))} />
-                  </div>
-                  {bad && !p.settled.includes(c) && (
-                    <Input name={`desc_${c}`} value={descs[c]} onChange={(e) => setDescs((s) => ({ ...s, [c]: e.target.value }))}
-                      required={!own && !tracked} aria-label={`What is wrong with the ${componentLabel(c).toLowerCase()}`}
-                      placeholder={tracked ? `Already tracked as ${defectLabel(tracked.number)}; add a note only if it changed` : "What you saw, e.g. cut on the sidewall, cords showing"}
-                      className="mt-2" />
-                  )}
-                </li>
-              );
-            })}
+            {PTI_COMPONENTS.map((c) => row(c, componentLabel(c)))}
           </ul>
-          {newNow && (
-            <p className="mt-2 text-[12px] text-danger">A Now rating takes {p.unitNumber} out of service until someone confirms the repair.</p>
+        </Section>
+      )}
+
+      {video === "RECEIVED" && (
+        <Section title="Trailer">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-[12px] text-fg-muted">Is a trailer hooked to the truck?</span>
+            <RadioPills name="hasTrailer" label="Trailer attached" value={hasTrailer ? "YES" : "NO"} onChange={(v) => setHasTrailer(v === "YES")} options={[
+              { value: "YES", label: "Yes", tone: "info" },
+              { value: "NO", label: "No", tone: "neutral", disabled: trailerKept, hint: trailerKept ? "This week's Soon / Now marks on the trailer stay on the record" : undefined },
+            ]} />
+          </div>
+          {hasTrailer && (
+            <div className="mt-3 space-y-3">
+              <div className="flex flex-wrap items-start gap-2">
+                <label className="block min-w-[200px] flex-1">
+                  <span className="mb-1 block text-[12px] font-medium text-fg-muted">Trailer<span className="text-danger"> *</span></span>
+                  <select name="trailerPick" required value={trailerPick} onChange={(e) => setTrailerPick(e.target.value)}
+                    className={cn(inputClass, !trailerPick && "text-fg-subtle")}>
+                    <option value="" disabled>Pick a trailer…</option>
+                    {p.trailers.map((t) => <option key={t.id} value={t.id}>{t.unitNumber}{t.id === p.pairedTrailerId ? " · paired with this truck" : ""}</option>)}
+                    <option value="TYPED">Not in the list: type its number</option>
+                  </select>
+                </label>
+                {trailerPick === "TYPED" && (
+                  <label className="block min-w-[200px] flex-1">
+                    <span className="mb-1 block text-[12px] font-medium text-fg-muted">Trailer number<span className="text-danger"> *</span></span>
+                    <Input name="trailerNumber" required value={trailerNumber} onChange={(e) => setTrailerNumber(e.target.value)} placeholder="e.g. 5310" autoFocus />
+                  </label>
+                )}
+              </div>
+              <ul className="divide-y divide-line rounded-md border border-line">
+                {PTI_TRAILER_COMPONENTS.map((c) => row(c, PTI_TRAILER_SHORT_LABELS[c] ?? componentLabel(c)))}
+              </ul>
+              {trailerPick === "TYPED" && trailerName && !p.trailers.some((t) => t.unitNumber.toLowerCase() === trailerName.toLowerCase()) && (
+                <p className="text-[12px] text-fg-subtle">Trailer {trailerName} isn&apos;t on file: Soon / Now marks become defects on {p.unitNumber}, noting the trailer number.</p>
+              )}
+            </div>
           )}
         </Section>
+      )}
+
+      {video === "RECEIVED" && newNow && (
+        <p className="-mt-3 flex items-center gap-1.5 text-[12px] text-danger"><Truck className="h-3.5 w-3.5" />A Now rating takes {p.unitNumber}{hasTrailer && trailerName ? ` (and trailer ${trailerName}, if a trailer mark is Now)` : ""} out of service until someone confirms the repair.</p>
       )}
 
       <Field label="Notes" hint={video === "MISSING" ? "Why it's missing, who was asked to send it." : "Anything the shop or the next reviewer should know."}>

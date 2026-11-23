@@ -4,7 +4,7 @@ import { PLATFORM_OWNER } from "@/lib/platform";
 import { accessToken } from "@/lib/mail/accounts";
 import { sendMail } from "@/lib/mail/send";
 import { MAIL_PROVIDERS } from "@/lib/mail/shared";
-import { PLANS, SITE } from "@/lib/site";
+import { CONTACT_PLANS, SITE } from "@/lib/site";
 
 /*
  * A new message from the public contact form (/contact) is saved for the Platform console and also emailed to the
@@ -44,7 +44,7 @@ export async function notifyContact(c: Contact) {
     if (!to.length) return console.warn("contact form: nobody to notify (set CONTACT_NOTIFY_EMAILS)");
     if (!from) return console.warn("contact form: no connected mailbox to send from (connect Gmail under Account, or set CONTACT_MAIL_SENDER)");
     const { token, email } = await accessToken(from.userId, from.provider);
-    const plan = c.plan ? PLANS.find((p) => p.id === c.plan)?.name ?? c.plan : null;
+    const plan = c.plan ? CONTACT_PLANS.find((p) => p.id === c.plan)?.name ?? c.plan : null;
     const rows: [string, string | null][] = [
       ["Name", c.name], ["Email", c.email], ["Phone", c.phone], ["Company", c.company], ["Fleet size", c.fleetSize], ["Plan", plan],
     ];

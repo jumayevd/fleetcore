@@ -10,6 +10,7 @@ import { CITIES, OWNERSHIP, OWNERSHIP_LABELS } from "@/lib/constants";
 import type { ActionState } from "@/lib/action";
 import { serviceStatus } from "@/lib/service";
 import { FUEL_TYPES, intervalText, leaseStatus, serviceSummary, truckStatusLabel } from "./lib";
+import { VendorFields } from "./truck-status-change";
 
 type NumKey = "odometerKm" | "pmIntervalKm" | "lastPmKm" | "nextServiceKm" | "leaseStartKm" | "leaseAnnualLimitKm" | "leaseBufferPct" | "leaseOverageRate";
 export type TruckTypeOption = { id: string; name: string; oilIntervalKm: number };
@@ -30,6 +31,7 @@ export function TruckForm({ action, truck, drivers, groups, types, cancelHref }:
   const f = useFormat();
   const d = f.labels.distance;
   const [ownership, setOwnership] = useState(truck?.ownership ?? "COMPANY");
+  const [vendor, setVendor] = useState(truck?.isVendor ?? false);
   const [typeId, setTypeId] = useState(truck?.truckTypeId ?? "");
   const [v, setV] = useState<Record<NumKey, string>>({
     odometerKm: String(truck?.odometerKm ?? 0),
@@ -79,8 +81,14 @@ export function TruckForm({ action, truck, drivers, groups, types, cancelHref }:
                 <Input value={truck ? truckStatusLabel(truck.status, Boolean(truck.driverId)) : "Available"} readOnly disabled />
               </Field>
               <Field label="Vendor truck" hint="Belongs to another company or owner (not leased). It keeps its status and also counts under Vendor.">
-                <Checkbox name="isVendor" defaultChecked={truck?.isVendor ?? false} label="Another company's or owner's truck" className="h-9" />
+                <Checkbox name="isVendor" checked={vendor} onChange={(e) => setVendor(e.target.checked)} label="Another company's or owner's truck" className="h-9" />
               </Field>
+              {vendor && (
+                <div className="sm:col-span-2">
+                  <VendorFields name={truck?.vendorName ?? ""} keepPct={truck?.vendorKeepPct?.toString() ?? ""} />
+                  <p className="mt-1 text-[11px] text-fg-subtle">Whose truck it is, and the share of its earnings the company keeps.</p>
+                </div>
+              )}
               <Field label="Home terminal" hint="Where the truck is based.">
                 <Input name="homeTerminal" list="truck-terminals" defaultValue={truck?.homeTerminal ?? ""} placeholder="Joliet, IL" />
                 <datalist id="truck-terminals">{[...new Set([...groups, ...CITIES.map((c) => c.name)])].map((g) => <option key={g} value={g} />)}</datalist>

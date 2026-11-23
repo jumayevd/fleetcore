@@ -31,6 +31,7 @@ import { openDefects, openRepairs, statusRecorders, truckTypeOptions, type OpenR
 import { inactiveInfo } from "../status-info";
 import { readingsHref } from "../../maintenance/_lib/links";
 import { InactiveCard } from "../truck-status-change";
+import { vendorSummary } from "@/lib/vendor-truck";
 import {
   compass, dayAsDate, daysSince, docExpiryByUnit, earliest, EXPIRY_SOON_DAYS, FUEL_TYPE_LABELS, fuelTone, intervalText, leaseStatus, missingDocs,
   ODOMETER_JUMP_KM, OWNERSHIP_TONE, parseNotes, pingSourceLabel, pingStale, recordedExpiry, serviceSummary, truckStatusLabel, truckStatusTone, type ServiceSummary,
@@ -87,7 +88,7 @@ export default async function TruckDetail({ params, searchParams }: PageProps<"/
     truck.status === "INACTIVE" ? statusRecorders([id]) : Promise.resolve(new Map<string, string>()),
   ]);
   const statusTarget = {
-    id, unitNumber: truck.unitNumber, hasDriver: Boolean(truck.driverId), isVendor: truck.isVendor, today: f.dateInput(now),
+    id, unitNumber: truck.unitNumber, hasDriver: Boolean(truck.driverId), isVendor: truck.isVendor, vendorName: truck.vendorName, vendorKeepPct: truck.vendorKeepPct, today: f.dateInput(now),
     scheduled: booked.map((w) => ({ id: w.id, number: w.number, title: w.title, when: f.day(w.scheduledAt) })),
     inactive: truck.status === "INACTIVE" ? inactiveInfo(truck, f, recorders.get(id)) : null,
   };
@@ -436,7 +437,7 @@ async function OverviewTab({ truck, now, editable, showMoney, prompts, attention
             ["Truck type", truck.truckType?.name ?? "No type"],
             ["Colour", truck.color ?? "Not set"],
             ["Ownership", lease ? `${OWNERSHIP_LABELS[truck.ownership]} · ${truck.lessor ?? "lessor not set"}` : OWNERSHIP_LABELS[truck.ownership] ?? truck.ownership],
-            ...(truck.isVendor ? [["Vendor", "Another company's or owner's truck"] as [string, React.ReactNode]] : []),
+            ...(truck.isVendor ? [["Vendor", vendorSummary(truck)] as [string, React.ReactNode]] : []),
             ["In service since", truck.inServiceAt ? f.date(truck.inServiceAt) : "Not set"],
             ["Home terminal", truck.homeTerminal ?? truck.group ?? "Not set"],
             ["Engine hours", truck.engineHours != null ? <span key="h" className="num">{f.number(truck.engineHours)}</span> : "—"],

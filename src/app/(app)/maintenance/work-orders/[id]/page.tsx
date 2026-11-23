@@ -98,8 +98,8 @@ export default async function RepairDetail({ params, searchParams }: PageProps<"
           <>
             {canWork && scheduled && <ActionButton action={startRepair.bind(null, id)} variant="primary" size="md" pendingText="Saving…" title="The unit goes off the road and the downtime clock starts">Into the shop</ActionButton>}
             {canWork && <LinkButton href={`${path}/edit`} variant="secondary"><Pencil />Edit</LinkButton>}
-            <DeleteButton action={deleteRepair.bind(null, id)} redirectTo={workOrdersHref({})}
-              confirm={`Delete ${roLabel(wo.number)} for good? Its lines, history and files go with it.${inShop ? ` ${unitNumber ?? "The unit"} goes back in service.` : ""}${done ? " Service dates it already moved on the truck stay as they are." : ""} This can't be undone; Void keeps it on record instead.`} />
+            {can(user.role, "repairs.delete") && <DeleteButton action={deleteRepair.bind(null, id)} redirectTo={workOrdersHref({})}
+              confirm={`Delete ${roLabel(wo.number)} for good? Its lines, history and files go with it.${inShop ? ` ${unitNumber ?? "The unit"} goes back in service.` : ""}${done ? " Service dates it already moved on the truck stay as they are." : ""} This can't be undone; Void keeps it on record instead.`} />}
           </>
         )}
       />

@@ -27,7 +27,7 @@ export default function SiteLayout({ children }: { children: ReactNode }) {
               Maintenance, paperwork and compliance for trucking fleets, on one screen.
             </p>
           </div>
-          <FooterCol title="Product" links={[["/#features", "Features"], ["/pricing", "Pricing"], ["/demo", "Live demo"]]} />
+          <FooterCol title="Product" links={[["/#features", "Features"], ["/fleet-service", "Fleet service"], ["/pricing", "Pricing"], ["/demo", "Live demo"]]} />
           <FooterCol title="Company" links={[["/contact", "Contact"], ["/privacy", "Privacy"], ...(SITE.email ? [[`mailto:${SITE.email}`, SITE.email] as [string, string]] : [])]} />
           <FooterCol title="Account" links={[["/login", "Log in"], ["/signup", "Sign up"]]} />
         </div>

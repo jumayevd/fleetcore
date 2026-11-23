@@ -34,7 +34,7 @@ export function TruckStatusMenu({ status, ...t }: TruckStatusTarget & { status: 
       {error && <span role="alert" className="max-w-80 truncate text-[12px] text-danger" title={error}>{error}</span>}
       <DropMenu items={items} label="Change status" className={cn(buttonClass("secondary"), "gap-2 pl-2", change.pending && "opacity-60")}>
         <Badge value={truckStatusTone(status, t.hasDriver)} label={truckStatusLabel(status, t.hasDriver)} dot />
-        {t.isVendor && <VendorChip />}
+        {t.isVendor && <VendorChip t={t} />}
         <ChevronDown className="text-fg-subtle" />
       </DropMenu>
       {change.dialogs}

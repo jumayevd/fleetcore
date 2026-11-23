@@ -6,6 +6,8 @@ import { saveDriver } from "@/app/actions/drivers";
 import { PageHeader } from "@/components/ui";
 import { DriverForm } from "../../driver-form";
 import { dispatcherOptions, truckOptions } from "../../data";
+import { countOf } from "../../../fleet/lib";
+import { DeleteDriver } from "./delete-driver";
 
 export async function generateMetadata({ params }: PageProps<"/drivers/[id]/edit">) {
   if (!(await getCurrentUser())) return {};
@@ -18,11 +20,19 @@ export default async function EditDriver({ params }: PageProps<"/drivers/[id]/ed
   const { id } = await params;
   const driver = await db.driver.findUnique({ where: { id }, include: { truck: { select: { id: true } }, teamTruck: { select: { id: true } } } });
   if (!driver) notFound();
-  const [trucks, dispatchers] = await Promise.all([can(user.role, "fleet.edit") ? truckOptions(id) : Promise.resolve(null), dispatcherOptions()]);
+  const mayDelete = can(user.role, "drivers.delete");
+  const [trucks, dispatchers, docCount, stintCount] = await Promise.all([
+    can(user.role, "fleet.edit") ? truckOptions(id) : Promise.resolve(null),
+    dispatcherOptions(),
+    mayDelete ? db.document.count({ where: { OR: [{ driverId: id }, { assignment: { driverId: id } }] } }) : 0,
+    mayDelete ? db.driverAssignment.count({ where: { driverId: id } }) : 0,
+  ]);
+  const removes = [countOf(docCount, "document"), countOf(stintCount, "truck stint")].filter((x): x is string => Boolean(x));
   return (
     <>
       <PageHeader title={`Edit ${driver.name}`} />
       <DriverForm action={saveDriver.bind(null, id)} driver={driver} trucks={trucks} truckId={driver.truck?.id ?? driver.teamTruck?.id ?? null} dispatchers={dispatchers} cancelHref={`/drivers/${id}`} />
+      {mayDelete && <div className="mt-6"><DeleteDriver id={id} name={driver.name} removes={removes} /></div>}
     </>
   );
 }

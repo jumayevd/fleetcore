@@ -14,6 +14,7 @@ import { defectLabel, roLabel } from "@/lib/service";
 import { clearTruckDrivers } from "@/lib/assignments";
 import { can } from "@/lib/permissions";
 import { deleteFile } from "@/lib/storage";
+import { vendorTerms } from "@/lib/vendor-truck";
 import { placeFromText, truckStatusLabel, UNHOOKED_TRAILER_STATUSES } from "./lib";
 
 /*
@@ -86,15 +87,19 @@ export async function setTruckStatus(truckId: string, status: string, details?: 
   });
 }
 
-/** Vendor is a flag, not a status: another company's or owner's truck, which keeps its own status. */
-export async function setTruckVendor(truckId: string, isVendor: boolean): Promise<ActionState> {
+/**
+ * Vendor is a flag, not a status: another company's or owner's truck, which keeps its own status. Marking it needs the
+ * vendor's name and the share the company keeps (src/lib/vendor-truck.ts); unmarking clears them.
+ */
+export async function setTruckVendor(truckId: string, isVendor: boolean, terms?: { name: string; keepPct: number | null }): Promise<ActionState> {
   const me = await requireUser("fleet.edit");
   return attempt(async () => {
     const truck = await db.truck.findUnique({ where: { id: truckId }, select: { unitNumber: true, isVendor: true } });
     if (!truck) throw new FormError("This truck no longer exists. Refresh the page.");
-    if (truck.isVendor !== isVendor) {
-      await db.truck.update({ where: { id: truckId }, data: { isVendor } });
-      await audit(me.id, "update", "truck", truckId, `${truck.unitNumber}: ${isVendor ? "marked as a vendor's truck" : "no longer a vendor's truck"}`);
+    const vendor = isVendor ? vendorTerms(terms?.name, terms?.keepPct) : { vendorName: null, vendorKeepPct: null };
+    await db.truck.update({ where: { id: truckId }, data: { isVendor, ...vendor } });
+    if (truck.isVendor !== isVendor || isVendor) {
+      await audit(me.id, "update", "truck", truckId, `${truck.unitNumber}: ${isVendor ? `vendor's truck (${vendor.vendorName}, company keeps ${vendor.vendorKeepPct}%)` : "no longer a vendor's truck"}`);
     }
     revalidatePath("/fleet");
     revalidatePath(`/fleet/${truckId}`);

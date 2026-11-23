@@ -13,6 +13,7 @@ import { dayKey, parseDateInput, startOfDayIn } from "@/lib/locale";
 import { setTruckDriver } from "@/lib/assignments";
 import { truckOf } from "@/lib/assignments-shared";
 import { serviceStatus } from "@/lib/service";
+import { vendorTerms } from "@/lib/vendor-truck";
 import { ODOMETER_JUMP_KM, placeFromText } from "@/app/(app)/fleet/lib";
 
 /*
@@ -45,6 +46,7 @@ export async function saveTruck(truckId: string | null, _: ActionState, fd: Form
     // A new truck starts in service; after that its status changes through the status menu, which asks why for
     // Inactive and needs a repair order for In shop. Vendor (another company's or owner's truck) is a flag beside it.
     const isVendor = f.bool("isVendor");
+    const vendor = isVendor ? vendorTerms(f.str("vendorName"), f.num("vendorKeepPct")) : { vendorName: null, vendorKeepPct: null };
     const ownership = f.str("ownership") ?? "COMPANY";
     if (!OWNERSHIP.includes(ownership as never)) throw new FormError("Pick a valid ownership");
     const unitNumber = f.req("unitNumber", "Unit number");
@@ -82,6 +84,7 @@ export async function saveTruck(truckId: string | null, _: ActionState, fd: Form
       plate: f.req("plate", "Plate"),
       ...(truckId ? {} : { status: "ACTIVE", statusSince: new Date() }),
       isVendor,
+      ...vendor,
       ownership,
       group: f.str("group"),
       homeTerminal: f.str("homeTerminal"),

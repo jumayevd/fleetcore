@@ -314,11 +314,15 @@ export async function walkAroundSummary(f: Formatter, now = new Date()) {
 export async function loadReview(truckId: string, week: Week, f: Formatter, now = new Date()) {
   const truck = await db.truck.findUnique({
     where: { id: truckId },
-    select: { id: true, unitNumber: true, make: true, model: true, year: true, status: true, driver: { select: { id: true, name: true, dispatcher: true } } },
+    select: {
+      id: true, unitNumber: true, make: true, model: true, year: true, status: true, driver: { select: { id: true, name: true, dispatcher: true } },
+      trailers: { select: { id: true }, take: 1 },
+    },
   });
   if (!truck) return null;
   const weeks = weeksBack(f, week, 4);
-  const [walk, open, history] = await Promise.all([
+  const saved = await db.walkAround.findUnique({ where: { truckId_weekStart: { truckId, weekStart: dateOnly(week.key) } }, select: { trailerId: true } });
+  const [walk, open, history, trailers] = await Promise.all([
     db.walkAround.findUnique({
       where: { truckId_weekStart: { truckId, weekStart: dateOnly(week.key) } },
       include: {
@@ -330,7 +334,8 @@ export async function loadReview(truckId: string, week: Week, f: Formatter, now 
       },
     }),
     db.defect.findMany({
-      where: { truckId, status: { in: ["OPEN", "REPAIRED"] } },
+      // The truck's open defects, and those of the trailer this week's review recorded.
+      where: { OR: [{ truckId }, ...(saved?.trailerId ? [{ trailerId: saved.trailerId }] : [])], status: { in: ["OPEN", "REPAIRED"] } },
       orderBy: { number: "asc" },
       select: {
         id: true, number: true, component: true, description: true, severity: true, status: true, holdsUnit: true, foundAt: true,
@@ -345,11 +350,15 @@ export async function loadReview(truckId: string, week: Week, f: Formatter, now 
         _count: { select: { defects: true, ratings: true } },
       },
     }),
+    db.trailer.findMany({ select: { id: true, unitNumber: true }, orderBy: { unitNumber: "asc" } }),
   ]);
   const historyBy = new Map(history.map((h) => [h.weekStart.toISOString().slice(0, 10), h]));
   return {
     truck,
     walk,
+    trailers: trailers.sort((a, b) => byUnit(a.unitNumber, b.unitNumber)),
+    /** The trailer paired with the truck on file: offered first when the reviewer says it has one. */
+    pairedTrailerId: truck.trailers[0]?.id ?? null,
     earlier: open.filter((d) => d.walkAroundId !== walk?.id).map((d) => ({ ...d, daysOpen: daysBetween(d.foundAt, now) })),
     history: weeks.map((w) => ({ key: w.key, at: w.at, walk: historyBy.get(w.key) ?? null })),
   };

@@ -5,8 +5,8 @@ import { useState } from "react";
 import { Container, Plus, Truck as TruckIcon } from "lucide-react";
 import { ActionForm, FormMessage, SubmitButton } from "@/components/forms";
 import { Button, Field, Select, Textarea, buttonClass, cn, type ButtonVariant } from "@/components/ui";
-import { DEFECT_SEVERITIES } from "@/lib/constants";
-import { DEFECT_COMPONENTS, SEVERITY_SHORT, componentLabel, severityLabel } from "@/lib/pti-shared";
+import { DEFECT_SEVERITIES, PTI_COMPONENTS, PTI_TRAILER_COMPONENTS } from "@/lib/constants";
+import { SEVERITY_SHORT, componentLabel, severityLabel } from "@/lib/pti-shared";
 import { reportDefect } from "@/app/actions/inspections";
 import { Overlay } from "./overlay";
 
@@ -75,8 +75,8 @@ export function ReportDefect({ trucks = [], trailers = [], members = [], fixed, 
             </div>
           )}
           <Field label="Component" required>
-            <Select name="component" required placeholder="Pick what is wrong…" defaultValue=""
-              options={DEFECT_COMPONENTS.map((c) => ({ value: c, label: componentLabel(c) }))} />
+            <Select key={kind} name="component" required placeholder="Pick what is wrong…" defaultValue=""
+              options={[...(kind === "truck" ? PTI_COMPONENTS : PTI_TRAILER_COMPONENTS), "OTHER"].map((c) => ({ value: c, label: componentLabel(c) }))} />
           </Field>
           <div>
             <span className="mb-1 block text-[12px] font-medium text-fg-muted">How soon<span className="text-danger"> *</span></span>

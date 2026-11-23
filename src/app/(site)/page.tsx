@@ -33,7 +33,7 @@ const FEATURES = [
   {
     eyebrow: "Preventive maintenance", title: "Oil changes by odometer, not by memory",
     text: "Set the interval per truck type. FleetCore reads the odometer from your ELD and shows how many miles each truck has used, which are over, and which shop did the last service.",
-    points: ["Intervals by truck type or per truck", "Odometer, engine hours and fuel from TrackPro", "Book the service straight from the overdue row"],
+    points: ["Intervals by truck type or per truck", "Odometer, engine hours and fuel from Samsara and other ELDs", "Book the service straight from the overdue row"],
     scene: OilScene,
   },
   {

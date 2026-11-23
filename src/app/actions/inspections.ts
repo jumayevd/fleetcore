@@ -7,7 +7,7 @@ import { requireUser, type CurrentUser } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import { attempt, fields, FormError, type ActionState } from "@/lib/action";
 import { can } from "@/lib/permissions";
-import { DEFECT_SEVERITIES, PTI_COMPONENTS, PTI_RATINGS, PTI_RATING_LABELS } from "@/lib/constants";
+import { DEFECT_SEVERITIES, PTI_COMPONENTS, PTI_RATINGS, PTI_RATING_LABELS, PTI_TRAILER_COMPONENTS } from "@/lib/constants";
 import { dateOnly, makeFormat, normalizeLocale } from "@/lib/locale";
 import { defectLabel, roLabel } from "@/lib/service";
 import { companyMembers, createDefect, dueFor, resolveWeek, syncUnitHold, type HoldChange, type UnitRef } from "@/lib/pti";
@@ -96,7 +96,9 @@ export async function saveWalkAroundReview(_: ActionState, fd: FormData): Promis
     const raised = existing ? await db.defect.findMany({ where: { walkAroundId: existing.id }, orderBy: { number: "asc" } }) : [];
     const withdrawnOwn = raised.filter((d) => d.status === "CLOSED" && d.closeNote?.startsWith(WITHDRAWN_NOTE));
     const resolved = raised.filter((d) => d.status === "CLOSED" && !d.closeNote?.startsWith(WITHDRAWN_NOTE));
-    const recorded = PTI_COMPONENTS.filter((c) => RATING_SEVERITY[saved.get(c) ?? ""]);
+    const recorded = [...saved.keys()].filter((c) => RATING_SEVERITY[saved.get(c) ?? ""]);
+    /** Trailers whose out-of-service state may change with these defects. */
+    const trailersOf = (list: { trailerId: string | null }[]) => [...new Set(list.map((d) => d.trailerId).filter((x): x is string => Boolean(x)))];
 
     if (video === "MISSING") {
       if (existing?.reviewedAt && recorded.length) {
@@ -116,6 +118,7 @@ export async function saveWalkAroundReview(_: ActionState, fd: FormData): Promis
         for (const d of live) await audit(me.id, "close", "defect", d.id, `${defectLabel(d.number)} withdrawn: ${truck.unitNumber}'s video marked missing`);
         withdrawn = live.map((d) => d.number);
         hold = await syncUnitHold({ truckId }, { released: live.some((d) => d.holdsUnit) });
+        for (const trailerId of trailersOf(live)) await syncUnitHold({ trailerId }, { released: live.some((d) => d.holdsUnit && d.trailerId === trailerId) });
       }
       const wa = await db.walkAround.upsert({
         where,
@@ -133,7 +136,34 @@ export async function saveWalkAroundReview(_: ActionState, fd: FormData): Promis
     }
 
     // Read and check everything before changing anything, so a refusal leaves no half-saved review.
-    const open = await db.defect.findMany({ where: { truckId, status: { in: ["OPEN", "REPAIRED"] } }, orderBy: { number: "asc" } });
+    // The trailer on the video: one on file (picked, or typed and found by its number), or only a typed number.
+    let trailer: { id: string | null; number: string } | null = null;
+    if (v.str("hasTrailer") === "YES") {
+      const pick = v.str("trailerPick");
+      if (pick && pick !== "TYPED") {
+        const t = await db.trailer.findUnique({ where: { id: pick }, select: { id: true, unitNumber: true } });
+        if (!t) throw new FormError("That trailer no longer exists. Pick another or type its number.");
+        trailer = { id: t.id, number: t.unitNumber };
+      } else {
+        const typed = v.str("trailerNumber");
+        if (!typed) throw new FormError("Pick the trailer, or type its number.");
+        const t = await db.trailer.findFirst({ where: { unitNumber: { equals: typed, mode: "insensitive" } }, select: { id: true, unitNumber: true } });
+        trailer = t ? { id: t.id, number: t.unitNumber } : { id: null, number: typed };
+      }
+    } else {
+      const kept = PTI_TRAILER_COMPONENTS.filter((c) => RATING_SEVERITY[saved.get(c) ?? ""]);
+      if (existing?.reviewedAt && kept.length) {
+        throw new FormError(`This week's review recorded the trailer's ${kept.map((c) => `${componentLabel(c).replace(/^Trailer /, "")} as ${PTI_RATING_LABELS[saved.get(c)!]}`).join(", ")}. Those marks stay on the record, so keep the trailer in the review.`);
+      }
+    }
+    /** What this review rates: the truck, and the trailer when it has one. */
+    const comps: readonly string[] = trailer ? [...PTI_COMPONENTS, ...PTI_TRAILER_COMPONENTS] : PTI_COMPONENTS;
+    /** Marks from an earlier checklist stay on the week's record as they were. */
+    const carried = [...saved].filter(([c]) => !comps.includes(c) && !(PTI_TRAILER_COMPONENTS as readonly string[]).includes(c));
+    const open = await db.defect.findMany({
+      where: { OR: [{ truckId }, ...(trailer?.id ? [{ trailerId: trailer.id }] : [])], status: { in: ["OPEN", "REPAIRED"] } },
+      orderBy: { number: "asc" },
+    });
     /**
      * A saved Soon / Now mark whose issue is settled: its defect was confirmed fixed, or it has none any more (deleted)
      * and no earlier defect tracks it. The mark stays exactly as it is and saving again raises nothing new for it.
@@ -141,7 +171,7 @@ export async function saveWalkAroundReview(_: ActionState, fd: FormData): Promis
     const settled = (c: string) => resolved.some((d) => d.component === c)
       || (Boolean(RATING_SEVERITY[saved.get(c) ?? ""]) && !raised.some((d) => d.component === c) && !open.some((d) => d.component === c && d.walkAroundId !== existing?.id));
     const ratings: Record<string, string> = {};
-    for (const c of PTI_COMPONENTS) {
+    for (const c of comps) {
       const r = v.str(`rating_${c}`) ?? "GOOD";
       if (!(PTI_RATINGS as readonly string[]).includes(r)) throw new FormError(`Pick a rating for ${componentLabel(c).toLowerCase()}.`);
       const was = saved.get(c);
@@ -181,7 +211,7 @@ export async function saveWalkAroundReview(_: ActionState, fd: FormData): Promis
       verdicts.set(d.id, verdict);
     }
     const stillTracked = (component: string) => earlier.find((d) => d.component === component && verdicts.get(d.id) !== "FIXED");
-    for (const c of PTI_COMPONENTS) {
+    for (const c of comps) {
       if (!RATING_SEVERITY[ratings[c]]) continue;
       if (mine.some((d) => d.component === c) || settled(c) || stillTracked(c)) continue;
       if (!v.str(`desc_${c}`)) throw new FormError(`Say what you saw on the ${componentLabel(c).toLowerCase()} (rated ${ratings[c] === "NOW" ? "Now" : "Soon"}).`);
@@ -189,8 +219,8 @@ export async function saveWalkAroundReview(_: ActionState, fd: FormData): Promis
 
     const wa = await db.walkAround.upsert({
       where,
-      create: { truckId, weekStart, driverId: truck.driverId, video: "RECEIVED", receivedAt: now },
-      update: { video: "RECEIVED", receivedAt: existing?.receivedAt ?? now },
+      create: { truckId, weekStart, driverId: truck.driverId, video: "RECEIVED", receivedAt: now, trailerId: trailer?.id ?? null, trailerNumber: trailer?.number ?? null },
+      update: { video: "RECEIVED", receivedAt: existing?.receivedAt ?? now, trailerId: trailer?.id ?? null, trailerNumber: trailer?.number ?? null },
     });
 
     let released = false;
@@ -227,7 +257,7 @@ export async function saveWalkAroundReview(_: ActionState, fd: FormData): Promis
     }
 
     const created: number[] = [];
-    for (const c of PTI_COMPONENTS) {
+    for (const c of comps) {
       const severity = RATING_SEVERITY[ratings[c]];
       const desc = v.str(`desc_${c}`);
       const own = mine.find((d) => d.component === c);
@@ -275,23 +305,31 @@ export async function saveWalkAroundReview(_: ActionState, fd: FormData): Promis
         }
         continue;
       }
+      const onTrailer = (PTI_TRAILER_COMPONENTS as readonly string[]).includes(c);
       const d = await createDefect({
-        truckId, walkAroundId: wa.id, component: c, description: desc!, severity, holdsUnit: severity === "NOW", foundAt: now, dueAt: dueFor(severity, now),
+        truckId, trailerId: onTrailer ? trailer?.id ?? null : null, walkAroundId: wa.id, component: c,
+        description: onTrailer && !trailer?.id ? `Trailer ${trailer?.number}: ${desc}` : desc!, severity, holdsUnit: severity === "NOW", foundAt: now, dueAt: dueFor(severity, now),
       });
-      await audit(me.id, "create", "defect", d.id, `${defectLabel(d.number)} ${componentLabel(c)} (${severity}) on ${truck.unitNumber}`);
+      await audit(me.id, "create", "defect", d.id, `${defectLabel(d.number)} ${componentLabel(c)} (${severity}) on ${truck.unitNumber}${onTrailer ? `, trailer ${trailer?.number}` : ""}`);
       created.push(d.number);
     }
 
     await db.walkAroundRating.deleteMany({ where: { walkAroundId: wa.id } });
-    await db.walkAroundRating.createMany({ data: PTI_COMPONENTS.map((c) => ({ walkAroundId: wa.id, component: c, rating: ratings[c] })) });
-    const issues = PTI_COMPONENTS.some((c) => RATING_SEVERITY[ratings[c]]) || still > 0;
+    await db.walkAroundRating.createMany({
+      data: [...comps.map((c) => ({ walkAroundId: wa.id, component: c, rating: ratings[c] })), ...carried.map(([c, r]) => ({ walkAroundId: wa.id, component: c, rating: r }))],
+    });
+    const issues = comps.some((c) => RATING_SEVERITY[ratings[c]]) || still > 0;
     await db.walkAround.update({
       where: { id: wa.id },
       data: { result: issues ? "ISSUES" : "CLEAN", reviewedById: me.id, reviewedAt: now, notes, driverId: existing?.driverId ?? truck.driverId },
     });
     const hold = await syncUnitHold({ truckId }, { released });
+    for (const trailerId of trailersOf([...raised, ...open, { trailerId: trailer?.id ?? null }])) {
+      const h = await syncUnitHold({ trailerId }, { released: true });
+      hold.held.push(...h.held); hold.released.push(...h.released);
+    }
     await audit(me.id, "review", "walk_around", wa.id, [
-      `${truck.unitNumber} · week of ${week.key}: ${issues ? "issues" : "clean"}`,
+      `${truck.unitNumber} · week of ${week.key}: ${issues ? "issues" : "clean"}${trailer ? ` · trailer ${trailer.number}` : ""}`,
       created.length ? `new ${created.map(defectLabel).join(", ")}` : null,
       closed.length ? `closed ${closed.map(defectLabel).join(", ")}` : null,
       hold.held.length ? "out of service" : null,
@@ -320,12 +358,14 @@ export async function resetWalkAround(truckId: string, weekKey: string, closeHre
     if (!truck) throw new FormError("This truck no longer exists.");
     const wa = await db.walkAround.findUnique({
       where: { truckId_weekStart: { truckId, weekStart: dateOnly(week.key) } },
-      include: { ratings: { where: { rating: { in: ["SOON", "NOW"] } }, select: { component: true, rating: true } }, defects: { select: { id: true, number: true, holdsUnit: true, status: true } } },
+      include: { ratings: { where: { rating: { in: ["SOON", "NOW"] } }, select: { component: true, rating: true } }, defects: { select: { id: true, number: true, holdsUnit: true, status: true, trailerId: true } } },
     });
     if (!wa) throw new FormError(`${truck.unitNumber} has nothing recorded for the week of ${f.day(week.at)}.`);
     await db.defect.deleteMany({ where: { id: { in: wa.defects.map((d) => d.id) } } });
     await db.walkAround.delete({ where: { id: wa.id } }); // its marks go with it
-    const hold = wa.defects.some((d) => d.holdsUnit && d.status !== "CLOSED") ? await syncUnitHold({ truckId }, { released: true }) : { held: [], released: [] };
+    const holding = wa.defects.filter((d) => d.holdsUnit && d.status !== "CLOSED");
+    const hold = holding.length ? await syncUnitHold({ truckId }, { released: true }) : { held: [], released: [] };
+    for (const trailerId of new Set(holding.map((d) => d.trailerId).filter((x): x is string => Boolean(x)))) await syncUnitHold({ trailerId }, { released: true });
     await audit(me.id, "reset", "walk_around", null, [
       `${truck.unitNumber} · week of ${week.key}: back to nothing sent`,
       `was ${wa.video.toLowerCase()}${wa.reviewedAt ? `, reviewed ${wa.result?.toLowerCase() ?? ""}` : ""}`,

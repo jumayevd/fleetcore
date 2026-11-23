@@ -359,6 +359,7 @@ export async function deleteRepair(id: string): Promise<ActionState> {
       select: { number: true, title: true, status: true, truckId: true, trailerId: true, documents: { select: { storageKey: true } } },
     });
     if (!wo) throw new FormError("This repair order no longer exists. It may have been deleted already.");
+    if (!can(me.role, "repairs.delete")) throw new FormError(`Only an owner or admin can delete a repair order. Void ${roLabel(wo.number)} instead: it stays on record with the reason.`);
     if (wo.status === "IN_PROGRESS") await releaseUnit(wo, id, new Date());
     await db.workOrder.delete({ where: { id } }); // lines, events and documents go with it
     await Promise.all(wo.documents.map((d) => deleteFile(d.storageKey).catch(() => undefined)));

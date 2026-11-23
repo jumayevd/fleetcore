@@ -12,8 +12,12 @@ export const PERMISSIONS = {
   "fleet.edit": EDITORS,
   /** Delete a truck or trailer with everything recorded on it (added by mistake). Sold or retired units go Inactive. */
   "fleet.delete": ADMINS,
+  /** Delete a repair order for good. Fleet specialists void it instead (kept on record with the reason). */
+  "repairs.delete": ADMINS,
   "drivers.view": EVERYONE,
   "drivers.edit": EDITORS,
+  /** Delete a driver with their files and truck history (added by mistake). Drivers who left go Inactive. */
+  "drivers.delete": ADMINS,
   "reports.view": EVERYONE,
   /** Costs, invoices, spend. View-only members see the work, not the money. */
   "money.view": [...EDITORS, "ARCHIVE"],

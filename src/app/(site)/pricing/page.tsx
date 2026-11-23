@@ -5,6 +5,7 @@ import { cn } from "@/components/ui";
 import { FAQ, FLAT_TRUCKS, PLANS } from "@/lib/site";
 import { CtaBand, SectionHead, bigButton } from "../parts";
 import { PriceCalculator } from "./calculator";
+import { ServicePrices } from "../service-prices";
 
 export const metadata: Metadata = {
   title: "Pricing",
@@ -62,6 +63,14 @@ export default function PricingPage() {
             Prices in US dollars, billed monthly. Not sure yet? <Link href="/demo" className="font-medium text-accent-text hover:underline">Watch the live demo</Link> first.
           </p>
         </div>
+      </section>
+
+      <section id="service" className="mx-auto max-w-5xl scroll-mt-20 px-5 pt-8">
+        <SectionHead eyebrow="Fleet service" title="Prefer us to run the maintenance?" center>
+          Our team handles oil changes, DOT inspections, weekly PTI control, breakdowns and warranty claims for you.{" "}
+          <Link href="/fleet-service" className="font-medium text-accent-text hover:underline">See what&apos;s included</Link>.
+        </SectionHead>
+        <ServicePrices className="mt-10" />
       </section>
 
       <section className="mx-auto max-w-3xl px-5 py-16">

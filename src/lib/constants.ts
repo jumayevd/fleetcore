@@ -159,16 +159,28 @@ export const VENDOR_TYPE_LABELS: Record<string, string> = {
 /* Walk-arounds (weekly pre-trip inspection) and defects               */
 /* ------------------------------------------------------------------ */
 
-/** What a reviewer checks on the weekly walk-around video, in walk-around order. */
+/** What a reviewer checks on the truck in the weekly walk-around video, in walk-around order. */
 export const PTI_COMPONENTS = [
-  "STEER_TIRES", "DRIVE_TIRES", "TRAILER_TIRES", "BRAKES", "LIGHTS", "LEAKS", "SUSPENSION", "BELTS_HOSES", "BATTERY",
-  "GLASS_MIRRORS", "BODY", "COUPLING", "TRAILER", "SAFETY_EQUIPMENT",
+  "STEER_TIRES", "DRIVE_TIRES", "BRAKE_SHOES", "DRUMS_DISKS", "SUSPENSION", "HOSES_LINES", "WINDSHIELD", "BODY", "MUD_FLAPS",
+  "COUPLING", "SAFETY_EQUIPMENT", "FLUIDS", "UNDER_HOOD", "CABLE_3IN1",
 ] as const;
+/** What a reviewer checks on the trailer, when the video shows one. Kept apart from the truck's by the TRL_ prefix. */
+export const PTI_TRAILER_COMPONENTS = [
+  "TRL_TIRES", "TRL_LIGHTS", "TRL_BRAKE_SHOES", "TRL_DRUMS_DISKS", "TRL_LEAKS", "TRL_BODY", "TRL_MUD_FLAPS",
+] as const;
+/** A trailer component's name inside the review's Trailer section, where "Trailer" goes without saying. */
+export const PTI_TRAILER_SHORT_LABELS: Record<string, string> = {
+  TRL_TIRES: "Tires", TRL_LIGHTS: "Lights & reflectors", TRL_BRAKE_SHOES: "Brake shoes", TRL_DRUMS_DISKS: "Drums / disks",
+  TRL_LEAKS: "Leaks & fluids", TRL_BODY: "Body", TRL_MUD_FLAPS: "Mud flaps",
+};
 export const PTI_COMPONENT_LABELS: Record<string, string> = {
-  STEER_TIRES: "Steer tires", DRIVE_TIRES: "Drive tires", TRAILER_TIRES: "Trailer tires", BRAKES: "Brakes", LIGHTS: "Lights & reflectors",
-  LEAKS: "Leaks & fluids", SUSPENSION: "Suspension / airbags", BELTS_HOSES: "Belts & hoses", BATTERY: "Battery & electrical",
-  GLASS_MIRRORS: "Windshield & mirrors", BODY: "Body & mud flaps", COUPLING: "5th wheel / coupling", TRAILER: "Trailer condition",
-  SAFETY_EQUIPMENT: "Safety equipment",
+  STEER_TIRES: "Steer tires", DRIVE_TIRES: "Drive tires", BRAKE_SHOES: "Brake shoes", DRUMS_DISKS: "Drums / disks", SUSPENSION: "Suspension",
+  HOSES_LINES: "Hoses / lines", WINDSHIELD: "Windshield", BODY: "Body", MUD_FLAPS: "Mud flaps", COUPLING: "Coupling",
+  SAFETY_EQUIPMENT: "Safety equipment", FLUIDS: "Fluid levels", UNDER_HOOD: "Condition under the hood", CABLE_3IN1: "3-in-1 cable",
+  ...Object.fromEntries(Object.entries(PTI_TRAILER_SHORT_LABELS).map(([k, v]) => [k, `Trailer ${v.toLowerCase()}`])),
+  // Earlier checklists: still on older walk-arounds and defects.
+  TRAILER_TIRES: "Trailer tires", BRAKES: "Brakes", LIGHTS: "Lights & reflectors", LEAKS: "Leaks & fluids", BELTS_HOSES: "Belts & hoses",
+  BATTERY: "Battery & electrical", GLASS_MIRRORS: "Windshield & mirrors", TRAILER: "Trailer condition",
 };
 /** GOOD · SOON (within 2 weeks) · NOW (before the next load) · UNSEEN (could not see it — never counts as healthy). */
 export const PTI_RATINGS = ["GOOD", "SOON", "NOW", "UNSEEN"] as const;

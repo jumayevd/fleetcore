@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { PLANS } from "@/lib/site";
+import { CONTACT_PLANS } from "@/lib/site";
 
 /*
  * The contact page is prebuilt, so what the link asked for (?plan=… from Pricing, ?topic=demo) is read in the browser:
@@ -14,7 +14,7 @@ const noSubscribe = () => () => {};
 export function useAsked() {
   const search = useSyncExternalStore(noSubscribe, () => window.location.search, () => "");
   const sp = new URLSearchParams(search);
-  return { plan: PLANS.find((p) => p.id === sp.get("plan")), demo: sp.get("topic") === "demo" };
+  return { plan: CONTACT_PLANS.find((p) => p.id === sp.get("plan")), demo: sp.get("topic") === "demo" };
 }
 
 /** The heading and intro, worded for what the visitor came for. */

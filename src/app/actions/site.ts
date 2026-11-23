@@ -8,7 +8,7 @@ import { attempt, fields, FormError, type ActionState } from "@/lib/action";
 import { addAccount, writeActive } from "@/lib/session";
 import { HOME } from "@/lib/permissions";
 import { demoWorkspace, isDemoEnabled } from "@/lib/demo";
-import { PLANS } from "@/lib/site";
+import { CONTACT_PLANS } from "@/lib/site";
 
 /** /demo → "Open the live demo": sign this browser in to the shared demo account and go to its fleet. */
 export async function openDemo() {
@@ -42,7 +42,7 @@ export async function sendContact(_: ActionState, fd: FormData): Promise<ActionS
     const saved = await rootDb.contactRequest.create({
       data: {
         name: clip(name, 120)!, email: clip(email, 200)!, phone: clip(f.phone("phone"), 40), company: clip(f.str("company"), 160),
-        fleetSize: clip(f.str("fleetSize"), 40), plan: plan && PLANS.some((p) => p.id === plan) ? plan : null, message: clip(f.str("message"), 4000),
+        fleetSize: clip(f.str("fleetSize"), 40), plan: plan && CONTACT_PLANS.some((p) => p.id === plan) ? plan : null, message: clip(f.str("message"), 4000),
       },
     });
     // Email it to the people who answer, after the visitor has their "Thanks" (src/lib/contact-notify).

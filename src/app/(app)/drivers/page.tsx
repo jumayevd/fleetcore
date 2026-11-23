@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
-import { FileWarning, PauseCircle, Plus, ShieldAlert, Truck as TruckIcon, Users } from "lucide-react";
+import { Archive, FileWarning, PauseCircle, Plus, ShieldAlert, Truck as TruckIcon, Users } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { db } from "@/lib/db";
@@ -141,10 +141,14 @@ export default async function DriversPage({ searchParams }: PageProps<"/drivers"
     <>
       {header}
 
-      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         {tile(only({ status: "ACTIVE" }), is({ status: "ACTIVE" }),
           <Stat className={tileClass} label="Active drivers" value={activeCount} icon={<Users />}
-            hint={`${onLeave} on leave · ${inactiveCount} inactive`} />)}
+            hint={`${onLeave} on leave`} />)}
+        {/* Drivers who left: set Inactive on their page, kept with their history. */}
+        {tile(only({ status: "INACTIVE" }), is({ status: "INACTIVE" }),
+          <Stat className={tileClass} label="Inactive" value={inactiveCount} icon={<Archive />}
+            hint={inactiveCount ? "left the company, history kept" : "nobody has left"} />)}
         {tile(only({ status: "ACTIVE", truck: "none" }), is({ status: "ACTIVE", truck: "none" }),
           <Stat className={tileClass} label="Without a truck" value={noTruck} icon={<TruckIcon />} tone={noTruck ? "warn" : "neutral"}
             hint={noTruck ? "active drivers with no truck assigned" : "every active driver has a truck"} />)}

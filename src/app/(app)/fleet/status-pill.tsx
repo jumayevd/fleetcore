@@ -7,6 +7,7 @@ import { Badge, STATUS_TONE, StatusDot, TONE_DOT, TONE_SOFT, cn, type Tone } fro
 import { Popover, menuItemClass, useMenuKeys } from "./menu";
 import { truckStatusLabel, truckStatusTone } from "./lib";
 import { InactiveRecord, useTruckStatusChange, type TruckStatusTarget } from "./truck-status-change";
+import { vendorSummary } from "@/lib/vendor-truck";
 
 /** The status as a tinted pill with a chevron: reads like a select, so it's plain that it changes the status. */
 export const statusPillClass = (tone: Tone) =>
@@ -40,7 +41,7 @@ export function TruckStatusPill({ status, editable, ...t }: TruckStatusTarget & 
   const tone: Tone = STATUS_TONE[key] ?? "neutral";
   const label = truckStatusLabel(status, t.hasDriver);
   const change = useTruckStatusChange(t);
-  if (!editable) return <span className="inline-flex items-center gap-1.5"><Badge value={key} label={label} dot />{t.isVendor && <VendorChip />}</span>;
+  if (!editable) return <span className="inline-flex items-center gap-1.5"><Badge value={key} label={label} dot />{t.isVendor && <VendorChip t={t} />}</span>;
   return (
     <span className="inline-flex items-center gap-1.5">
       <Popover width={status === "INACTIVE" && t.inactive ? 340 : 256} align="start" trigger={({ open, toggle }) => (
@@ -60,15 +61,16 @@ export function TruckStatusPill({ status, editable, ...t }: TruckStatusTarget & 
           </>
         )}
       </Popover>
-      {t.isVendor && <VendorChip />}
+      {t.isVendor && <VendorChip t={t} />}
       {change.dialogs}
     </span>
   );
 }
 
-/** Beside the status of another company's or owner's truck. */
-export function VendorChip() {
-  return <span className="rounded bg-progress-soft px-1.5 py-px text-[10.5px] font-medium text-progress" title="Belongs to another company or owner">Vendor</span>;
+/** Beside the status of another company's or owner's truck; hovering shows whose it is and the share kept. */
+export function VendorChip({ t }: { t: { vendorName?: string | null; vendorKeepPct?: number | null } }) {
+  const title = `Vendor truck: ${vendorSummary({ vendorName: t.vendorName ?? null, vendorKeepPct: t.vendorKeepPct ?? null })}`;
+  return <span className="rounded bg-progress-soft px-1.5 py-px text-[10.5px] font-medium text-progress" title={title}>Vendor</span>;
 }
 
 function StatusList({ status, hasDriver, pending, pick, isVendor, toggleVendor }: {

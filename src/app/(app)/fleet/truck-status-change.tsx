@@ -20,8 +20,10 @@ export type InactiveInfo = {
 
 export type TruckStatusTarget = {
   id: string; unitNumber: string; hasDriver: boolean; today: string; scheduled: ScheduledRepair[];
-  /** Another company's or owner's truck (a flag beside the status, not a status). */
+  /** Another company's or owner's truck (a flag beside the status, not a status), whose it is and the share kept. */
   isVendor: boolean;
+  vendorName?: string | null;
+  vendorKeepPct?: number | null;
   /** Set while the truck is Inactive: shown when its status is opened, and what Edit starts from. */
   inactive?: InactiveInfo | null;
 };
@@ -41,7 +43,7 @@ const DETAIL_HINT: Record<string, string> = {
  */
 export function useTruckStatusChange(t: TruckStatusTarget) {
   const [pending, start] = useTransition();
-  const [asking, setAsking] = useState<"INACTIVE" | "MAINTENANCE" | null>(null);
+  const [asking, setAsking] = useState<"INACTIVE" | "MAINTENANCE" | "VENDOR" | null>(null);
   const pick = (status: string, onDone: (error: string | null) => void) => {
     if (status === "INACTIVE" || status === "MAINTENANCE") {
       setAsking(status);
@@ -57,8 +59,16 @@ export function useTruckStatusChange(t: TruckStatusTarget) {
       }
     });
   };
-  /** Mark or unmark the truck as a vendor's: it keeps its status either way. */
-  const toggleVendor = (onDone: (error: string | null) => void) => start(async () => {
+  /** Mark (asks whose it is and the share kept first) or unmark the truck as a vendor's: it keeps its status either way. */
+  const toggleVendor = (onDone: (error: string | null) => void) => {
+    if (!t.isVendor) {
+      setAsking("VENDOR");
+      onDone(null);
+      return;
+    }
+    unmarkVendor(onDone);
+  };
+  const unmarkVendor = (onDone: (error: string | null) => void) => start(async () => {
     try {
       const res = await setTruckVendor(t.id, !t.isVendor);
       onDone(res?.error ?? null);
@@ -72,6 +82,7 @@ export function useTruckStatusChange(t: TruckStatusTarget) {
     <span className="contents" onClick={(e) => e.stopPropagation()}>
       {asking === "INACTIVE" && <InactiveDialog t={t} onClose={close} />}
       {asking === "MAINTENANCE" && <ShopDialog t={t} onClose={close} />}
+      {asking === "VENDOR" && <VendorDialog t={t} onClose={close} />}
     </span>
   );
   return { pick, toggleVendor, pending, dialogs };
@@ -164,6 +175,62 @@ function InactiveDialog({ t, onClose }: { t: TruckStatusTarget; onClose: () => v
           {t.hasDriver ? "Its driver comes off the truck on that day. " : ""}It stops counting in the fleet until it is set back to Available.
         </p>
       )}
+      {error && <FormMessage tone="error" className="mt-3">{error}</FormMessage>}
+    </Overlay>
+  );
+}
+
+/** The vendor's name and the share the company keeps: the same two fields as on the truck form. */
+export function VendorFields({ name, keepPct, onName, onKeepPct, required = true }: {
+  name?: string; keepPct?: string; onName?: (v: string) => void; onKeepPct?: (v: string) => void; required?: boolean;
+}) {
+  const controlled = onName != null;
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_7.5rem] gap-3">
+      <label className="block">
+        <span className="mb-1 block text-[12px] font-medium text-fg-muted">Vendor&apos;s name{required && <span className="text-danger"> *</span>}</span>
+        <Input name="vendorName" required={required} maxLength={120} placeholder="The person whose truck it is"
+          {...(controlled ? { value: name, onChange: (e) => onName(e.target.value) } : { defaultValue: name })} />
+      </label>
+      <label className="block">
+        <span className="mb-1 block text-[12px] font-medium text-fg-muted">Company keeps{required && <span className="text-danger"> *</span>}</span>
+        <span className="relative block">
+          <Input name="vendorKeepPct" type="number" required={required} min={0} max={100} step={0.5} placeholder="20" className="num pr-7"
+            {...(controlled ? { value: keepPct, onChange: (e) => onKeepPct?.(e.target.value) } : { defaultValue: keepPct })} />
+          <span aria-hidden className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-[12px] text-fg-subtle">%</span>
+        </span>
+      </label>
+    </div>
+  );
+}
+
+function VendorDialog({ t, onClose }: { t: TruckStatusTarget; onClose: () => void }) {
+  const [name, setName] = useState(t.vendorName ?? "");
+  const [keepPct, setKeepPct] = useState(t.vendorKeepPct?.toString() ?? "");
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const pct = keepPct.trim() === "" ? null : Number(keepPct);
+  const ready = Boolean(name.trim()) && pct != null && pct >= 0 && pct <= 100;
+  const submit = () => start(async () => {
+    setError(null);
+    try {
+      const res = await setTruckVendor(t.id, true, { name, keepPct: pct });
+      if (res?.error) setError(res.error);
+      else onClose();
+    } catch {
+      setError("Could not save. Refresh the page and try again.");
+    }
+  });
+  return (
+    <Overlay variant="dialog" onClose={onClose} title={`Mark ${t.unitNumber} as a vendor truck`} subtitle="Another person's or company's truck"
+      footer={
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button disabled={pending || !ready} onClick={submit}>{pending ? "Saving…" : "Mark as vendor truck"}</Button>
+        </div>
+      }>
+      <VendorFields name={name} keepPct={keepPct} onName={setName} onKeepPct={setKeepPct} />
+      <p className="mt-3 text-[12px] text-fg-subtle">{t.unitNumber} keeps its status and also counts under Vendor.</p>
       {error && <FormMessage tone="error" className="mt-3">{error}</FormMessage>}
     </Overlay>
   );

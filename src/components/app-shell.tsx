@@ -3,7 +3,7 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
-import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import {
   LayoutDashboard, Map, Truck, Container, Wrench, ClipboardList, Users, BarChart3, Landmark, ShieldCheck, ScrollText, Settings,
   Droplet, Store, ClipboardCheck, TriangleAlert, ShieldAlert, Plug,
@@ -137,6 +137,21 @@ export function AppShell({ user, active, accounts, locale, navOpen, children }: 
   );
 }
 
+/**
+ * A sidebar link that loads its whole page as soon as the pointer (or focus) reaches it, not only its loading
+ * skeleton: the server is a round trip away, and the time between hovering and clicking hides most of it. Kept in
+ * the browser for staleTimes.static (next.config.ts), so going back and forth between pages is instant.
+ */
+function NavLink({ onMouseEnter, onFocus, onTouchStart, ...props }: ComponentProps<typeof Link>) {
+  const [warm, setWarm] = useState(false);
+  const heat = () => setWarm(true);
+  return (
+    <Link {...props} prefetch={warm ? true : null}
+      onMouseEnter={(e) => { heat(); onMouseEnter?.(e); }} onFocus={(e) => { heat(); onFocus?.(e); }}
+      onTouchStart={(e) => { heat(); onTouchStart?.(e); }} />
+  );
+}
+
 function SideNav({ user, active, path, data, expanded, pinned, onTogglePin, onNavigate }: {
   user: ShellUser; active: ActiveWorkspace; path: string; data: ShellData | null;
   expanded: boolean; pinned: boolean; onTogglePin: () => void; onNavigate?: () => void;
@@ -166,14 +181,14 @@ function SideNav({ user, active, path, data, expanded, pinned, onTogglePin, onNa
             const Icon = ICONS[single ? item.icon : g.icon] ?? Package;
             const label = single ? item.label : g.section;
             return (
-              <Link key={g.section} href={item.href} title={expanded ? undefined : label} onClick={onNavigate} aria-current={here && single ? "page" : undefined}
+              <NavLink key={g.section} href={item.href} title={expanded ? undefined : label} onClick={onNavigate} aria-current={here && single ? "page" : undefined}
                 className={cn("group relative flex h-9 items-center gap-2.5 rounded-[9px] text-[13px] font-medium transition-[color,background-color,box-shadow] duration-150",
                   expanded ? "px-2.5" : "justify-center",
                   here ? "bg-surface text-fg shadow-card" : "text-fg-muted hover:bg-surface/60 hover:text-fg")}>
                 <Icon className={cn("h-[18px] w-[18px] shrink-0 transition-colors", here ? "text-accent" : "text-fg-subtle group-hover:text-fg-muted")} />
                 {expanded && <span className="truncate">{label}</span>}
                 <Suspense fallback={null}><NavBadge data={data} hrefs={g.items.map((i) => i.href)} expanded={expanded} /></Suspense>
-              </Link>
+              </NavLink>
             );
           }
           const open = toggled[g.section] ?? here;
@@ -196,12 +211,12 @@ function SideNav({ user, active, path, data, expanded, pinned, onTogglePin, onNa
                       return (
                         <li key={i.href} className="relative">
                           {on && <span aria-hidden className="absolute -left-[9px] bottom-2 top-2 w-[2px] rounded-full bg-accent" />}
-                          <Link href={i.href} onClick={onNavigate} aria-current={on ? "page" : undefined}
+                          <NavLink href={i.href} onClick={onNavigate} aria-current={on ? "page" : undefined}
                             className={cn("group flex h-8 items-center gap-2 rounded-[8px] px-2.5 text-[13px] transition-[color,background-color,box-shadow] duration-150",
                               on ? "bg-surface font-medium text-fg shadow-card" : "text-fg-muted hover:bg-surface/60 hover:text-fg")}>
                             <span className="truncate">{i.label}</span>
                             <Suspense fallback={null}><NavBadge data={data} hrefs={[i.href]} expanded /></Suspense>
-                          </Link>
+                          </NavLink>
                         </li>
                       );
                     })}

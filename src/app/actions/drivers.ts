@@ -10,6 +10,7 @@ import { attempt, fields, FormError, type ActionState } from "@/lib/action";
 import { DRIVER_STATUSES, DRIVER_TYPES } from "@/lib/constants";
 import { setTruckDriver } from "@/lib/assignments";
 import { startOfDayIn } from "@/lib/locale";
+import { deleteFile } from "@/lib/storage";
 
 /* ------------------------------------------------------------------ */
 /* Driver actions. Truck assignment goes through the truck's driver     */
@@ -224,4 +225,25 @@ export async function assignTruck(driverId: string, truckId: string | null): Pro
   });
   if (changed) refresh(driverId, true);
   return res;
+}
+
+/**
+ * "Delete driver" at the foot of the edit page, for owners and admins: a driver added by mistake. Their files and truck
+ * history go with them; fuel logs, walk-arounds and repairs they were charged for stay, without the name. Drivers who
+ * left the company go Inactive instead. Typing the driver's name confirms.
+ */
+export async function deleteDriver(driverId: string, confirm: string): Promise<ActionState> {
+  const me = await requireUser("drivers.edit");
+  return attempt(async () => {
+    if (!can(me.role, "drivers.delete")) throw new FormError("Only an owner or admin can delete a driver.");
+    const driver = await db.driver.findUnique({ where: { id: driverId }, select: { name: true, truck: { select: { id: true } }, teamTruck: { select: { id: true } } } });
+    if (!driver) throw new FormError("This driver no longer exists. They may have been deleted already.");
+    if (confirm.trim() !== driver.name.trim()) throw new FormError(`Type ${driver.name} to confirm.`);
+    const docs = await db.document.findMany({ where: { OR: [{ driverId }, { assignment: { driverId } }] }, select: { storageKey: true } });
+    await db.driver.delete({ where: { id: driverId } });
+    await Promise.all(docs.map((d) => deleteFile(d.storageKey).catch(() => undefined)));
+    await audit(me.id, "delete", "driver", null, `${driver.name}${docs.length ? ` · ${docs.length} file${docs.length > 1 ? "s" : ""}` : ""}`);
+    refresh(null, Boolean(driver.truck || driver.teamTruck));
+    return { ok: `${driver.name} deleted` };
+  });
 }

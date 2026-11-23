@@ -6,7 +6,7 @@ import { useState } from "react";
 import { Menu, X } from "lucide-react";
 import { buttonClass, cn } from "@/components/ui";
 
-const LINKS = [["/#features", "Product"], ["/pricing", "Pricing"], ["/demo", "Live demo"], ["/contact", "Contact"]] as const;
+const LINKS = [["/#features", "Product"], ["/fleet-service", "Fleet service"], ["/pricing", "Pricing"], ["/demo", "Live demo"], ["/contact", "Contact"]] as const;
 
 /** Site header links and buttons; a menu on phones. Log in takes people already signed in straight to their fleet. */
 export function SiteNav() {

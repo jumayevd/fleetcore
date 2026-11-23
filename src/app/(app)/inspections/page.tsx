@@ -223,6 +223,9 @@ export default async function PreTripBoard({ searchParams }: PageProps<"/inspect
         receivedLabel: w?.receivedAt ? f.dateTime(w.receivedAt) : null,
         reviewed: w?.reviewedAt ? { by: w.reviewedBy?.name ?? null, on: f.dateTime(w.reviewedAt), stamp: w.reviewedAt.toISOString() } : null,
         notes: w?.notes ?? "",
+        trailer: w?.trailerId || w?.trailerNumber ? { id: w.trailerId, number: w.trailerNumber ?? "" } : null,
+        trailers: data.trailers,
+        pairedTrailerId: data.pairedTrailerId,
         ratings: Object.fromEntries((w?.ratings ?? []).map((r) => [r.component, r.rating])),
         thisWeek: Object.fromEntries((w?.defects ?? []).map((d) => [d.component, {
           number: d.number, description: d.description, severity: d.severity,

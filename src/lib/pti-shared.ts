@@ -4,7 +4,7 @@
  */
 import type { Tone } from "@/components/ui";
 import {
-  DEFECT_SEVERITY_LABELS, DEFECT_STATUS_LABELS, PTI_COMPONENT_LABELS, PTI_COMPONENTS, PTI_RATINGS, ROADSIDE_RESULT_LABELS, ROADSIDE_STATUS_LABELS, humanize,
+  DEFECT_SEVERITY_LABELS, DEFECT_STATUS_LABELS, PTI_COMPONENT_LABELS, PTI_COMPONENTS, PTI_RATINGS, PTI_TRAILER_COMPONENTS, ROADSIDE_RESULT_LABELS, ROADSIDE_STATUS_LABELS, humanize,
 } from "./constants";
 
 export const DAY_MS = 86_400_000;
@@ -25,7 +25,7 @@ export const byUnit = (a: string, b: string) => a.localeCompare(b, "en", { numer
 /* ------------------------------------------------------------------ */
 
 /** What a defect can be filed under: the walk-around components plus "Other". */
-export const DEFECT_COMPONENTS = [...PTI_COMPONENTS, "OTHER"] as const;
+export const DEFECT_COMPONENTS = [...PTI_COMPONENTS, ...PTI_TRAILER_COMPONENTS, "OTHER"] as const;
 export const componentLabel = (c: string) => PTI_COMPONENT_LABELS[c] ?? (c === "OTHER" ? "Other" : humanize(c));
 
 export const RATING_TONE: Record<string, Tone> = { GOOD: "ok", SOON: "warn", NOW: "danger", UNSEEN: "neutral" };

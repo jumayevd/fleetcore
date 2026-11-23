@@ -250,6 +250,9 @@ model Truck {
   status             String               @default("ACTIVE")
   /// A vendor's truck: belongs to another company or owner (not leased). Set by hand; the truck keeps its own status.
   isVendor           Boolean              @default(false)
+  /// A vendor truck's owner (the person or company whose truck it is) and the share of its earnings the company keeps (%).
+  vendorName         String?
+  vendorKeepPct      Float?
   /// Why it is Inactive (INACTIVE_REASONS), with any details, and when the status started.
   statusReason       String?
   statusNote         String?
@@ -343,6 +346,7 @@ model Trailer {
   workOrders       WorkOrder[]
   defects          Defect[]
   roadside         RoadsideInspection[]
+  walkArounds      WalkAround[]
 
   @@unique([companyId, unitNumber])
   @@index([companyId, status])
@@ -641,6 +645,11 @@ model WalkAround {
   truck        Truck              @relation(fields: [truckId], references: [id], onDelete: Cascade)
   driverId     String?
   driver       Driver?            @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  /// The trailer hooked to the truck on the video, when the reviewer recorded one: a trailer on file, or only its
+  /// number when it isn't in the system. Its components are rated as TRL_* (PTI_TRAILER_COMPONENTS).
+  trailerId     String?
+  trailer       Trailer?           @relation(fields: [trailerId], references: [id], onDelete: SetNull)
+  trailerNumber String?
   /// First day of the week, as a calendar date in the company's time zone.
   weekStart    DateTime           @db.Date
   /// AWAITING | RECEIVED | MISSING
