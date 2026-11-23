@@ -28,7 +28,7 @@ export default function SiteLayout({ children }: { children: ReactNode }) {
             </p>
           </div>
           <FooterCol title="Product" links={[["/#features", "Features"], ["/pricing", "Pricing"], ["/demo", "Live demo"]]} />
-          <FooterCol title="Company" links={[["/contact", "Contact"], ...(SITE.email ? [[`mailto:${SITE.email}`, SITE.email] as [string, string]] : [])]} />
+          <FooterCol title="Company" links={[["/contact", "Contact"], ["/privacy", "Privacy"], ...(SITE.email ? [[`mailto:${SITE.email}`, SITE.email] as [string, string]] : [])]} />
           <FooterCol title="Account" links={[["/login", "Log in"], ["/signup", "Sign up"]]} />
         </div>
         <div className="border-t border-line">
