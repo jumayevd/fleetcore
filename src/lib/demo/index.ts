@@ -35,7 +35,7 @@ async function demoAccount(email: string, name: string) {
 }
 
 /** The current demo company (the newest, should two rebuilds ever overlap). */
-export async function findDemoCompany() {
+async function findDemoCompany() {
   return rootDb.company.findFirst({
     where: { memberships: { some: { user: { email: DEMO_OWNER_EMAIL } } } },
     orderBy: { createdAt: "desc" },

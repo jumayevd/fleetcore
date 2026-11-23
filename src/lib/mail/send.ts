@@ -14,6 +14,8 @@ export type Outgoing = {
   from: { name: string; email: string };
   to: string[];
   cc: string[];
+  /** Where replies go, when not to the sender. */
+  replyTo?: string;
   subject: string;
   text: string;
   files: OutgoingFile[];
@@ -36,6 +38,7 @@ export function buildMime(m: Outgoing) {
     `From: ${address(m.from.name, m.from.email)}`,
     `To: ${m.to.join(", ")}`,
     ...(m.cc.length ? [`Cc: ${m.cc.join(", ")}`] : []),
+    ...(m.replyTo ? [`Reply-To: ${m.replyTo}`] : []),
     `Subject: ${headerText(m.subject)}`,
     `Date: ${new Date().toUTCString()}`,
     "MIME-Version: 1.0",
@@ -87,6 +90,7 @@ async function sendOutlook(token: string, m: Outgoing) {
   const recipients = (xs: string[]) => xs.map((address) => ({ emailAddress: { address } }));
   const draft = (await graph(token, "/messages", {
     subject: m.subject, body: { contentType: "Text", content: m.text }, toRecipients: recipients(m.to), ccRecipients: recipients(m.cc),
+    ...(m.replyTo ? { replyTo: recipients([m.replyTo]) } : {}),
   })) as { id: string };
   const id = encodeURIComponent(draft.id);
   for (const f of m.files) {

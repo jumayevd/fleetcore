@@ -8,15 +8,10 @@ export function parseThemePref(v: string | undefined | null): ThemePref {
   return v === "light" || v === "dark" || v === "auto" ? v : DEFAULT_THEME;
 }
 
-/**
- * Runs before first paint (inlined in <head>). Applies the saved choice; "auto" follows the OS; no cookie
- * means Day. Keeps the page from flashing the wrong theme. Keep it tiny and dependency-free.
- */
-export const THEME_BOOT_SCRIPT = `(function(){try{var m=document.cookie.match(/(?:^|; )${THEME_COOKIE}=(light|dark|auto)/);var p=m?m[1]:'${DEFAULT_THEME}';var t=p==='auto'?(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):p;document.documentElement.setAttribute('data-theme',t);}catch(e){}})();`;
 
 /* ------------------------------------------------------------------ */
-/* Personal appearance (per browser, in cookies so the server renders */
-/* the first paint with them: no flash)                                */
+/* Personal appearance (per browser, in cookies; applied before the   */
+/* first paint by THEME_BOOT_SCRIPT: no flash)                         */
 /* ------------------------------------------------------------------ */
 
 export const ACCENTS = ["blue", "indigo", "violet", "teal", "green", "amber", "graphite"] as const;
@@ -47,3 +42,10 @@ export function saveAppearance(name: "accent" | "density" | "font", value: strin
   document.cookie = `${APPEARANCE_COOKIE[name]}=${value}; path=/; max-age=31536000; samesite=lax`;
   document.documentElement.setAttribute(`data-${name}`, value);
 }
+
+/**
+ * Runs before first paint (inlined in <head>). Applies the saved theme ("auto" follows the OS; no cookie means Day) and
+ * the saved accent, density and font. Doing this here rather than on the server keeps pages free of cookies, so the
+ * public site is prebuilt and opens instantly. Keep it tiny and dependency-free.
+ */
+export const THEME_BOOT_SCRIPT = `(function(){try{var d=document.documentElement,c=document.cookie,g=function(n,r){var m=c.match(new RegExp('(?:^|; )'+n+'=('+r+')(?:;|$)'));return m&&m[1];};var p=g('${THEME_COOKIE}','light|dark|auto')||'${DEFAULT_THEME}';d.setAttribute('data-theme',p==='auto'?(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):p);var a=g('${APPEARANCE_COOKIE.accent}','${ACCENTS.join("|")}'),n=g('${APPEARANCE_COOKIE.density}','${DENSITIES.join("|")}'),f=g('${APPEARANCE_COOKIE.font}','${FONTS.join("|")}');if(a)d.setAttribute('data-accent',a);if(n)d.setAttribute('data-density',n);if(f)d.setAttribute('data-font',f);}catch(e){}})();`;

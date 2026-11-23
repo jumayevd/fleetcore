@@ -66,6 +66,7 @@ export function MockStage({ children, className, eager, side = "right" }: { chil
     const leave = () => { px = 0; py = 0; delete box.dataset.hover; queue(); };
     const replay = () => { if (visible && document.visibilityState === "visible") setRound((n) => n + 1); };
 
+    // Replays run only while a quarter of the stage is on screen.
     const io = new IntersectionObserver(([e]) => {
       visible = e.isIntersecting && e.intersectionRatio >= 0.25;
       if (visible) {
@@ -73,15 +74,30 @@ export function MockStage({ children, className, eager, side = "right" }: { chil
         if (!timer && !still) timer = setInterval(replay, REPLAY_MS);
       } else if (timer) { clearInterval(timer); timer = undefined; }
     }, { threshold: [0, 0.25] });
+    // Scroll tracking runs only while the stage is on or near the screen, so stages further down cost nothing.
+    let near = false;
+    const listen = (on: boolean) => {
+      if (on === near) return;
+      near = on;
+      if (on) {
+        window.addEventListener("scroll", queue, { passive: true });
+        window.addEventListener("resize", queue);
+        queue();
+      } else {
+        window.removeEventListener("scroll", queue);
+        window.removeEventListener("resize", queue);
+      }
+    };
+    const nearIo = new IntersectionObserver(([e]) => listen(e.isIntersecting), { rootMargin: "200px 0px" });
     io.observe(box);
+    nearIo.observe(box);
     paint();
-    window.addEventListener("scroll", queue, { passive: true });
-    window.addEventListener("resize", queue);
     box.addEventListener("pointermove", move);
     box.addEventListener("pointerleave", leave);
     return () => {
-      io.disconnect(); if (timer) clearInterval(timer); if (raf) cancelAnimationFrame(raf);
-      window.removeEventListener("scroll", queue); window.removeEventListener("resize", queue);
+      io.disconnect(); nearIo.disconnect(); listen(false);
+      if (timer) clearInterval(timer);
+      if (raf) cancelAnimationFrame(raf);
       box.removeEventListener("pointermove", move); box.removeEventListener("pointerleave", leave);
     };
   }, [side]);

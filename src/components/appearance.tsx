@@ -8,7 +8,7 @@ import {
   ACCENTS, ACCENT_SWATCH, DENSITIES, FONTS, FONT_LABEL, saveAppearance, type Accent, type Density, type FontChoice, type ThemePref,
 } from "@/lib/theme";
 
-// The accent / density / font live as attributes on <html> (set by the server from cookies). A tiny store over
+// The accent / density / font live as attributes on <html> (set from cookies by the boot script, src/lib/theme). A tiny store over
 // those attributes keeps every control in sync, including the menu and the account page at the same time.
 const attrListeners = new Set<() => void>();
 let attrObserver: MutationObserver | null = null;

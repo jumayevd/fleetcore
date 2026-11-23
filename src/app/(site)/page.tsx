@@ -1,14 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import {
   ArrowRight, Bell, Building2, CalendarClock, ClipboardCheck, Droplet, FileWarning, MapPin, MessageSquareText, Receipt,
   ShieldAlert, Sparkles, Store, Truck, Users, Wrench,
 } from "lucide-react";
 import { cn } from "@/components/ui";
-import { getSessionContext } from "@/lib/session";
-import { HOME } from "@/lib/permissions";
-import { isDemoEmail } from "@/lib/demo/shared";
 import { CtaBand, Eyebrow, SectionHead, bigButton } from "./parts";
 import { ProductVideo } from "./video";
 import { MockStage } from "./mock/stage";
@@ -84,12 +80,8 @@ const MORE = [
   { icon: Bell, title: "Team roles", text: "Owner, admin, specialist and view-only access." },
 ];
 
-export default async function HomePage() {
-  // Signed in and working in a company: the home page opens the app. Not for the shared demo account, so someone who
-  // tried the demo can still read the site and log in to their own fleet.
-  const { active } = await getSessionContext();
-  if (active && !isDemoEmail(active.user.email)) redirect(HOME);
-
+/** Prebuilt and the same for everyone: signed-in people reach their fleet through Log in (/login sends them straight in). */
+export default function HomePage() {
   return (
     <>
       {/* Hero */}

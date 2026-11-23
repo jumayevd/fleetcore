@@ -4,12 +4,15 @@ import { useActionState } from "react";
 import { CheckCircle2, Loader2, Send } from "lucide-react";
 import { inputClass, cn } from "@/components/ui";
 import { sendContact } from "@/app/actions/site";
+import { PLANS } from "@/lib/site";
 import { bigButton } from "../parts";
+import { useAsked } from "./from-link";
 
 const label = "mb-1.5 block text-[13px] font-medium text-fg";
 const field = cn(inputClass, "h-10 text-[14px]");
 
-export function ContactForm({ plans, plan }: { plans: { id: string; name: string }[]; plan?: string }) {
+export function ContactForm() {
+  const plan = useAsked().plan?.id;
   const [state, action, pending] = useActionState(sendContact, undefined);
 
   if (state?.ok) {
@@ -38,9 +41,9 @@ export function ContactForm({ plans, plan }: { plans: { id: string; name: string
         </div>
         <div>
           <label htmlFor="c-plan" className={label}>Plan</label>
-          <select id="c-plan" name="plan" defaultValue={plan ?? ""} className={field}>
+          <select key={plan ?? ""} id="c-plan" name="plan" defaultValue={plan ?? ""} className={field}>
             <option value="">Not sure yet</option>
-            {plans.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            {PLANS.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
         <div className="sm:col-span-2">

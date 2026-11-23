@@ -18,7 +18,7 @@ export const H = 660;
 /** Stagger an entrance animation. */
 export const at = (ms: number): CSSProperties => ({ animationDelay: `${ms}ms` });
 
-export type MockNav = "today" | "fleet" | "maintenance" | "inspections" | "drivers" | "tracking" | "reports" | "assistant";
+type MockNav = "today" | "fleet" | "maintenance" | "inspections" | "drivers" | "tracking" | "reports" | "assistant";
 
 const NAV: [MockNav, string, LucideIcon][] = [
   ["today", "Today", LayoutDashboard], ["fleet", "Fleet", Truck], ["maintenance", "Maintenance", Wrench],

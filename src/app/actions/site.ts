@@ -1,6 +1,8 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { after } from "next/server";
+import { notifyContact } from "@/lib/contact-notify";
 import { rootDb } from "@/lib/db-root";
 import { attempt, fields, FormError, type ActionState } from "@/lib/action";
 import { addAccount, writeActive } from "@/lib/session";
@@ -37,12 +39,14 @@ export async function sendContact(_: ActionState, fd: FormData): Promise<ActionS
       rootDb.contactRequest.count({ where: { createdAt: { gt: since } } }),
     ]);
     if (mine >= 3 || all >= 30) throw new FormError("We've got your message already. We'll be in touch shortly.");
-    await rootDb.contactRequest.create({
+    const saved = await rootDb.contactRequest.create({
       data: {
         name: clip(name, 120)!, email: clip(email, 200)!, phone: clip(f.phone("phone"), 40), company: clip(f.str("company"), 160),
         fleetSize: clip(f.str("fleetSize"), 40), plan: plan && PLANS.some((p) => p.id === plan) ? plan : null, message: clip(f.str("message"), 4000),
       },
     });
+    // Email it to the people who answer, after the visitor has their "Thanks" (src/lib/contact-notify).
+    after(() => notifyContact(saved));
     return { ok: "sent" };
   });
 }
