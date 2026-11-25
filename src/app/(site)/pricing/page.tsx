@@ -60,7 +60,7 @@ export default function PricingPage() {
 
           <div className="mt-8"><PriceCalculator /></div>
           <p className="mt-6 text-center text-[13px] text-fg-subtle">
-            Prices in US dollars, billed monthly. Not sure yet? <Link href="/demo" className="font-medium text-accent-text hover:underline">Watch the live demo</Link> first.
+            Prices in US dollars, billed monthly. Not sure yet? <Link href="/contact?topic=demo" className="font-medium text-accent-text hover:underline">Book a demo</Link> first.
           </p>
         </div>
       </section>

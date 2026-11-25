@@ -7,3 +7,6 @@ export const DEMO_OWNER_EMAIL = "demo-owner@fleetcore.invalid";
 export const isDemoEmail = (email: string | null | undefined) => email === DEMO_EMAIL;
 
 export const DEMO_BLOCKED = "That isn't available in the live demo.";
+
+/** The hands-on live demo (/demo → "Open the live demo"): off unless DEMO_ENABLED=true. See src/lib/demo/index.ts. */
+export const isDemoEnabled = () => process.env.DEMO_ENABLED === "true";

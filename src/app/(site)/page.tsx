@@ -13,7 +13,7 @@ import { AssistantScene, InspectionsScene, MapScene, OilScene, RepairsScene, Rep
 
 export const metadata: Metadata = {
   title: { absolute: "FleetCore: fleet maintenance and compliance for trucking companies" },
-  description: "Oil changes by odometer, repairs and shop time, pre-trip walk-arounds, expiring papers and roadside inspections for every truck and trailer, on one screen. Try the live demo.",
+  description: "Oil changes by odometer, repairs and shop time, pre-trip walk-arounds, expiring papers and roadside inspections for every truck and trailer, on one screen. Book a demo.",
 };
 
 const PAINS = [
@@ -100,10 +100,10 @@ export default function HomePage() {
               that expires Friday, the truck that&apos;s been in the shop too long, the defect nobody owns.
             </p>
             <div className="mt-9 flex flex-wrap gap-3">
-              <Link href="/demo" className={bigButton()}>Open the live demo<ArrowRight /></Link>
+              <Link href="/contact?topic=demo" className={bigButton()}>Book a demo<ArrowRight /></Link>
               <Link href="/pricing" className={bigButton("secondary")}>See pricing</Link>
             </div>
-            <p className="mt-4 text-[13px] text-fg-subtle">No sign-up. Watch the one-minute video below, or open the demo fleet and click around.</p>
+            <p className="mt-4 text-[13px] text-fg-subtle">Watch the one-minute video below, then book a walkthrough on your own kind of fleet.</p>
           </div>
           <div className="mt-14 sm:mt-16">
             <ProductVideo />

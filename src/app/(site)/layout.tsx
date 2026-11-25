@@ -5,7 +5,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { SITE } from "@/lib/site";
 import { SiteNav } from "./nav";
 
-/** The public site: product, pricing, live demo and contact. Inter throughout, whatever font the app is set to. */
+/** The public site: product, pricing, product tour and contact. Inter throughout, whatever font the app is set to. */
 export default function SiteLayout({ children }: { children: ReactNode }) {
   const year = new Date().getFullYear();
   return (
@@ -27,7 +27,7 @@ export default function SiteLayout({ children }: { children: ReactNode }) {
               Maintenance, paperwork and compliance for trucking fleets, on one screen.
             </p>
           </div>
-          <FooterCol title="Product" links={[["/#features", "Features"], ["/fleet-service", "Fleet service"], ["/pricing", "Pricing"], ["/demo", "Live demo"]]} />
+          <FooterCol title="Product" links={[["/#features", "Features"], ["/fleet-service", "Fleet service"], ["/pricing", "Pricing"], ["/demo", "Product tour"]]} />
           <FooterCol title="Company" links={[["/contact", "Contact"], ["/privacy", "Privacy"], ...(SITE.email ? [[`mailto:${SITE.email}`, SITE.email] as [string, string]] : [])]} />
           <FooterCol title="Account" links={[["/login", "Log in"], ["/signup", "Sign up"]]} />
         </div>

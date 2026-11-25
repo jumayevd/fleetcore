@@ -70,7 +70,7 @@ export const CONTACT_PLANS: { id: string; name: string }[] = [...PLANS.map((p) =
 export const monthlyPrice = (plan: Plan, trucks: number) => (trucks <= FLAT_TRUCKS ? plan.flat : Math.round(trucks * plan.perTruck * 100) / 100);
 
 export const FAQ: [q: string, a: string][] = [
-  ["Can I try it first?", "Watch the tour on the Live demo page, or open the demo fleet and click around yourself. No sign-up. When you're ready, we set up a trial on your own trucks."],
+  ["Can I try it first?", "Watch the one-minute product tour, then book a demo: we walk you through FleetCore on your own kind of fleet. When you're ready, we set up a trial on your own trucks."],
   ["How is the price counted?", `Up to ${FLAT_TRUCKS} trucks you pay one flat monthly price. With more than ${FLAT_TRUCKS} trucks, every truck is billed per month: $9.99 on Standard, $11.99 with AI. Trailers and team members are free.`],
   ["Do I need an ELD?", "No. FleetCore works with readings your team types in. With TrackPro connected, odometer, engine hours and fuel come in on their own."],
   ["Can I move my data in?", "Send us your truck, trailer and driver lists in any spreadsheet. We set up your workspace for you."],

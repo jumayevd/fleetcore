@@ -31,7 +31,7 @@ export default function ContactPage() {
           )}
           <li className="flex gap-3">
             <PlayCircle className="mt-0.5 h-5 w-5 shrink-0 text-accent" />
-            <div><p className="text-[15px] font-medium">Want to look first?</p><Link href="/demo" className="text-[14px] text-accent-text hover:underline">Open the live demo</Link></div>
+            <div><p className="text-[15px] font-medium">Want to look first?</p><Link href="/demo" className="text-[14px] text-accent-text hover:underline">Watch the one-minute tour</Link></div>
           </li>
         </ul>
       </div>

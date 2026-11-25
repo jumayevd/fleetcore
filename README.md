@@ -22,7 +22,7 @@ company who opens `/` goes straight to the app.
 
 - **Contact form** messages are saved in the database (`ContactRequest`) and listed at the top of the Platform console,
   where they are marked handled. Bots are slowed by a hidden field and a per-address limit.
-- **Live demo** (on unless `DEMO_ENABLED=false`): `/demo` plays a self-running tour of the product (HTML mock-ups in `src/app/(site)/mock`), and "Open the live demo" signs the browser in to one shared account
+- **Live demo** (off unless `DEMO_ENABLED=true`; walkthroughs are given on request): `/demo` plays a self-running tour of the product (HTML mock-ups in `src/app/(site)/mock`), and "Open the live demo" signs the browser in to one shared account
   (`demo@fleetcore.invalid`, Specialist) in the made-up company **Demo Freight Co.**, built from the same generator as the
   local seed (`src/lib/demo/fleet-data.ts`). `/api/cron/demo` throws it away and builds it again every night at 04:30
   UTC, so visitors' changes don't last. The demo account can't change its password or profile, connect a mailbox,
@@ -282,7 +282,7 @@ layout). An App Store app needs a Mac with Xcode and an Apple Developer account.
 | `AUTH_SECRET` | Random 32-byte hex (also keys the encrypted ELD tokens: changing it means pasting them again) |
 | `CRON_SECRET` | Random; Vercel Cron sends it to `/api/cron/eld`, `/api/cron/backup` and `/api/cron/demo` |
 | `DEMO_MODE` | `true` locally, `false` in production |
-| `DEMO_ENABLED` | `false` turns off the hands-on live demo (`/demo`) and its nightly rebuild; on by default |
+| `DEMO_ENABLED` | `true` turns on the hands-on live demo (`/demo`) and its nightly rebuild; off by default, and while off the demo account is signed out |
 | `APP_URL` | Optional, base URL for invitation links |
 | `MEMBER_EMAIL_DOMAINS` | Optional, comma-separated: invitations only to these domains (`fleetcore.com` in production); unset = any address |
 | `AI_GATEWAY_API_KEY`, `ASSISTANT_MODEL` | Optional locally; OIDC on Vercel |

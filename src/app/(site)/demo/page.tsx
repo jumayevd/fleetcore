@@ -1,22 +1,24 @@
 import type { Metadata } from "next";
-import { Check, MousePointerClick, RotateCcw } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, CalendarCheck, Check, MousePointerClick, RotateCcw } from "lucide-react";
 import { isDemoEnabled } from "@/lib/demo";
 import { openDemo } from "@/app/actions/site";
-import { Eyebrow } from "../parts";
+import { Eyebrow, bigButton } from "../parts";
 import { ProductVideo } from "../video";
 import { DemoButton } from "./demo-button";
 
 export const metadata: Metadata = {
-  title: "Live demo",
-  description: "Watch FleetCore run a fleet in one minute: today's list, oil changes, repairs, walk-arounds, the live map and costs. Then open the demo fleet yourself. No sign-up.",
+  title: "Product tour",
+  description: "Watch FleetCore run a fleet in one minute: today's list, oil changes, repairs, walk-arounds, the live map and costs. Then book a demo on your own kind of fleet.",
 };
 
+/** What a walkthrough (or the hands-on demo, when it is on) covers. */
 const TRY = [
-  "Open Today and clear an overdue oil change",
-  "Book a repair for a truck held out of service",
-  "Review a driver's weekly walk-around",
-  "Find which papers expire this month",
-  "See what each truck cost you in Reports",
+  "Clearing an overdue oil change from Today",
+  "Booking a repair for a truck held out of service",
+  "Reviewing a driver's weekly walk-around",
+  "Finding which papers expire this month",
+  "Seeing what each truck cost you in Reports",
 ];
 
 export default function DemoPage() {
@@ -27,7 +29,7 @@ export default function DemoPage() {
         <div aria-hidden className="pointer-events-none absolute inset-0 bg-[radial-gradient(45%_45%_at_50%_0%,var(--accent-soft),transparent_70%)]" />
         <div className="relative mx-auto max-w-6xl px-5 pb-10 pt-14 sm:pt-20">
           <div className="mx-auto max-w-2xl text-center">
-            <Eyebrow>Live demo</Eyebrow>
+            <Eyebrow>Product tour</Eyebrow>
             <h1 className="mt-4 text-balance text-[36px] font-semibold leading-[1.08] tracking-[-0.03em] sm:text-[50px]">FleetCore in one minute.</h1>
             <p className="mt-4 text-[17px] leading-8 text-fg-muted">
               A walk through the demo fleet: today&apos;s list, oil changes, repairs, walk-arounds, the live map and costs.
@@ -36,6 +38,24 @@ export default function DemoPage() {
           <ProductVideo className="mt-10" />
         </div>
       </section>
+
+      {!enabled && (
+        <section className="mx-auto max-w-6xl px-5 pb-20 pt-6">
+          <div className="grid items-center gap-8 rounded-2xl border border-line bg-surface p-7 sm:p-10 lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)]">
+            <div>
+              <p className="flex items-center gap-2 text-[13px] font-semibold text-accent-text"><CalendarCheck className="h-4 w-4" />See it on your own fleet</p>
+              <h2 className="mt-2 text-balance text-[26px] font-semibold leading-tight tracking-[-0.02em]">Book a demo with our team.</h2>
+              <p className="mt-3 text-[15px] leading-7 text-fg-muted">
+                Tell us about your fleet and we&apos;ll walk you through FleetCore live, with the questions that matter to you answered on the spot.
+              </p>
+              <Link href="/contact?topic=demo" className={`${bigButton()} mt-6`}>Book a demo<ArrowRight /></Link>
+            </div>
+            <ul className="space-y-3 rounded-xl bg-raised p-5">
+              {TRY.map((t) => <li key={t} className="flex gap-2.5 text-[14px]"><Check className="mt-0.5 h-4 w-4 shrink-0 text-accent" />{t}</li>)}
+            </ul>
+          </div>
+        </section>
+      )}
 
       {enabled && (
         <section className="mx-auto max-w-6xl px-5 pb-20 pt-6">

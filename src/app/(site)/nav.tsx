@@ -6,7 +6,7 @@ import { useState } from "react";
 import { Menu, X } from "lucide-react";
 import { buttonClass, cn } from "@/components/ui";
 
-const LINKS = [["/#features", "Product"], ["/fleet-service", "Fleet service"], ["/pricing", "Pricing"], ["/demo", "Live demo"], ["/contact", "Contact"]] as const;
+const LINKS = [["/#features", "Product"], ["/fleet-service", "Fleet service"], ["/pricing", "Pricing"], ["/demo", "Product tour"], ["/contact", "Contact"]] as const;
 
 /** Site header links and buttons; a menu on phones. Log in takes people already signed in straight to their fleet. */
 export function SiteNav() {
@@ -31,7 +31,7 @@ export function SiteNav() {
       </nav>
       <div className="ml-auto hidden items-center gap-2 md:flex">
         {account}
-        <Link href="/demo" className={buttonClass("accent")}>Try the live demo</Link>
+        <Link href="/contact?topic=demo" className={buttonClass("accent")}>Book a demo</Link>
       </div>
       <button type="button" aria-label={open ? "Close menu" : "Open menu"} aria-expanded={open} onClick={() => setOpen((v) => !v)}
         className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-md text-fg-muted hover:bg-raised hover:text-fg md:hidden">
@@ -46,7 +46,7 @@ export function SiteNav() {
           </nav>
           <div className="mt-4 flex flex-wrap gap-2">
             {account}
-            <Link href="/demo" onClick={() => setOpen(false)} className={buttonClass("accent")}>Try the live demo</Link>
+            <Link href="/contact?topic=demo" onClick={() => setOpen(false)} className={buttonClass("accent")}>Book a demo</Link>
           </div>
         </div>
       )}

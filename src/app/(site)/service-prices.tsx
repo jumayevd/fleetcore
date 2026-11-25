@@ -9,7 +9,7 @@ export function ServicePrices({ className }: { className?: string }) {
     <div className={cn("grid gap-5 md:grid-cols-[1.6fr_1fr]", className)}>
       <div className="rounded-2xl border border-line bg-surface p-7 sm:p-8">
         <h3 className="text-[20px] font-semibold">By fleet size</h3>
-        <p className="mt-2 text-[14px] leading-6 text-fg-muted">Per truck, per month. Everything in the service list is included.</p>
+        <p className="mt-2 text-[14px] leading-6 text-fg-muted">Per unit, per month. Everything in the service list is included.</p>
         <div className="mt-6 overflow-hidden rounded-xl border border-line">
           <table className="w-full text-left text-[14px]">
             <thead className="bg-raised text-[12px] font-medium text-fg-subtle">
@@ -27,8 +27,8 @@ export function ServicePrices({ className }: { className?: string }) {
                     <td colSpan={2} className="px-4 py-4 text-fg-muted">Price is negotiable</td>
                   ) : (
                     <>
-                      <td className="px-4 py-4"><span className="text-[22px] font-semibold tracking-tight">${t.bobtail}</span><span className="text-fg-subtle"> / truck</span></td>
-                      <td className="px-4 py-4"><span className="text-[22px] font-semibold tracking-tight">${t.withTrailer}</span><span className="text-fg-subtle"> / truck</span></td>
+                      <td className="px-4 py-4"><span className="text-[22px] font-semibold tracking-tight">${t.bobtail}</span><span className="text-fg-subtle"> / unit</span></td>
+                      <td className="px-4 py-4"><span className="text-[22px] font-semibold tracking-tight">${t.withTrailer}</span><span className="text-fg-subtle"> / unit</span></td>
                     </>
                   )}
                 </tr>

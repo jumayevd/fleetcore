@@ -31,10 +31,10 @@ export function CtaBand() {
             See your next missed oil change before it happens.
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-[16px] leading-7 text-fg-muted">
-            Watch the one-minute tour, then open a real fleet and click around. No sign-up, no card.
+            Watch the one-minute tour, then book a walkthrough: we show you FleetCore on your own kind of fleet.
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
-            <Link href="/demo" className={bigButton()}>Open the live demo<ArrowRight /></Link>
+            <Link href="/contact?topic=demo" className={bigButton()}>Book a demo<ArrowRight /></Link>
             <Link href="/pricing" className={bigButton("secondary")}>See pricing</Link>
           </div>
         </div>

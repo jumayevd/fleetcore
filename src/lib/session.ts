@@ -1,4 +1,5 @@
 import "server-only";
+import { DEMO_EMAIL, isDemoEnabled } from "./demo/shared";
 import { cookies } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 import { cache } from "react";
@@ -75,7 +76,11 @@ export async function writeAccounts(accounts: SessionAccount[]) {
  */
 async function liveAccounts(accounts: SessionAccount[]) {
   if (!accounts.length) return accounts;
-  const rows = await rootDb.user.findMany({ where: { id: { in: accounts.map((a) => a.userId) }, active: true }, select: { id: true, sessionsValidFrom: true } });
+  const rows = await rootDb.user.findMany({
+    // The shared live-demo account only works while the demo is on: switching it off signs those browsers out.
+    where: { id: { in: accounts.map((a) => a.userId) }, active: true, ...(isDemoEnabled() ? {} : { email: { not: DEMO_EMAIL } }) },
+    select: { id: true, sessionsValidFrom: true },
+  });
   const from = new Map(rows.map((r) => [r.id, r.sessionsValidFrom?.getTime() ?? 0]));
   return accounts.filter((a) => from.has(a.userId) && a.at * 1000 >= from.get(a.userId)!);
 }
